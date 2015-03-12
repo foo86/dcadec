@@ -1,0 +1,811 @@
+/*
+ * This file is part of dcadec.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
+#include "common.h"
+#include "bitstream.h"
+#include "fixed_math.h"
+#include "xll_decoder.h"
+#include "exss_parser.h"
+
+#include "xll_tables.h"
+
+#define XLL_PBR_SIZE    (240 << 10)
+
+static int parse_dmix_coeffs(struct xll_chset *chs)
+{
+    struct xll_decoder *xll = chs->decoder;
+    int m, n;
+
+    if (chs->primary_chset) {
+        m = prim_dmix_nch[chs->dmix_type];
+        n = chs->nchannels;
+    } else {
+        m = xll->nchannels;
+        n = chs->nchannels + 1;
+    }
+
+    // Reallocate downmix coefficients matrix
+    int ret;
+    if ((ret = dca_realloc(xll->chset, &chs->dmix_coeff, m * n, sizeof(int))) < 0)
+        return ret;
+
+    // Parse downmix coefficients
+    int *coeff_ptr = chs->dmix_coeff;
+    for (int i = 0; i < m; i++)
+        for (int j = 0; j < n; j++)
+            *coeff_ptr++ = bits_get(&xll->bits, 9);
+
+    return 0;
+}
+
+static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
+{
+    struct xll_decoder *xll = chs->decoder;
+    int i, j, k, ret;
+    size_t header_pos = xll->bits.index;
+
+    // Size of channel set sub-header
+    size_t header_size = bits_get(&xll->bits, 10) + 1;
+
+    // Check CRC
+    if ((ret = bits_check_crc(&xll->bits, header_pos, header_pos + header_size * 8)) < 0)
+        return ret;
+
+    // Number of channels in the channel set
+    chs->nchannels = bits_get(&xll->bits, 4) + 1;
+
+    // Residual type
+    chs->residual_encode = bits_get(&xll->bits, chs->nchannels);
+
+    // PCM bit resolution
+    chs->pcm_bit_res = bits_get(&xll->bits, 5) + 1;
+
+    // Storage unit width
+    chs->storage_bit_res = bits_get(&xll->bits, 5) + 1;
+
+    // Original sampling frequency
+    chs->freq = exss_sample_rates[bits_get(&xll->bits, 4)];
+
+    // Sampling frequency modifier
+    bits_skip(&xll->bits, 2);
+
+    // Which replacement set this channel set is member of
+    chs->replace_set_index = bits_get(&xll->bits, 2);
+
+    // Default replacement set flag
+    if (chs->replace_set_index)
+        bits_skip1(&xll->bits);
+
+    if (asset->one_to_one_map_ch_to_spkr) {
+        // Primary channel set flag
+        chs->primary_chset = bits_get1(&xll->bits);
+
+        // Downmix coefficients present in stream
+        chs->dmix_coeffs_present = bits_get1(&xll->bits);
+
+        // Downmix already performed by encoder
+        chs->dmix_embedded = chs->dmix_coeffs_present && bits_get1(&xll->bits);
+
+        // Downmix type
+        // 0 - 1/0, 1 - Lo/Ro, 2 - Lt/Rt, 3 - 3/0,
+        // 4 - 2/1, 5 - 2/2, 6 - 3/1
+        if (chs->dmix_coeffs_present && chs->primary_chset) {
+            chs->dmix_type = bits_get(&xll->bits, 3);
+            enforce(chs->dmix_type < 7, "Invalid primary channel set downmix type");
+        }
+
+        // Whether the channel set is part of a hierarchy
+        chs->hier_chset = bits_get1(&xll->bits);
+
+        // Downmix coefficients
+        if (chs->dmix_coeffs_present && (ret = parse_dmix_coeffs(chs)) < 0)
+            return ret;
+
+        // Channel mask enabled
+        chs->ch_mask_enabled = bits_get1(&xll->bits);
+        if (chs->ch_mask_enabled) {
+            // Channel mask for set
+            chs->ch_mask = bits_get(&xll->bits, xll->ch_mask_nbits);
+        } else {
+            chs->ch_mask = 0;
+            // Angular speaker position table
+            for (i = 0; i < chs->nchannels; i++) {
+                bits_skip(&xll->bits, 9);
+                bits_skip(&xll->bits, 9);
+                bits_skip(&xll->bits, 7);
+            }
+        }
+    } else {
+        chs->primary_chset = true;
+        chs->dmix_coeffs_present = false;
+        chs->dmix_embedded = false;
+        chs->hier_chset = false;
+        chs->ch_mask_enabled = false;
+        chs->ch_mask = 0;
+
+        // Mapping coeffs present flag
+        if (bits_get1(&xll->bits)) {
+            // Number of bits used to pack each
+            // channel-to-speaker mapping coefficient
+            int nchspkrcoefbits = 6 + 2 * bits_get(&xll->bits, 3);
+
+            // Number of loudspeaker configurations
+            int nspkrconfigs = bits_get(&xll->bits, 2) + 1;
+
+            for (i = 0; i < nspkrconfigs; i++) {
+                // Active channel mask for current configuration
+                int active_ch_mask = bits_get(&xll->bits, chs->nchannels);
+
+                // Number of speakers in current configuration
+                int nspeakers = bits_get(&xll->bits, 6) + 1;
+
+                // Speaker mask or polar coordinates flag
+                if (bits_get1(&xll->bits)) {
+                    // Speaker mask for current configuration
+                    bits_skip(&xll->bits, xll->ch_mask_nbits);
+                } else {
+                    // Angular speaker position table for current configuration
+                    for (j = 0; j < nspeakers; j++) {
+                        bits_skip(&xll->bits, 9);
+                        bits_skip(&xll->bits, 9);
+                        bits_skip(&xll->bits, 7);
+                    }
+                }
+
+                // Channel to loudspeaker mapping coefficients
+                for (j = 0; j < chs->nchannels; j++)
+                    if (active_ch_mask & (1 << j))
+                        bits_skip(&xll->bits, nchspkrcoefbits);
+            }
+        }
+    }
+
+    if (chs->freq > 96000)
+        // Extra frequency bands flag
+        chs->nfreqbands = 2 * (1 + bits_get1(&xll->bits));
+    else
+        chs->nfreqbands = 1;
+
+    if (chs->storage_bit_res > 16)
+        chs->nabits = 5;
+    else if (chs->storage_bit_res > 8)
+        chs->nabits = 4;
+    else
+        chs->nabits = 3;
+    if (xll->nchsets > 1 && chs->nabits < 5)
+        chs->nabits++;
+
+    // Pairwise channel decorrelation for frequency band 0
+    chs->decor_enabled = bits_get1(&xll->bits);
+    if (chs->decor_enabled && chs->nchannels > 1) {
+        // Original channel order
+        for (i = 0; i < chs->nchannels; i++)
+            chs->orig_order[i] = bits_get(&xll->bits, ch_nbits[chs->nchannels - 1]);
+        // Pairwise channel coefficients
+        for (i = 0; i < chs->nchannels / 2; i++) {
+            if (bits_get1(&xll->bits))
+                chs->decor_coef[i] = bits_get_signed_linear(&xll->bits, 7);
+            else
+                chs->decor_coef[i] = 0;
+        }
+    } else {
+        for (i = 0; i < chs->nchannels; i++)
+            chs->orig_order[i] = i;
+        for (i = 0; i < chs->nchannels / 2; i++)
+            chs->decor_coef[i] = 0;
+    }
+
+    // Adaptive predictor order for frequency band 0
+    chs->highest_pred_order = 0;
+    for (i = 0; i < chs->nchannels; i++) {
+        chs->adapt_pred_order[i] = bits_get(&xll->bits, 4);
+        if (chs->adapt_pred_order[i] > chs->highest_pred_order)
+            chs->highest_pred_order = chs->adapt_pred_order[i];
+    }
+    enforce(chs->highest_pred_order <= xll->nsegsamples,
+            "Invalid adaptive predicition order");
+
+    // Fixed predictor order for frequency band 0
+    for (i = 0; i < chs->nchannels; i++) {
+        if (chs->adapt_pred_order[i] == 0)
+            chs->fixed_pred_order[i] = bits_get(&xll->bits, 2);
+        else
+            chs->fixed_pred_order[i] = 0;
+    }
+
+    // Adaptive predictor quantized reflection coefficients for frequency band 0
+    for (i = 0; i < chs->nchannels; i++) {
+        for (j = 0; j < chs->adapt_pred_order[i]; j++) {
+            k = bits_get_signed_linear(&xll->bits, 8);
+            enforce(k > -128, "Invalid reflection coefficient index");
+            if (k < 0)
+                chs->adapt_refl_coef[i][j] = -(int)refl_coef_table[-k];
+            else
+                chs->adapt_refl_coef[i][j] = (int)refl_coef_table[k];
+        }
+    }
+
+    if (xll->scalable_lsbs) {
+        // Size of LSB section in any segment of frequency band 0
+        chs->lsb_section_size = bits_get(&xll->bits, xll->seg_size_nbits);
+
+        // Number of bits to represent the samples in LSB part of frequency band 0
+        int tmp = 0;
+        for (i = 0; i < chs->nchannels; i++)
+            tmp |= (chs->nscalablelsbs[i] = bits_get(&xll->bits, 4));
+        enforce(!tmp || chs->lsb_section_size,
+                "LSB section missing with non-zero LSB width");
+
+        // Number of bits discarded by authoring in frequency band 0
+        for (i = 0; i < chs->nchannels; i++)
+            chs->bit_width_adjust[i] = bits_get(&xll->bits, 4);
+    } else {
+        chs->lsb_section_size = 0;
+        for (i = 0; i < chs->nchannels; i++) {
+            chs->nscalablelsbs[i] = 0;
+            chs->bit_width_adjust[i] = 0;
+        }
+    }
+
+    // Extra frequency band parameters
+    // Reserved
+    // Byte align
+    // CRC16 of channel set sub-header
+    return bits_seek(&xll->bits, header_pos + header_size * 8);
+}
+
+static int chs_alloc_band_data(struct xll_chset *chs)
+{
+    struct xll_decoder *xll = chs->decoder;
+
+    int ret = dca_realloc(xll->chset, &chs->sample_buffer, (xll->nframesamples * chs->nchannels) << xll->scalable_lsbs, sizeof(int));
+
+    if (ret) {
+        memset(chs->msb_sample_buffer, 0, sizeof(chs->msb_sample_buffer));
+        memset(chs->lsb_sample_buffer, 0, sizeof(chs->lsb_sample_buffer));
+    }
+
+    if (ret > 0) {
+        for (int i = 0; i < chs->nchannels; i++) {
+            chs->msb_sample_buffer[i] = chs->sample_buffer + i * xll->nframesamples;
+            if (xll->scalable_lsbs)
+                chs->lsb_sample_buffer[i] = chs->sample_buffer + (chs->nchannels + i) * xll->nframesamples;
+        }
+    }
+
+    return ret;
+}
+
+static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t band_data_nbytes)
+{
+    struct xll_decoder *xll = chs->decoder;
+    int i, j, ret;
+
+    // Calculate bit index where band data ends
+    size_t band_data_end = xll->bits.index + band_data_nbytes * 8;
+
+    // Ignore all but the first band
+    if (band)
+        return bits_seek(&xll->bits, band_data_end);
+
+    // Start unpacking MSB portion of the segment
+    if (seg == 0 || bits_get1(&xll->bits) == false) {
+        // Unpack segment type
+        // 0 - distinct coding parameters for each channel
+        // 1 - common coding parameters for all channels
+        chs->seg_type = bits_get1(&xll->bits);
+
+        // Determine number of coding parameters encoded in segment
+        int nparamsets = (chs->seg_type == false) ? chs->nchannels : 1;
+
+        // Unpack Rice coding parameters
+        for (i = 0; i < nparamsets; i++) {
+            // Unpack Rice coding flag
+            // 0 - linear code, 1 - Rice code
+            chs->rice_code_flag[i] = bits_get1(&xll->bits);
+            if (chs->seg_type == false && chs->rice_code_flag[i] == true) {
+                // Unpack Hybrid Rice coding flag
+                // 0 - Rice code, 1 - Hybrid Rice code
+                if (bits_get1(&xll->bits))
+                    // Unpack binary code length for isolated samples
+                    chs->bitalloc_hybrid_linear[i] = bits_get(&xll->bits, chs->nabits) + 1;
+                else
+                    // 0 indicates no Hybrid Rice coding
+                    chs->bitalloc_hybrid_linear[i] = 0;
+            } else {
+                // 0 indicates no Hybrid Rice coding
+                chs->bitalloc_hybrid_linear[i] = 0;
+            }
+        }
+
+        // Unpack coding parameters
+        for (i = 0; i < nparamsets; i++) {
+            if (seg == 0) {
+                // Unpack coding parameter for part A of segment 0
+                chs->bitalloc_part_a[i] = bits_get(&xll->bits, chs->nabits);
+
+                // Adjust for the linear code
+                if (chs->rice_code_flag[i] == false && chs->bitalloc_part_a[i])
+                    chs->bitalloc_part_a[i]++;
+
+                if (chs->seg_type == false)
+                    chs->nsamples_part_a[i] = chs->adapt_pred_order[i];
+                else
+                    chs->nsamples_part_a[i] = chs->highest_pred_order;
+            } else {
+                chs->bitalloc_part_a[i] = 0;
+                chs->nsamples_part_a[i] = 0;
+            }
+
+            // Unpack coding parameter for part B of segment
+            chs->bitalloc_part_b[i] = bits_get(&xll->bits, chs->nabits);
+
+            // Adjust for the linear code
+            if (chs->rice_code_flag[i] == false && chs->bitalloc_part_b[i])
+                chs->bitalloc_part_b[i]++;
+        }
+    }
+
+    // Unpack entropy codes
+    for (i = 0; i < chs->nchannels; i++) {
+        // Select index of coding parameters
+        int k = (chs->seg_type == false) ? i : 0;
+
+        // Slice the segment into parts A and B
+        int *part_a = chs->msb_sample_buffer[i] + seg * xll->nsegsamples;
+        int *part_b = chs->msb_sample_buffer[i] + seg * xll->nsegsamples + chs->nsamples_part_a[k];
+        int nsamples_part_b = xll->nsegsamples - chs->nsamples_part_a[k];
+
+        if (chs->rice_code_flag[k] == false) {
+            // Linear codes
+            // Unpack all residuals of part A of segment 0
+            bits_get_signed_linear_array(&xll->bits, part_a, chs->nsamples_part_a[k], chs->bitalloc_part_a[k]);
+
+            // Unpack all residuals of part B of segment 0 and others
+            bits_get_signed_linear_array(&xll->bits, part_b, nsamples_part_b, chs->bitalloc_part_b[k]);
+        } else {
+            // Rice codes
+            // Unpack all residuals of part A of segment 0
+            bits_get_signed_rice_array(&xll->bits, part_a, chs->nsamples_part_a[k], chs->bitalloc_part_a[k]);
+
+            if (chs->bitalloc_hybrid_linear[k]) {
+                // Hybrid Rice codes
+                // Unpack the number of isolated samples
+                int nisosamples = bits_get(&xll->bits, xll->nsegsamples_log2);
+
+                // Set all locations to 0
+                memset(part_b, 0, sizeof(*part_b) * nsamples_part_b);
+
+                // Extract the locations of isolated samples and flag by -1
+                for (j = 0; j < nisosamples; j++) {
+                    int loc = bits_get(&xll->bits, xll->nsegsamples_log2);
+                    enforce(loc < nsamples_part_b, "Invalid isolated sample location");
+                    part_b[loc] = -1;
+                }
+
+                // Unpack all residuals of part B of segment 0 and others
+                for (j = 0; j < nsamples_part_b; j++)
+                    if (part_b[j] == -1)
+                        part_b[j] = bits_get_signed_linear(&xll->bits, chs->bitalloc_hybrid_linear[k]);
+                    else
+                        part_b[j] = bits_get_signed_rice(&xll->bits, chs->bitalloc_part_b[k]);
+            } else {
+                // Rice codes
+                // Unpack all residuals of part B of segment 0 and others
+                bits_get_signed_rice_array(&xll->bits, part_b, nsamples_part_b, chs->bitalloc_part_b[k]);
+            }
+        }
+    }
+
+    // Start unpacking LSB portion of the segment
+    if (chs->lsb_section_size) {
+        enforce(chs->lsb_section_size <= band_data_nbytes, "LSB section size too big");
+        enforce(chs->lsb_section_size >= (xll->band_crc_present & 2), "LSB section size too small");
+
+        // Skip to the start of LSB portion
+        size_t scalable_lsbs_start = band_data_end - chs->lsb_section_size * 8 - (xll->band_crc_present & 2) * 8;
+        if ((ret = bits_seek(&xll->bits, scalable_lsbs_start)) < 0)
+            return ret;
+
+        // Unpack all LSB parts of residuals of this segment
+        for (i = 0; i < chs->nchannels; i++)
+            if (chs->nscalablelsbs[i])
+                bits_get_array(&xll->bits, chs->lsb_sample_buffer[i] + seg * xll->nsegsamples, xll->nsegsamples, chs->nscalablelsbs[i]);
+    }
+
+    // Skip to the end of band data
+    return bits_seek(&xll->bits, band_data_end);
+}
+
+void xll_filter_band_data(struct xll_chset *chs)
+{
+    struct xll_decoder *xll = chs->decoder;
+    int i, j, k;
+
+    // Inverse fixed coefficient prediction
+    for (i = 0; i < chs->nchannels; i++) {
+        if (chs->fixed_pred_order[i]) {
+            int *buf = chs->msb_sample_buffer[i];
+            int tmp[8] = { 0 };
+            for (j = 0; j < xll->nframesamples; j++) {
+                tmp[0] = buf[j];
+                for (k = 0; k < chs->fixed_pred_order[i]; k++) {
+                    tmp[k * 2 + 2] = tmp[k * 2 + 0] + tmp[k * 2 + 1];
+                    tmp[k * 2 + 1] = tmp[k * 2 + 2];
+                }
+                buf[j] = tmp[k * 2];
+            }
+        }
+    }
+
+    // Inverse adaptive prediction
+    for (i = 0; i < chs->nchannels; i++) {
+        int order = chs->adapt_pred_order[i];
+        if (order) {
+            int coefs[16] = { 0 };
+            // Conversion from reflection coefficients to direct form coefficients
+            for (j = 0; j < order; j++) {
+                int rc = chs->adapt_refl_coef[i][j];
+                for (k = 0; k < (j + 1) / 2; k++) {
+                    int tmp1 = coefs[    k    ];
+                    int tmp2 = coefs[j - k - 1];
+                    coefs[    k    ] = tmp1 + mul16(rc, tmp2);
+                    coefs[j - k - 1] = tmp2 + mul16(rc, tmp1);
+                }
+                coefs[j] = rc;
+            }
+            int *buf = chs->msb_sample_buffer[i];
+            for (j = 0; j < xll->nframesamples - order; j++) {
+                int64_t err = INT64_C(0);
+                for (k = 0; k < order; k++)
+                    err += (int64_t)buf[j + k] * coefs[order - k - 1];
+                // Round and scale the prediction
+                // Calculate the original sample
+                buf[j + k] -= clip23(norm16(err));
+            }
+        }
+    }
+
+    // Inverse pairwise channel decorrellation
+    if (chs->decor_enabled) {
+        for (i = 0; i < chs->nchannels / 2; i++) {
+            if (chs->decor_coef[i]) {
+                int *src = chs->msb_sample_buffer[i * 2 + 0];
+                int *dst = chs->msb_sample_buffer[i * 2 + 1];
+                for (j = 0; j < xll->nframesamples; j++)
+                    dst[j] += mul3(src[j], chs->decor_coef[i]);
+            }
+        }
+
+        // Reorder channel pointers to the original order
+        int *tmp[XLL_MAX_CHANNELS];
+        for (i = 0; i < chs->nchannels; i++)
+            tmp[i] = chs->msb_sample_buffer[i];
+        for (i = 0; i < chs->nchannels; i++)
+            chs->msb_sample_buffer[chs->orig_order[i]] = tmp[i];
+    }
+}
+
+int xll_get_lsb_width(struct xll_chset *chs, int ch)
+{
+    struct xll_decoder *xll = chs->decoder;
+    int adj = chs->bit_width_adjust[ch];
+    int shift = chs->nscalablelsbs[ch];
+
+    if (xll->fixed_lsb_width)
+        shift = xll->fixed_lsb_width;
+    else if (shift && adj)
+        shift += adj - 1;
+    else
+        shift += adj;
+
+    assert(shift < chs->pcm_bit_res);
+    return shift;
+}
+
+void xll_assemble_msbs_lsbs(struct xll_chset *chs)
+{
+    struct xll_decoder *xll = chs->decoder;
+    for (int ch = 0; ch < chs->nchannels; ch++) {
+        int shift = xll_get_lsb_width(chs, ch);
+        if (shift) {
+            int *msb = chs->msb_sample_buffer[ch];
+            if (chs->nscalablelsbs[ch]) {
+                int *lsb = chs->lsb_sample_buffer[ch];
+                int adj = chs->bit_width_adjust[ch];
+                for (int n = 0; n < xll->nframesamples; n++)
+                    msb[n] = (msb[n] << shift) + (lsb[n] << adj);
+            } else {
+                for (int n = 0; n < xll->nframesamples; n++)
+                    msb[n] <<= shift;
+            }
+        }
+    }
+}
+
+int xll_map_ch_to_spkr(struct xll_chset *chs, int ch)
+{
+    struct xll_decoder *xll = chs->decoder;
+
+    if (chs->ch_mask_enabled) {
+        for (int spkr = 0, pos = 0; spkr < xll->ch_mask_nbits; spkr++)
+            if (chs->ch_mask & (1 << spkr))
+                if (pos++ == ch)
+                    return spkr;
+        return -1;  // Invalid
+    } else {
+        if (chs->nchannels != 2)
+            return -1;
+        return ch + 1;  // Map to L/R
+    }
+}
+
+static int parse_common_header(struct xll_decoder *xll)
+{
+    int ret;
+
+    // XLL extension sync word
+    enforce(bits_get(&xll->bits, 32) == SYNC_WORD_XLL, "Invalid XLL sync word");
+
+    // Version number
+    int stream_ver = bits_get(&xll->bits, 4) + 1;
+    require(stream_ver == 1, "Unsupported XLL stream version");
+
+    // Lossless frame header length
+    size_t header_size = bits_get(&xll->bits, 8) + 1;
+
+    // Number of bits used to read frame size
+    int frame_size_nbits = bits_get(&xll->bits, 5) + 1;
+
+    // Number of bytes in a lossless frame
+    xll->frame_size = (size_t)bits_get(&xll->bits, frame_size_nbits) + 1;
+
+    enforce(xll->frame_size <= XLL_PBR_SIZE, "Invalid XLL frame size");
+    enforce(header_size <= xll->frame_size, "Invalid XLL common header size");
+
+    // Check CRC
+    if ((ret = bits_check_crc(&xll->bits, 32, header_size * 8)) < 0)
+        return ret;
+
+    // Number of channels sets per frame
+    xll->nchsets = bits_get(&xll->bits, 4) + 1;
+
+    // Number of segments per frame
+    xll->nframesegs = 1 << bits_get(&xll->bits, 4);
+    enforce(xll->nframesegs <= 1024, "Too many segments per XLL frame");
+
+    // Samples in segment per one frequency band for the first channel set
+    // Maximum value is 256 for sampling frequencies <= 48 kHz
+    // Maximum value is 512 for sampling frequencies > 48 kHz
+    xll->nsegsamples_log2 = bits_get(&xll->bits, 4);
+    xll->nsegsamples = 1 << xll->nsegsamples_log2;
+    enforce(xll->nsegsamples <= 512, "Too many samples per XLL segment");
+
+    // Samples in frame per one frequency band for the first channel set
+    xll->nframesamples = xll->nframesegs * xll->nsegsamples;
+    enforce(xll->nframesamples <= 65536, "Too many samples per XLL frame");
+
+    // Number of bits used to read segment size
+    xll->seg_size_nbits = bits_get(&xll->bits, 5) + 1;
+
+    // Presence of CRC16 within each frequency band
+    // 0 - No CRC16 within band
+    // 1 - CRC16 placed at the end of MSB0
+    // 2 - CRC16 placed at the end of MSB0 and LSB0
+    // 3 - CRC16 placed at the end of MSB0 and LSB0 and other frequency bands
+    xll->band_crc_present = bits_get(&xll->bits, 2);
+
+    // MSB/LSB split flag
+    xll->scalable_lsbs = bits_get1(&xll->bits);
+
+    // Channel position mask
+    xll->ch_mask_nbits = bits_get(&xll->bits, 5) + 1;
+
+    // Fixed LSB width
+    if (xll->scalable_lsbs)
+        xll->fixed_lsb_width = bits_get(&xll->bits, 4);
+    else
+        xll->fixed_lsb_width = 0;
+
+    // Reserved
+    // Byte align
+    // Header CRC16 protection
+    return bits_seek(&xll->bits, header_size * 8);
+}
+
+static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
+{
+    // Reallocate channel sets
+    int ret;
+    if ((ret = dca_realloc(xll, &xll->chset, xll->nchsets, sizeof(struct xll_chset))) < 0)
+        return ret;
+    if (ret > 0)
+        for_each_chset(xll, chs)
+            chs->decoder = xll;
+
+    // Parse channel set headers
+    xll->nfreqbands = 0;
+    xll->nchannels = 0;
+    for_each_chset(xll, chs) {
+        if ((ret = chs_parse_header(chs, asset)) < 0)
+            return ret;
+        if (chs->nfreqbands > xll->nfreqbands)
+            xll->nfreqbands = chs->nfreqbands;
+        xll->nchannels += chs->nchannels;
+    }
+
+    return 0;
+}
+
+static int parse_navi_table(struct xll_decoder *xll)
+{
+    // Reallocate NAVI table
+    int ret;
+    if ((ret = dca_realloc(xll, &xll->navi, xll->nfreqbands * xll->nframesegs * xll->nchsets, sizeof(size_t))) < 0)
+        return ret;
+
+    // Parse NAVI
+    size_t navi_pos = xll->bits.index;
+    size_t *navi_ptr = xll->navi;
+    size_t navi_size = 0;
+    for (int band = 0; band < xll->nfreqbands; band++) {
+        for (int seg = 0; seg < xll->nframesegs; seg++) {
+            for_each_chset(xll, chs) {
+                if (chs->nfreqbands > band) {
+                    *navi_ptr = (size_t)bits_get(&xll->bits, xll->seg_size_nbits) + 1;
+                    if (*navi_ptr < 1 || *navi_ptr > xll->frame_size)
+                        return -DCADEC_EBADDATA;
+                    navi_size += *navi_ptr;
+                }
+                navi_ptr++;
+            }
+        }
+    }
+
+    if (navi_size > xll->frame_size)
+        return -DCADEC_EBADDATA;
+
+    // Byte align
+    // CRC16
+    bits_align1(&xll->bits);
+    bits_skip(&xll->bits, 16);
+    return bits_check_crc(&xll->bits, navi_pos, xll->bits.index);
+}
+
+static int parse_band_data(struct xll_decoder *xll)
+{
+    int ret;
+    for_each_chset(xll, chs)
+        if ((ret = chs_alloc_band_data(chs)) < 0)
+            return ret;
+
+    size_t *navi_ptr = xll->navi;
+    for (int band = 0; band < xll->nfreqbands; band++) {
+        for (int seg = 0; seg < xll->nframesegs; seg++) {
+            for_each_chset(xll, chs) {
+                if (chs->nfreqbands > band)
+                    if ((ret = chs_parse_band_data(chs, band, seg, *navi_ptr)) < 0)
+                        return ret;
+                navi_ptr++;
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int parse_frame(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
+{
+    int ret;
+
+    bits_init(&xll->bits, data, size);
+    if ((ret = parse_common_header(xll)) < 0)
+        return ret;
+    if ((ret = parse_sub_headers(xll, asset)) < 0)
+        return ret;
+    if ((ret = parse_navi_table(xll)) < 0)
+        return ret;
+    if ((ret = parse_band_data(xll)) < 0)
+        return ret;
+    if ((ret = bits_seek(&xll->bits, xll->frame_size * 8)) < 0)
+        return ret;
+
+    return 0;
+}
+
+static int parse_frame_fast(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
+{
+    int ret;
+
+    if ((ret = parse_frame(xll, data, size, asset)) < 0)
+        return ret;
+
+    if (xll->frame_size > size)
+        return -DCADEC_EINVAL;
+
+    if (xll->frame_size < size) {
+        if (!(xll->pbr_buffer = ta_alloc_size(xll, XLL_PBR_SIZE + DCADEC_BUFFER_PADDING)))
+            return -DCADEC_ENOMEM;
+        size_t length = size - xll->frame_size;
+        memcpy(xll->pbr_buffer, data + xll->frame_size, length);
+        xll->pbr_length = length;
+    }
+
+    return 0;
+}
+
+static int parse_frame_slow(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
+{
+    int ret;
+
+    if (xll->pbr_length > XLL_PBR_SIZE)
+        return -DCADEC_EINVAL;
+
+    if (size > XLL_PBR_SIZE - xll->pbr_length)
+        return -DCADEC_EINVAL;
+
+    memcpy(xll->pbr_buffer + xll->pbr_length, data, size);
+    xll->pbr_length += size;
+
+    if ((ret = parse_frame(xll, xll->pbr_buffer, xll->pbr_length, asset)) < 0)
+        return ret;
+
+    if (xll->frame_size == xll->pbr_length) {
+        xll_clear(xll);
+    } else {
+        if (xll->pbr_length < xll->frame_size)
+            return -DCADEC_EINVAL;
+        size_t length = xll->pbr_length - xll->frame_size;
+        memmove(xll->pbr_buffer, xll->pbr_buffer + xll->frame_size, length);
+        xll->pbr_length = length;
+    }
+
+    return 0;
+}
+
+int xll_parse(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
+{
+    int ret;
+
+    if (!asset->one_to_one_map_ch_to_spkr && asset->nchannels_total != 2)
+        return -DCADEC_ENOSUP;
+
+    if (xll->hd_stream_id != asset->hd_stream_id) {
+        xll_clear(xll);
+        xll->hd_stream_id = asset->hd_stream_id;
+    }
+
+    data += asset->xll_offset;
+    size = asset->xll_size;
+
+    if (xll->pbr_buffer)
+        ret = parse_frame_slow(xll, data, size, asset);
+    else
+        ret = parse_frame_fast(xll, data, size, asset);
+
+    return ret;
+}
+
+void xll_clear(struct xll_decoder *xll)
+{
+    if (xll) {
+        ta_free(xll->pbr_buffer);
+        xll->pbr_buffer = NULL;
+        xll->pbr_length = 0;
+    }
+}
