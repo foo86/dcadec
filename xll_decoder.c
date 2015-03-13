@@ -560,7 +560,8 @@ static int parse_common_header(struct xll_decoder *xll)
     int ret;
 
     // XLL extension sync word
-    enforce(bits_get(&xll->bits, 32) == SYNC_WORD_XLL, "Invalid XLL sync word");
+    if (bits_get(&xll->bits, 32) != SYNC_WORD_XLL)
+        return -DCADEC_ENOSYNC;
 
     // Version number
     int stream_ver = bits_get(&xll->bits, 4) + 1;
@@ -728,54 +729,101 @@ static int parse_frame(struct xll_decoder *xll, uint8_t *data, size_t size, stru
     return 0;
 }
 
-static int parse_frame_fast(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
+static int copy_to_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, int delay)
 {
-    int ret;
+    if (size > XLL_PBR_SIZE)
+        return -DCADEC_EINVAL;
+    if (!(xll->pbr_buffer = ta_zalloc_size(xll, XLL_PBR_SIZE + DCADEC_BUFFER_PADDING)))
+        return -DCADEC_ENOMEM;
+    memcpy(xll->pbr_buffer, data, size);
+    xll->pbr_length = size;
+    xll->pbr_delay = delay;
+    return 0;
+}
 
-    if ((ret = parse_frame(xll, data, size, asset)) < 0)
+static int parse_frame_no_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
+{
+    int ret = parse_frame(xll, data, size, asset);
+
+    // If XLL packet data didn't start with a sync word, we must have jumped
+    // right into the middle of PBR smoothing period
+    if (ret == -DCADEC_ENOSYNC && asset->xll_sync_present) {
+        if (asset->xll_sync_offset > size)
+            return -DCADEC_EINVAL;
+
+        // Skip to the next sync word in this packet
+        data += asset->xll_sync_offset;
+        size -= asset->xll_sync_offset;
+
+        // If decoding delay is set, put the frame into PBR buffer and return
+        // failure code. Higher level decoder is expected to switch to lossy
+        // core decoding or mute its output until decoding delay expires.
+        if (asset->xll_delay_nframes > 0) {
+            if ((ret = copy_to_pbr(xll, data, size, asset->xll_delay_nframes)) < 0)
+                return ret;
+            return -DCADEC_ENOSYNC;
+        }
+
+        // No decoding delay, just parse the frame in place
+        ret = parse_frame(xll, data, size, asset);
+    }
+
+    if (ret < 0)
         return ret;
 
     if (xll->frame_size > size)
         return -DCADEC_EINVAL;
 
-    if (xll->frame_size < size) {
-        if (!(xll->pbr_buffer = ta_alloc_size(xll, XLL_PBR_SIZE + DCADEC_BUFFER_PADDING)))
-            return -DCADEC_ENOMEM;
-        size_t length = size - xll->frame_size;
-        memcpy(xll->pbr_buffer, data + xll->frame_size, length);
-        xll->pbr_length = length;
-    }
+    // If the XLL decoder didn't consume full packet, start PBR smoothing period
+    if (xll->frame_size < size)
+        if ((ret = copy_to_pbr(xll, data + xll->frame_size, size - xll->frame_size, 0)) < 0)
+            return ret;
 
     return 0;
 }
 
-static int parse_frame_slow(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
+static int parse_frame_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
 {
     int ret;
 
-    if (xll->pbr_length > XLL_PBR_SIZE)
-        return -DCADEC_EINVAL;
+    assert(xll->pbr_length <= XLL_PBR_SIZE);
 
-    if (size > XLL_PBR_SIZE - xll->pbr_length)
-        return -DCADEC_EINVAL;
+    if (size > XLL_PBR_SIZE - xll->pbr_length) {
+        ret = -DCADEC_EINVAL;
+        goto fail;
+    }
 
     memcpy(xll->pbr_buffer + xll->pbr_length, data, size);
     xll->pbr_length += size;
 
+    // Respect decoding delay after synchronization error
+    if (xll->pbr_delay > 0)
+        if (--xll->pbr_delay > 0)
+            return -DCADEC_ENOSYNC;
+
     if ((ret = parse_frame(xll, xll->pbr_buffer, xll->pbr_length, asset)) < 0)
-        return ret;
+        goto fail;
+
+    if (xll->frame_size > xll->pbr_length) {
+        ret = -DCADEC_EINVAL;
+        goto fail;
+    }
 
     if (xll->frame_size == xll->pbr_length) {
+        // End of PBR smoothing period
         xll_clear(xll);
     } else {
-        if (xll->pbr_length < xll->frame_size)
-            return -DCADEC_EINVAL;
-        size_t length = xll->pbr_length - xll->frame_size;
-        memmove(xll->pbr_buffer, xll->pbr_buffer + xll->frame_size, length);
-        xll->pbr_length = length;
+        xll->pbr_length -= xll->frame_size;
+        memmove(xll->pbr_buffer, xll->pbr_buffer + xll->frame_size, xll->pbr_length);
     }
 
     return 0;
+
+fail:
+    // For now, throw out all PBR state on failure.
+    // Perhaps we can be smarter and try to at least resync.
+    xll_clear(xll);
+    return ret;
 }
 
 int xll_parse(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
@@ -794,9 +842,9 @@ int xll_parse(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_a
     size = asset->xll_size;
 
     if (xll->pbr_buffer)
-        ret = parse_frame_slow(xll, data, size, asset);
+        ret = parse_frame_pbr(xll, data, size, asset);
     else
-        ret = parse_frame_fast(xll, data, size, asset);
+        ret = parse_frame_no_pbr(xll, data, size, asset);
 
     return ret;
 }
@@ -807,5 +855,6 @@ void xll_clear(struct xll_decoder *xll)
         ta_free(xll->pbr_buffer);
         xll->pbr_buffer = NULL;
         xll->pbr_length = 0;
+        xll->pbr_delay = 0;
     }
 }

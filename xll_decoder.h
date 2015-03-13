@@ -102,6 +102,7 @@ struct xll_decoder {
 
     uint8_t     *pbr_buffer;
     size_t      pbr_length;
+    int         pbr_delay;
 };
 
 void xll_filter_band_data(struct xll_chset *chs);
