@@ -1212,7 +1212,7 @@ static int parse_xbr_frame(struct core_decoder *core)
 {
     int     xbr_frame_size[4];
     int     xbr_nchannels[4];
-    int     xbr_nsubbands[4 * MAX_CHANNELS];
+    int     xbr_nsubbands[4 * 8];
 
     size_t header_pos = core->bits.index;
 
