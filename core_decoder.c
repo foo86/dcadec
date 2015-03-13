@@ -1281,6 +1281,14 @@ static int parse_xbr_frame(struct core_decoder *core)
     return 0;
 }
 
+// Revert to base core channel set in case (X)XCH parsing fails
+static void revert_to_base_chset(struct core_decoder *core)
+{
+    core->nchannels = audio_mode_nch[core->audio_mode];
+    core->ch_mask = audio_mode_ch_mask[core->audio_mode];
+    core->dmix_coeffs_present = core->dmix_embedded = false;
+}
+
 static int parse_optional_info(struct core_decoder *core, int flags)
 {
     // Only when extensions decoding is requested
@@ -1374,13 +1382,19 @@ static int parse_optional_info(struct core_decoder *core, int flags)
         if (xch_pos) {
             //printf("found XCH @ %zu\n", xch_pos);
             core->bits.index = xch_pos * 32;
-            core->xch_present = !parse_xch_frame(core);
+            if (!parse_xch_frame(core))
+                core->xch_present = true;
+            else
+                revert_to_base_chset(core);
         }
 
         if (xxch_pos) {
             //printf("found XXCH @ %zu\n", xxch_pos);
             core->bits.index = xxch_pos * 32;
-            core->xxch_present = !parse_xxch_frame(core);
+            if (!parse_xxch_frame(core))
+                core->xxch_present = true;
+            else
+                revert_to_base_chset(core);
         }
 
         if (x96_pos) {
@@ -1435,8 +1449,12 @@ void core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
 
     if ((asset->extension_mask & EXSS_XXCH) && !core->xxch_present) {
         bits_init(&core->bits, data + asset->xxch_offset, asset->xxch_size);
-        core->xxch_present =
-            bits_get(&core->bits, 32) == SYNC_WORD_XXCH && !parse_xxch_frame(core);
+        if (bits_get(&core->bits, 32) == SYNC_WORD_XXCH) {
+            if (!parse_xxch_frame(core))
+                core->xxch_present = true;
+            else
+                revert_to_base_chset(core);
+        }
     }
 
     if ((asset->extension_mask & EXSS_XBR) && !core->xbr_present) {
