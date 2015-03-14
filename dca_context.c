@@ -274,44 +274,42 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     }
 
     int *spkr_map[SPEAKER_COUNT] = { NULL };
-    int ch_mask;
+    int ch_mask = 0;
 
-    if (p->ch_mask_enabled)
-        ch_mask = p->ch_mask;
-    else if (p->nchannels == 2)
-        ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
-    else
-        return -DCADEC_ENOSUP;
+    // Fake up channel mask for primary channel set if needed
+    if (!p->ch_mask_enabled) {
+        if (p->nchannels == 2)
+            p->ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
+        else
+            return -DCADEC_ENOSUP;
+    }
 
     int *samples[256];
     int nchannels = 0;
 
-    // Start with the primary channel set
-    for (int ch = 0; ch < p->nchannels; ch++) {
-        int spkr = xll_map_ch_to_spkr(p, ch);
-        if (spkr >= 0)
-            spkr_map[spkr] = p->msb_sample_buffer[ch];
-        samples[nchannels++] = p->msb_sample_buffer[ch];
-    }
-
-    // Undo embedded hierarchial downmix
+    // Build the output speaker map and channel vector for downmix reversal
     for_each_chset(xll, c) {
         if (c->replace_set_index)
             continue;
-        if (!c->ch_mask_enabled)
-            break;
-        struct xll_chset *o = find_hier_dmix_chset(xll, c);
-        if (!o)
-            break;
-        if ((ret = undo_down_mix(xll, c, o, samples, nchannels)) < 0)
-            return ret;
-        for (int ch = 0; ch < o->nchannels; ch++) {
-            int spkr = xll_map_ch_to_spkr(o, ch);
-            if (spkr >= 0)
-                spkr_map[spkr] = o->msb_sample_buffer[ch];
-            samples[nchannels++] = o->msb_sample_buffer[ch];
+        for (int ch = 0; ch < c->nchannels; ch++) {
+            int spkr = xll_map_ch_to_spkr(c, ch);
+            if (spkr >= 0 && !spkr_map[spkr])
+                spkr_map[spkr] = c->msb_sample_buffer[ch];
+            samples[nchannels++] = c->msb_sample_buffer[ch];
         }
-        ch_mask |= o->ch_mask;
+        ch_mask |= c->ch_mask;
+    }
+
+    // Undo embedded hierarchial downmix
+    nchannels = 0;
+    for_each_chset(xll, c) {
+        if (c->replace_set_index)
+            continue;
+        nchannels += c->nchannels;
+        struct xll_chset *o = find_hier_dmix_chset(xll, c);
+        if (o)
+            if ((ret = undo_down_mix(xll, c, o, samples, nchannels)) < 0)
+                return ret;
     }
 
     // Reorder sample buffer pointers
