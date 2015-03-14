@@ -645,6 +645,8 @@ static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
     for_each_chset(xll, chs) {
         if ((ret = chs_parse_header(chs, asset)) < 0)
             return ret;
+        if (chs->replace_set_index)
+            continue;
         if (chs->nfreqbands > xll->nfreqbands)
             xll->nfreqbands = chs->nfreqbands;
         xll->nchannels += chs->nchannels;
