@@ -211,6 +211,8 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             return ret;
     }
 
+    int nchannels = 0;
+
     // Process channel sets
     for_each_chset(xll, c) {
         if (c->replace_set_index)
@@ -257,7 +259,8 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
                 int *src = core->output_samples[core_ch];
                 if (o) {
                     // Undo embedded core downmix pre-scaling
-                    int scale_inv = conv_dmix_scale_inv(o->dmix_coeff[ch * (o->nchannels + 1)]);
+                    int coeff = o->dmix_coeff[(nchannels + ch) * (o->nchannels + 1)];
+                    int scale_inv = conv_dmix_scale_inv(coeff);
                     for (int n = 0; n < xll->nframesamples; n++)
                         dst[n] += clip23((mul16(src[n], scale_inv) + round) >> shift);
                 } else {
@@ -271,6 +274,8 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         // Assemble MSB and LSB parts after combining with core
         if (xll->scalable_lsbs)
             xll_assemble_msbs_lsbs(c);
+
+        nchannels += c->nchannels;
     }
 
     int *spkr_map[SPEAKER_COUNT] = { NULL };
@@ -285,9 +290,9 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     }
 
     int *samples[256];
-    int nchannels = 0;
 
     // Build the output speaker map and channel vector for downmix reversal
+    nchannels = 0;
     for_each_chset(xll, c) {
         if (c->replace_set_index)
             continue;
