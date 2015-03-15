@@ -406,57 +406,63 @@ fail:
     return dca->packet ? 0 : ret;
 }
 
-int dcadec_context_core_info(struct dcadec_context *dca, int *nchannels,
-                             int *lfe_present, int *sample_rate,
-                             int *source_pcm_res, int *es_format,
-                             int *bit_rate)
+struct dcadec_core_info *dcadec_context_get_core_info(struct dcadec_context *dca)
 {
     if (!dca)
-        return -DCADEC_EINVAL;
+        return NULL;
     if (!(dca->packet & DCADEC_PACKET_CORE))
-        return -DCADEC_EINVAL;
-    struct core_decoder *core = dca->core;
-    if (nchannels)
-        *nchannels = core->nchannels;
-    if (lfe_present)
-        *lfe_present = core->lfe_present;
-    if (sample_rate)
-        *sample_rate = core->sample_rate;
-    if (source_pcm_res)
-        *source_pcm_res = core->source_pcm_res;
-    if (es_format)
-        *es_format = core->es_format;
-    if (bit_rate)
-        *bit_rate = core->bit_rate;
-    return 0;
+        return NULL;
+    struct dcadec_core_info *info = ta_znew(NULL, struct dcadec_core_info);
+    if (!info)
+        return NULL;
+    info->nchannels = dca->core->nchannels;
+    info->audio_mode = dca->core->audio_mode;
+    info->lfe_present = dca->core->lfe_present;
+    info->sample_rate = dca->core->sample_rate;
+    info->source_pcm_res = dca->core->source_pcm_res;
+    info->es_format = dca->core->es_format;
+    info->bit_rate = dca->core->bit_rate;
+    info->npcmblocks = dca->core->npcmblocks;
+    info->xch_present = dca->core->xch_present;
+    info->xxch_present = dca->core->xxch_present;
+    info->xbr_present = dca->core->xbr_present;
+    return info;
 }
 
-int dcadec_context_exss_info(struct dcadec_context *dca, int *nchannels,
-                             int *sample_rate, int *bits_per_sample,
-                             int *profile)
+void dcadec_context_free_core_info(struct dcadec_core_info *info)
+{
+    ta_free(info);
+}
+
+struct dcadec_exss_info *dcadec_context_get_exss_info(struct dcadec_context *dca)
 {
     if (!dca)
-        return -DCADEC_EINVAL;
+        return NULL;
     if (!(dca->packet & DCADEC_PACKET_EXSS))
-        return -DCADEC_EINVAL;
+        return NULL;
+    struct dcadec_exss_info *info = ta_znew(NULL, struct dcadec_exss_info);
+    if (!info)
+        return NULL;
     struct exss_asset *asset = &dca->exss->assets[0];
-    if (nchannels)
-        *nchannels = asset->nchannels_total;
-    if (sample_rate)
-        *sample_rate = asset->max_sample_rate;
-    if (bits_per_sample)
-        *bits_per_sample = asset->pcm_bit_res;
-    if (profile) {
-        if (asset->extension_mask & EXSS_XLL)
-            *profile = DCADEC_PROFILE_HD_MA;
-        else if (asset->extension_mask & (EXSS_XBR | EXSS_XXCH | EXSS_X96))
-            *profile = DCADEC_PROFILE_HD_HRA;
-        else if (asset->extension_mask & EXSS_LBR)
-            *profile = DCADEC_PROFILE_EXPRESS;
-        else
-            *profile = DCADEC_PROFILE_UNKNOWN;
-    }
-    return 0;
+    info->nchannels = asset->nchannels_total;
+    info->sample_rate = asset->max_sample_rate;
+    info->bits_per_sample = asset->pcm_bit_res;
+    if (asset->extension_mask & EXSS_XLL)
+        info->profile = DCADEC_PROFILE_HD_MA;
+    else if (asset->extension_mask & (EXSS_XBR | EXSS_XXCH | EXSS_X96))
+        info->profile = DCADEC_PROFILE_HD_HRA;
+    else if (asset->extension_mask & EXSS_LBR)
+        info->profile = DCADEC_PROFILE_EXPRESS;
+    else
+        info->profile = DCADEC_PROFILE_UNKNOWN;
+    info->embedded_stereo = asset->embedded_stereo;
+    info->embedded_6ch = asset->embedded_6ch;
+    return info;
+}
+
+void dcadec_context_free_exss_info(struct dcadec_exss_info *info)
+{
+    ta_free(info);
 }
 
 int dcadec_context_filter(struct dcadec_context *dca, int ***samples,

@@ -76,6 +76,33 @@
 
 struct dcadec_context;
 
+struct dcadec_core_info {
+    int     nchannels;      /**< Number of primary audio channels (including
+                                 extension channels from XCH and XXCH) */
+    int     audio_mode;     /**< Core audio channel arrangement (AMODE) */
+    int     lfe_present;    /**< LFE channel presence flag (can be 0, 1 or 2) */
+    int     sample_rate;    /**< Core audio sample rate in Hz */
+    int     source_pcm_res; /**< Source PCM resolution in bits */
+    bool    es_format;      /**< Extended surround (ES) mastering flag */
+    int     bit_rate;       /**< Core stream bit rate in bytes per second,
+                                 zero or negative if unavailable */
+    int     npcmblocks;     /**< Number of audio sample blocks in a frame */
+    bool    xch_present;    /**< XCH extension data present and valid */
+    bool    xxch_present;   /**< XXCH extension data present and valid */
+    bool    xbr_present;    /**< XBR extension data present and valid */
+    bool    x96_present;    /**< X96 extension data present and valid */
+};
+
+struct dcadec_exss_info {
+    int nchannels;          /**< Number of audio channels encoded among all
+                                 substreams */
+    int sample_rate;        /**< Maximum encoded audio sample rate in Hz */
+    int bits_per_sample;    /**< Highest encoded PCM resolution in bits */
+    int profile;            /**< Type of DTS profile encoded */
+    bool embedded_stereo;   /**< 2.0 downmix has been embedded into the stream */
+    bool embedded_6ch;      /**< 5.1 downmix has been embedded into the stream */
+};
+
 /**
  * Parse DTS packet. Caller must have already established byte stream
  * synchronization. Packet must start with a valid 32-bit sync word.
@@ -93,54 +120,41 @@ struct dcadec_context;
 int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, size_t size);
 
 /**
- * Get information about DTS core payload of the parsed packet. All parameters
- * except decoder context are optional and can be NULL.
+ * Get information about DTS core payload of the parsed packet.
  *
- * @param dca           Pointer to decoder context.
+ * @param dca   Pointer to decoder context.
  *
- * @param nchannels     Filled with number of primary audio channels.
- *
- * @param lfe_present   Filled with LFE channel presence flag. 0 - no LFE
- *                      channel present, 1 - LFE channel with 128 samples
- *                      decimation, 2 - LFE channel with 64 samples decimation.
- *
- * @param sample_rate       Filled with audio sample rate in Hz.
- *
- * @param source_pcm_res    Filled with source PCM resolution in bits.
- *
- * @param es_format         Filled with boolean value indicating whether
- *                          encoded stream is mastered in ES format or not.
- *
- * @param bit_rate          Filled with encoded stream bit rate in bytes per
- *                          second. If the bit rate is unknown, negative
- *                          value is returned.
- *
- * @return                  0 on success, negative error code on failure.
+ * @return      Pointer to DTS core information structure on success,
+ *              NULL on failure. Returned data should be freed with
+ *              dcadec_context_free_core_info() function.
  */
-int dcadec_context_core_info(struct dcadec_context *dca, int *nchannels,
-                             int *lfe_present, int *sample_rate,
-                             int *source_pcm_res, int *es_format, int *bit_rate);
+struct dcadec_core_info *dcadec_context_get_core_info(struct dcadec_context *dca);
 
 /**
- * Get information about extension sub-stream payload of the parsed packet.
- * All parameters except decoder context are optional and can be NULL.
+ * Free DTS core information structure.
  *
- * @param dca               Pointer to decoder context.
- *
- * @param nchannels         Filled with number of audio channels encoded in all
- *                          sub-streams.
- *
- * @param sample_rate       Filled with maximum audio sample rate in Hz.
- *
- * @param bits_per_sample   Filled with highest PCM resolution in bits.
- *
- * @param profile           Filled with type of DTS profile encoded.
- *
- * @return                  0 on success, negative error code on failure.
+ * @param info  Pointer to DTS core information structure.
  */
-int dcadec_context_exss_info(struct dcadec_context *dca, int *nchannels,
-                             int *sample_rate, int *bits_per_sample,
-                             int *profile);
+void dcadec_context_free_core_info(struct dcadec_core_info *info);
+
+/**
+ * Get information about extension sub-stream (EXSS) payload of the parsed
+ * packet.
+ *
+ * @param dca   Pointer to decoder context.
+ *
+ * @return      Pointer to EXSS information structure on success,
+ *              NULL on failure. Returned data should be freed with
+ *              dcadec_context_free_exss_info() function.
+ */
+struct dcadec_exss_info *dcadec_context_get_exss_info(struct dcadec_context *dca);
+
+/**
+ * Free EXSS information structure.
+ *
+ * @param info  Pointer to EXSS information structure.
+ */
+void dcadec_context_free_exss_info(struct dcadec_exss_info *info);
 
 /**
  * Filter the parsed packet and return per-channel PCM data. All parameters

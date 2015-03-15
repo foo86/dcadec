@@ -81,33 +81,30 @@ static void print_help(char *name)
 
 static void print_info(struct dcadec_context *context)
 {
-    int nchannels, lfe_present, sample_rate, bits_per_sample,
-        es_format, bit_rate, profile, ret;
-
-    ret = dcadec_context_core_info(context, &nchannels, &lfe_present,
-                                   &sample_rate, &bits_per_sample,
-                                   &es_format, &bit_rate);
-    if (ret == 0) {
+    struct dcadec_core_info *core = dcadec_context_get_core_info(context);
+    if (core) {
         fprintf(stderr, "DTS Core Audio: %d.%d ch, %d Hz, %d bit",
-            nchannels, !!lfe_present, sample_rate, bits_per_sample);
-        if (es_format)
+            core->nchannels, !!core->lfe_present, core->sample_rate,
+            core->source_pcm_res);
+        if (core->es_format)
             fprintf(stderr, ", ES");
-        if (bit_rate > 0)
-            fprintf(stderr, ", %.f kbps", bit_rate / 1000.0f);
+        if (core->bit_rate > 0)
+            fprintf(stderr, ", %.f kbps", core->bit_rate / 1000.0f);
         fprintf(stderr, "\n");
+        dcadec_context_free_core_info(core);
     }
 
-    ret = dcadec_context_exss_info(context, &nchannels, &sample_rate,
-                                   &bits_per_sample, &profile);
-    if (ret == 0) {
-        if (profile & DCADEC_PROFILE_HD_MA)
+    struct dcadec_exss_info *exss = dcadec_context_get_exss_info(context);
+    if (exss) {
+        if (exss->profile & DCADEC_PROFILE_HD_MA)
             fprintf(stderr, "DTS-HD Master Audio");
-        else if (profile & DCADEC_PROFILE_HD_HRA)
-            fprintf(stderr, "DTS-HD High Resolution Audio");
+        else if (exss->profile & DCADEC_PROFILE_HD_HRA)
+            fprintf(stderr, "DTS-HD High-Resolution Audio");
         else
             fprintf(stderr, "DTS-HD Unknown Profile");
         fprintf(stderr, ": %d ch, %d Hz, %d bit\n",
-            nchannels, sample_rate, bits_per_sample);
+            exss->nchannels, exss->sample_rate, exss->bits_per_sample);
+        dcadec_context_free_exss_info(exss);
     }
 }
 
