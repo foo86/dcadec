@@ -5,6 +5,7 @@ LDFLAGS ?=
 LIBS ?= -lm
 OUT_LIB ?= libdcadec/libdcadec.a
 OUT_DEC ?= dcadec
+OUT_CUT ?= dcacut
 
 SRC_LIB = \
 libdcadec/bitstream.c \
@@ -27,11 +28,15 @@ SRC_DEC = dcadec.c
 OBJ_DEC = $(SRC_DEC:.c=.o)
 DEP_DEC = $(SRC_DEC:.c=.d)
 
-all: $(OUT_LIB) $(OUT_DEC)
+SRC_CUT = dcacut.c
+OBJ_CUT = $(SRC_CUT:.c=.o)
+DEP_CUT = $(SRC_CUT:.c=.d)
+
+all: $(OUT_LIB) $(OUT_DEC) $(OUT_CUT)
 
 default: all
 
--include $(DEP_LIB) $(DEP_DEC)
+-include $(DEP_LIB) $(DEP_DEC) $(DEP_CUT)
 
 $(OUT_LIB): $(OBJ_LIB)
 	$(AR) crsu $@ $(OBJ_LIB)
@@ -39,6 +44,10 @@ $(OUT_LIB): $(OBJ_LIB)
 $(OUT_DEC): $(OBJ_DEC) $(OUT_LIB)
 	$(CC) $(LDFLAGS) -o $@ $(OBJ_DEC) $(OUT_LIB) $(LIBS)
 
+$(OUT_CUT): $(OBJ_CUT) $(OUT_LIB)
+	$(CC) $(LDFLAGS) -o $@ $(OBJ_CUT) $(OUT_LIB) $(LIBS)
+
 clean:
 	rm -f $(OUT_LIB) $(OBJ_LIB) $(DEP_LIB)
 	rm -f $(OUT_DEC) $(OBJ_DEC) $(DEP_DEC)
+	rm -f $(OUT_CUT) $(OBJ_CUT) $(DEP_CUT)
