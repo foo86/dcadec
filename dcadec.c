@@ -30,9 +30,9 @@
 #include <signal.h>
 #endif
 
-#include "dca_stream.h"
-#include "dca_context.h"
-#include "dca_waveout.h"
+#include "libdcadec/dca_stream.h"
+#include "libdcadec/dca_context.h"
+#include "libdcadec/dca_waveout.h"
 
 static void print_help(char *name)
 {
