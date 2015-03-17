@@ -1855,6 +1855,7 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
     core->xch_present = false;
     core->xxch_present = false;
     core->xbr_present = false;
+    core->x96_present = false;
 
     if (asset) {
         bits_init(&core->bits, data + asset->core_offset, asset->core_size);
