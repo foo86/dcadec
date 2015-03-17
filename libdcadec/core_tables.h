@@ -50,6 +50,11 @@ static const int32_t quant_levels[32] = {
     2097152, 4194304, 8388608,    -1,     -1,     -1,     -1,      -1
 };
 
+// Table 5-26: Selection of quantization levels and codebooks
+static const uint8_t quant_index_sel_nbits[10] = {
+    1, 2, 2, 2, 2, 3, 3, 3, 3, 3
+};
+
 // Table 5-27: Scale factor adjustment index
 static const int32_t scale_factor_adj[4] = {
     4194304, 4718592, 5242880, 6029312
@@ -108,6 +113,6 @@ static const int32_t joint_scale_factors[128] = {
 };
 
 // Annex D.6 - Block code books
-static const uint8_t block_code_bits[8] = {
+static const uint8_t block_code_nbits[8] = {
     0, 7, 10, 12, 13, 15, 17, 19
 };

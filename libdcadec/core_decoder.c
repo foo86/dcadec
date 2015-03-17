@@ -297,32 +297,14 @@ static int parse_coding_header(struct core_decoder *core, enum header_type heade
     }
 
     // Quantization index codebook select
-    n = 0;  // ABITS = 1
-    for (ch = xch_base; ch < core->nchannels; ch++)
-        core->quant_index_sel[ch][n] = bits_get(&core->bits, 1);
-
-    for (n = 1; n < 5; n++) // ABITS = 2 to 5
+    for (n = 0; n < NUM_CODE_BOOKS; n++)
         for (ch = xch_base; ch < core->nchannels; ch++)
-            core->quant_index_sel[ch][n] = bits_get(&core->bits, 2);
-
-    for (n = 5; n < NUM_CODE_BOOKS; n++)    // ABITS = 6 to 10
-        for (ch = xch_base; ch < core->nchannels; ch++)
-            core->quant_index_sel[ch][n] = bits_get(&core->bits, 3);
+            core->quant_index_sel[ch][n] = bits_get(&core->bits, quant_index_sel_nbits[n]);
 
     // Scale factor adjustment index
-    n = 0;  // ABITS = 1
-    for (ch = xch_base; ch < core->nchannels; ch++)
-        if (core->quant_index_sel[ch][n] == 0)
-            core->scale_factor_adj[ch][n] = scale_factor_adj[bits_get(&core->bits, 2)];
-
-    for (n = 1; n < 5; n++) // ABITS = 2 to 5
+    for (n = 0; n < NUM_CODE_BOOKS; n++)
         for (ch = xch_base; ch < core->nchannels; ch++)
-            if (core->quant_index_sel[ch][n] < 3)
-                core->scale_factor_adj[ch][n] = scale_factor_adj[bits_get(&core->bits, 2)];
-
-    for (n = 5; n < NUM_CODE_BOOKS; n++)    // ABITS = 6 to 10
-        for (ch = xch_base; ch < core->nchannels; ch++)
-            if (core->quant_index_sel[ch][n] < 7)
+            if (core->quant_index_sel[ch][n] < quant_index_group_size[n])
                 core->scale_factor_adj[ch][n] = scale_factor_adj[bits_get(&core->bits, 2)];
 
     if (header == HEADER_XXCH) {
@@ -514,7 +496,7 @@ static int parse_block_code(struct core_decoder *core, int *value, int sel)
 {
     // Select block code book
     // Extract the block code index from the bit stream
-    int code = bits_get(&core->bits, block_code_bits[sel]);
+    int code = bits_get(&core->bits, block_code_nbits[sel]);
     int levels = quant_levels[sel];
     int offset = (levels - 1) >> 1;
 
