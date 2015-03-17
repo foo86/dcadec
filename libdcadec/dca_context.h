@@ -29,6 +29,7 @@
 #define DCADEC_ENOMEM       7   /**< Memory allocation error */
 #define DCADEC_EOVERFLOW    8   /**< PCM output overflow */
 #define DCADEC_EIO          9   /**< I/O error */
+#define DCADEC_EOUTCHG     10   /**< PCM output parameters changed */
 #define DCADEC_EFAIL       32   /**< Unspecified error */
 /**@}*/
 
@@ -222,5 +223,14 @@ struct dcadec_context *dcadec_context_create(int flags);
  * @param dca   Pointer to decoder context.
  */
 void dcadec_context_destroy(struct dcadec_context *dca);
+
+/**
+ * Convert negative libdcadec error code into string.
+ *
+ * @param errnum    Error code returned by libdcadec function.
+ *
+ * @return          Constant string describing error code.
+ */
+const char *dcadec_strerror(int errnum);
 
 #endif

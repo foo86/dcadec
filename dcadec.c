@@ -183,7 +183,7 @@ int main(int argc, char **argv)
     int ret;
 
     if ((ret = dcadec_stream_read(stream, &packet, &size)) < 0) {
-        fprintf(stderr, "Error %d reading packet\n", ret);
+        fprintf(stderr, "Error reading packet: %s\n", dcadec_strerror(ret));
         dcadec_stream_close(stream);
         return 1;
     }
@@ -202,7 +202,7 @@ int main(int argc, char **argv)
     }
 
     if ((ret = dcadec_context_parse(context, packet, size)) < 0) {
-        fprintf(stderr, "Error %d parsing packet\n", ret);
+        fprintf(stderr, "Error parsing packet: %s\n", dcadec_strerror(ret));
         dcadec_context_destroy(context);
         dcadec_stream_close(stream);
         return 1;
@@ -246,19 +246,19 @@ int main(int argc, char **argv)
         if ((ret = dcadec_context_filter(context, &samples, &nsamples,
                                          &channel_mask, &sample_rate,
                                          &bits_per_sample, NULL)) < 0) {
-            fprintf(stderr, "Error %d filtering frame\n", ret);
+            fprintf(stderr, "Error filtering frame: %s\n", dcadec_strerror(ret));
             break;
         }
 
         if ((ret = dcadec_waveout_write(waveout, samples, nsamples,
                                         channel_mask, sample_rate,
                                         bits_per_sample)) < 0) {
-            fprintf(stderr, "Error %d writing PCM output\n", ret);
+            fprintf(stderr, "Error writing WAV file: %s\n", dcadec_strerror(ret));
             break;
         }
 
         if ((ret = dcadec_stream_read(stream, &packet, &size)) < 0) {
-            fprintf(stderr, "Error %d reading packet\n", ret);
+            fprintf(stderr, "Error reading packet: %s\n", dcadec_strerror(ret));
             break;
         }
 
@@ -274,7 +274,7 @@ int main(int argc, char **argv)
             break;
 
         if ((ret = dcadec_context_parse(context, packet, size)) < 0) {
-            fprintf(stderr, "Error %d parsing packet\n", ret);
+            fprintf(stderr, "Error parsing packet: %s\n", dcadec_strerror(ret));
             break;
         }
     }

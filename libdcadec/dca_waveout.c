@@ -68,13 +68,6 @@ static void write_int(struct dcadec_waveout *wave, int v)
 static int write_header(struct dcadec_waveout *wave, int channel_mask,
                         int sample_rate, int bits_per_sample)
 {
-    if (!channel_mask)
-        return -DCADEC_EINVAL;
-    if (sample_rate < 8000 || sample_rate > 384000)
-        return -DCADEC_EINVAL;
-    if (bits_per_sample < 8 || bits_per_sample > 32)
-        return -DCADEC_EINVAL;
-
     wave->channel_mask = channel_mask;
     wave->nchannels = dca_popcount(channel_mask);
     wave->sample_rate = sample_rate;
@@ -145,6 +138,12 @@ int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
         return -DCADEC_EINVAL;
     if (!samples)
         return -DCADEC_EINVAL;
+    if (!channel_mask)
+        return -DCADEC_EINVAL;
+    if (sample_rate < 8000 || sample_rate > 384000)
+        return -DCADEC_EINVAL;
+    if (bits_per_sample < 8 || bits_per_sample > 32)
+        return -DCADEC_EINVAL;
 
     if (!wave->size) {
         if ((ret = write_header(wave, channel_mask,
@@ -153,11 +152,11 @@ int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
         wave->size = 60;
     } else {
         if (channel_mask != wave->channel_mask)
-            return -DCADEC_EINVAL;
+            return -DCADEC_EOUTCHG;
         if (sample_rate != wave->sample_rate)
-            return -DCADEC_EINVAL;
+            return -DCADEC_EOUTCHG;
         if (bits_per_sample != wave->bits_per_sample)
-            return -DCADEC_EINVAL;
+            return -DCADEC_EOUTCHG;
     }
 
     if ((ret = dca_realloc(wave, &wave->buffer, nsamples, wave->block_align)) < 0)

@@ -527,3 +527,28 @@ void dcadec_context_destroy(struct dcadec_context *dca)
 {
     ta_free(dca);
 }
+
+const char *dcadec_strerror(int errnum)
+{
+    static const char * const errors[] = {
+        "Invalid argument",
+        "Invalid bitstream format",
+        "CRC check failed",
+        "Bitstream navigation error",
+        "Synchronization error",
+        "Unsupported feature",
+        "Memory allocation error",
+        "PCM output overflow",
+        "I/O error",
+        "PCM output parameters changed"
+    };
+
+    if (errnum >= 0)
+        return "No error";
+
+    unsigned int err = -errnum - 1;
+    if (err < dca_countof(errors))
+        return errors[err];
+    else
+        return "Unspecified error";
+}
