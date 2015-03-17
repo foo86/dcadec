@@ -537,16 +537,17 @@ static inline void dequantize(int *output, const int *input, int step_size,
     }
 }
 
-// 5.5 - Primary audio data arrays
-static int parse_subband_samples(struct core_decoder *core, int sf, int ssf,
-                                 int ch, int band, int sub_pos)
+static inline int extract_audio(struct core_decoder *core, int *audio,
+                                int abits, int *quant_index_sel)
 {
     const struct huffman *huff = NULL;
 
     // Assume no further encoding by default
     enum sample_type type = NO_FURTHER_ENCODING;
+
+    assert(abits >= 0 && abits < 27);
+
     // Select the quantizer
-    int abits = core->bit_allocation[ch][band];
     if (abits == 0) {
         // No bits allocated
         type = NO_BITS_ALLOCATED;
@@ -555,7 +556,7 @@ static int parse_subband_samples(struct core_decoder *core, int sf, int ssf,
         const struct huffman *group_huff = quant_index_group_huff[abits - 1];
         int group_size = quant_index_group_size[abits - 1];
         // Select quantization index code book
-        int sel = core->quant_index_sel[ch][abits - 1];
+        int sel = quant_index_sel[abits - 1];
         if (sel < group_size) {
             type = HUFFMAN_CODE;
             huff = &group_huff[sel];
@@ -565,10 +566,10 @@ static int parse_subband_samples(struct core_decoder *core, int sf, int ssf,
     }
 
     // Extract bits from the bit stream
-    int audio[NUM_SUBBAND_SAMPLES], ret;
+    int ret;
     switch (type) {
     case NO_BITS_ALLOCATED:
-        memset(audio, 0, sizeof(audio));
+        memset(audio, 0, NUM_SUBBAND_SAMPLES * sizeof(*audio));
         break;
     case HUFFMAN_CODE:
         if ((ret = bits_get_signed_vlc_array(&core->bits, audio, NUM_SUBBAND_SAMPLES, huff)) < 0)
@@ -584,6 +585,20 @@ static int parse_subband_samples(struct core_decoder *core, int sf, int ssf,
         bits_get_signed_array(&core->bits, audio, NUM_SUBBAND_SAMPLES, abits - 3);
         break;
     }
+
+    return type;
+}
+
+// 5.5 - Primary audio data arrays
+static int parse_subband_samples(struct core_decoder *core, int sf, int ssf,
+                                 int ch, int band, int sub_pos)
+{
+    int abits = core->bit_allocation[ch][band];
+    int audio[NUM_SUBBAND_SAMPLES];
+    int ret;
+
+    if ((ret = extract_audio(core, audio, abits, core->quant_index_sel[ch])) < 0)
+        return ret;
 
     int step_size, trans_ssf, scale;
 
@@ -605,7 +620,7 @@ static int parse_subband_samples(struct core_decoder *core, int sf, int ssf,
 
     // Adjustment of scale factor
     // Only when SEL indicates Huffman code
-    if (type == HUFFMAN_CODE)
+    if (ret == HUFFMAN_CODE)
         scale = clip23(mul22nrd(core->scale_factor_adj[ch][abits - 1], scale));
 
     dequantize(core->subband_samples[ch][band] +
