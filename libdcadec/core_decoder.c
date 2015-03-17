@@ -899,6 +899,21 @@ int core_filter(struct core_decoder *core, int flags)
         }
     }
 
+    // Handle change of certain filtering parameters
+    int diff = core->filter_flags ^ flags;
+
+    if (diff & (DCADEC_FLAG_CORE_BIT_EXACT | DCADEC_FLAG_CORE_SYNTH_X96)) {
+        for (int ch = 0; ch < MAX_CHANNELS; ch++) {
+            ta_free(core->subband_dsp[ch]);
+            core->subband_dsp[ch] = NULL;
+        }
+    }
+
+    if (diff & DCADEC_FLAG_CORE_LFE_FIR)
+        memset(core->lfe_samples, 0, MAX_LFE_HISTORY * sizeof(int));
+
+    core->filter_flags = flags;
+
     // Filter primary channels
     for (int ch = 0; ch < core->nchannels; ch++) {
         // Allocate subband DSP
