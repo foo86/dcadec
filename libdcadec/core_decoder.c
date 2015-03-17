@@ -350,11 +350,27 @@ static int parse_scale(struct core_decoder *core, int *scale_index, int sel)
     return scale_table[*scale_index];
 }
 
+static int parse_joint_scale(struct core_decoder *core, int sel)
+{
+    int scale_index;
+
+    if (sel < 5)
+        scale_index = bits_get_signed_vlc(&core->bits, &scale_factor_huff[sel]);
+    else
+        scale_index = bits_get(&core->bits, sel + 1);
+
+    // Bias by 64
+    scale_index += 64;
+
+    enforce((unsigned int)scale_index < dca_countof(joint_scale_factors), "Invalid joint scale factor index");
+    return joint_scale_factors[scale_index];
+}
+
 // 5.4.1 - Primary audio coding side information
 static int parse_subframe_header(struct core_decoder *core, int sf,
                                  enum header_type header, int xch_base)
 {
-    int ch, band;
+    int ch, band, ret;
 
     if (header == HEADER_CORE) {
         // Subsubframe count
@@ -414,8 +430,6 @@ static int parse_subframe_header(struct core_decoder *core, int sf,
 
     // Scale factors
     for (ch = xch_base; ch < core->nchannels; ch++) {
-        int ret;
-
         // Clear scale factors
         for (band = 0; band < core->nsubbands[ch]; band++) {
             core->scale_factors[ch][band][0] = 0;
@@ -468,19 +482,9 @@ static int parse_subframe_header(struct core_decoder *core, int sf,
             // Get source channel
             int src_ch = core->joint_intensity_index[ch] - 1;
             for (band = core->nsubbands[ch]; band < core->nsubbands[src_ch]; band++) {
-                int scale_index;
-
-                if (sel < 5)
-                    scale_index = bits_get_signed_vlc(&core->bits, &scale_factor_huff[sel]);
-                else
-                    scale_index = bits_get(&core->bits, sel + 1);
-
-                // Bias by 64
-                scale_index += 64;
-
-                enforce((unsigned int)scale_index < dca_countof(joint_scale_factors),
-                        "Invalid joint scale factor index");
-                core->joint_scale_factors[ch][band] = joint_scale_factors[scale_index];
+                if ((ret = parse_joint_scale(core, sel)) < 0)
+                    return ret;
+                core->joint_scale_factors[ch][band] = ret;
             }
         }
     }
