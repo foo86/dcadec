@@ -1252,8 +1252,12 @@ static int parse_xbr_frame(struct core_decoder *core)
     for (int i = 0; i < xbr_nchsets; i++) {
         xbr_nchannels[i] = bits_get(&core->bits, 3) + 1;
         int xbr_band_nbits = bits_get(&core->bits, 2) + 5;
-        for (int ch = 0; ch < xbr_nchannels[i]; ch++)
-            xbr_nsubbands[xbr_base_ch++] = bits_get(&core->bits, xbr_band_nbits) + 1;
+        for (int ch = 0; ch < xbr_nchannels[i]; ch++) {
+            xbr_nsubbands[xbr_base_ch + ch] = bits_get(&core->bits, xbr_band_nbits) + 1;
+            enforce(xbr_nsubbands[xbr_base_ch + ch] <= MAX_SUBBANDS,
+                    "Invalid number of active XBR subbands");
+        }
+        xbr_base_ch += xbr_nchannels[i];
     }
 
     /*
