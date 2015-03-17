@@ -872,6 +872,18 @@ static int conv_dmix_scale_inv(int code)
 
 int core_filter(struct core_decoder *core, int flags)
 {
+    struct x96_decoder *x96 = NULL;
+
+    // Externally set CORE_SYNTH_X96 flags implies that X96 synthesis should be
+    // enabled, yet actual X96 subband data should be discarded. This is a special
+    // case for lossless residual decoder that apparently ignores X96 data.
+    if (!(flags & DCADEC_FLAG_CORE_SYNTH_X96) && core->x96_present) {
+        x96 = core->x96_decoder;
+        if (x96)
+            flags |= DCADEC_FLAG_CORE_SYNTH_X96;
+    }
+
+    // X96 synthesis enabled flag
     bool synth_x96 = !!(flags & DCADEC_FLAG_CORE_SYNTH_X96);
 
     // Output sample rate
@@ -930,7 +942,7 @@ int core_filter(struct core_decoder *core, int flags)
         core->subband_dsp[ch]->interpolate(core->subband_dsp[ch],
                                            core->output_samples[spkr],
                                            core->subband_samples[ch],
-                                           MAX_SUBBANDS,
+                                           x96 ? x96->subband_samples[ch] : NULL,
                                            core->npcmblocks,
                                            core->filter_perfect);
     }
@@ -1312,6 +1324,393 @@ static int parse_xbr_frame(struct core_decoder *core)
     return 0;
 }
 
+static int parse_x96_subband_samples(struct x96_decoder *x96, int ssf,
+                                     int ch, int band, int sub_pos)
+{
+    int abits = x96->bit_allocation[ch][band] - 1;
+    int audio[NUM_SUBBAND_SAMPLES];
+    int ret;
+
+    if ((ret = extract_audio(x96->core, audio, abits, x96->quant_index_sel[ch])) < 0)
+        return ret;
+
+    int step_size;
+
+    // Select quantization step size table
+    // Look up quantization step size
+    if (x96->core->bit_rate == -2)
+        step_size = step_size_lossless[abits];
+    else
+        step_size = step_size_lossy[abits];
+
+    dequantize(x96->subband_samples[ch][band] +
+               sub_pos + ssf * NUM_SUBBAND_SAMPLES,
+               audio, step_size,
+               x96->scale_factors[ch][band], false);
+    return 0;
+}
+
+#define NUM_VQ_X96  16
+
+// Modified ISO/IEC 9899 linear congruential generator
+// Returns pseudorandom integer in range [-2^30, 2^30 - 1]
+static int rand_x96(struct x96_decoder *x96)
+{
+    x96->rand = 1103515245U * x96->rand + 12345U;
+    return (x96->rand & 0x7fffffff) - 0x40000000;
+}
+
+static int parse_x96_subframe_audio(struct x96_decoder *x96, int sf, int *sub_pos)
+{
+    struct core_decoder *core = x96->core;
+    int ssf, ch, band;
+
+    // Number of subband samples in this subframe
+    int nsamples = core->nsubsubframes[sf] * NUM_SUBBAND_SAMPLES;
+    enforce(*sub_pos + nsamples <= core->npcmblocks, "Subband sample buffer overflow");
+
+    // Number of VQ lookup iterations for this subframe
+    int n_ssf_iter = core->nsubsubframes[sf] / 2;
+    if (nsamples > n_ssf_iter * NUM_VQ_X96)
+        n_ssf_iter++;
+
+    // VQ encoded or unallocated subbands
+    for (ch = 0; ch < core->nchannels; ch++) {
+        for (band = x96->subband_start; band < x96->nsubbands[ch]; band++) {
+            // Get the sample pointer
+            int *samples = x96->subband_samples[ch][band] + *sub_pos;
+
+            // Get the scale factor
+            int scale = x96->scale_factors[ch][band];
+
+            int abits = x96->bit_allocation[ch][band];
+            if (abits == 0) {   // No bits allocated for subband
+                if (scale <= 1) {
+                    memset(samples, 0, nsamples * sizeof(int));
+                } else {
+                    // Generate scaled random samples as required by specification
+                    for (int n = 0; n < nsamples; n++)
+                        samples[n] = mul31(rand_x96(x96), scale);
+                }
+            } else if (abits == 1) {    // VQ encoded subband
+                for (int ssf_iter = 0; ssf_iter < n_ssf_iter; ssf_iter++) {
+                    // Extract the VQ address from the bit stream
+                    int vq_index = bits_get(&core->bits, 10);
+
+                    // Look up the VQ code book for up to 16 subband samples
+                    const int8_t *vq_samples = high_freq_samples[vq_index];
+
+                    // Number of VQ samples to look up
+                    int vq_nsamples = nsamples - ssf_iter * NUM_VQ_X96;
+                    if (vq_nsamples > NUM_VQ_X96)
+                        vq_nsamples = NUM_VQ_X96;
+
+                    // Scale and take the samples
+                    for (int n = 0; n < vq_nsamples; n++)
+                        samples[n] = clip23(mul4(scale, vq_samples[n]));
+                    samples += vq_nsamples;
+                }
+            }
+        }
+    }
+
+    // Audio data
+    for (ssf = 0; ssf < core->nsubsubframes[sf]; ssf++) {
+        int ret;
+
+        for (ch = 0; ch < core->nchannels; ch++)
+            for (band = x96->subband_start; band < x96->nsubbands[ch]; band++)
+                // Not VQ encoded or unallocated subbands
+                if (x96->bit_allocation[ch][band] > 1)
+                    if ((ret = parse_x96_subband_samples(x96, ssf, ch, band, *sub_pos)) < 0)
+                        return ret;
+
+        // DSYNC
+        if (ssf == core->nsubsubframes[sf] - 1 || core->sync_ssf)
+            enforce(bits_get(&core->bits, 16) == 0xffff, "DSYNC check failed");
+    }
+
+    // Inverse ADPCM
+    for (ch = 0; ch < core->nchannels; ch++) {
+        for (band = x96->subband_start; band < x96->nsubbands[ch]; band++) {
+            // Only if prediction mode is on
+            if (x96->prediction_mode[ch][band]) {
+                int *samples = x96->subband_samples[ch][band] + *sub_pos;
+
+                // Extract the VQ index
+                int vq_index = x96->prediction_vq_index[ch][band];
+
+                // Look up the VQ table for prediction coefficients
+                const int16_t *vq_coeffs = adpcm_coeffs[vq_index];
+                for (int m = 0; m < nsamples; m++) {
+                    int64_t err = INT64_C(0);
+                    for (int n = 0; n < NUM_ADPCM_COEFFS; n++)
+                        err += (int64_t)samples[m - n - 1] * vq_coeffs[n];
+                    samples[m] = clip23(samples[m] + clip23(norm13(err)));
+                }
+            }
+        }
+    }
+
+    // Joint subband coding
+    for (ch = 0; ch < core->nchannels; ch++) {
+        // Only if joint subband coding is enabled
+        if (x96->joint_intensity_index[ch]) {
+            // Get source channel
+            int src_ch = x96->joint_intensity_index[ch] - 1;
+            for (band = x96->nsubbands[ch]; band < x96->nsubbands[src_ch]; band++) {
+                int *src = x96->subband_samples[src_ch][band] + *sub_pos;
+                int *dst = x96->subband_samples[    ch][band] + *sub_pos;
+                int scale = x96->joint_scale_factors[ch][band];
+                for (int n = 0; n < nsamples; n++)
+                    dst[n] = clip23(mul17(src[n], scale));
+            }
+        }
+    }
+
+    // Advance subband sample pointer for the next subframe
+    *sub_pos += nsamples;
+    return 0;
+}
+
+static void erase_x96_adpcm_history(struct x96_decoder *x96)
+{
+    // Erase ADPCM history from previous frame if
+    // predictor history switch was disabled
+    for (int ch = 0; ch < MAX_CHANNELS; ch++) {
+        for (int band = 0; band < MAX_SUBBANDS_X96; band++) {
+            int *samples = x96->subband_samples[ch][band] - NUM_ADPCM_COEFFS;
+            for (int n = 0; n < NUM_ADPCM_COEFFS; n++)
+                samples[n] = 0;
+        }
+    }
+}
+
+static int alloc_x96_sample_buffer(struct x96_decoder *x96)
+{
+    struct core_decoder *core = x96->core;
+    int nchsamples = NUM_ADPCM_COEFFS + core->npcmblocks;
+    int nframesamples = nchsamples * MAX_CHANNELS * MAX_SUBBANDS_X96;
+
+    // Reallocate subband sample buffer
+    int ret;
+    if ((ret = dca_realloc(core, &x96->subband_buffer, nframesamples, sizeof(int))) < 0)
+        return ret;
+    if (ret > 0) {
+        for (int ch = 0; ch < MAX_CHANNELS; ch++)
+            for (int band = 0; band < MAX_SUBBANDS_X96; band++)
+                x96->subband_samples[ch][band] = x96->subband_buffer +
+                    (ch * MAX_SUBBANDS_X96 + band) * nchsamples + NUM_ADPCM_COEFFS;
+    }
+
+    if (!core->predictor_history)
+        erase_x96_adpcm_history(x96);
+
+    return 0;
+}
+
+static int parse_x96_subframe_header(struct x96_decoder *x96)
+{
+    struct core_decoder *core = x96->core;
+    int ch, band, ret;
+
+    // Prediction mode
+    for (ch = 0; ch < core->nchannels; ch++)
+        for (band = x96->subband_start; band < x96->nsubbands[ch]; band++)
+            x96->prediction_mode[ch][band] = bits_get1(&core->bits);
+
+    // Prediction coefficients VQ address
+    for (ch = 0; ch < core->nchannels; ch++)
+        for (band = x96->subband_start; band < x96->nsubbands[ch]; band++)
+            if (x96->prediction_mode[ch][band])
+                x96->prediction_vq_index[ch][band] = bits_get(&core->bits, 12);
+
+    // Bit allocation index
+    for (ch = 0; ch < core->nchannels; ch++) {
+        // Select codebook
+        int sel = x96->bit_allocation_sel[ch];
+
+        const struct huffman *huff;
+        unsigned int abits_max;
+
+        // Reuse quantization index code books for bit allocation index
+        if (x96->high_res) {
+            huff = &quant_index_huff_7[sel];
+            abits_max = 15;
+        } else {
+            huff = &quant_index_huff_5[sel];
+            abits_max = 7;
+        }
+
+        // Clear accumulation
+        int abits = 0;
+
+        for (band = x96->subband_start; band < x96->nsubbands[ch]; band++) {
+            if (sel < 7)
+                // If Huffman code was used, the difference of abits was encoded
+                abits += bits_get_signed_vlc(&core->bits, huff);
+            else
+                abits = bits_get(&core->bits, 3 + x96->high_res);
+            enforce((unsigned int)abits <= abits_max, "Invalid bit allocation index");
+            x96->bit_allocation[ch][band] = abits;
+        }
+    }
+
+    // Scale factors
+    for (ch = 0; ch < core->nchannels; ch++) {
+        // Clear accumulation
+        int scale_index = 0;
+
+        // Extract scales for subbands
+        // Transmitted even for unallocated subbands
+        for (band = x96->subband_start; band < x96->nsubbands[ch]; band++) {
+            if ((ret = parse_scale(core, &scale_index, x96->scale_factor_sel[ch])) < 0)
+                return ret;
+            x96->scale_factors[ch][band] = ret;
+        }
+    }
+
+    // Joint subband codebook select
+    for (ch = 0; ch < core->nchannels; ch++) {
+        // Only if joint subband coding is enabled
+        if (x96->joint_intensity_index[ch]) {
+            x96->joint_scale_sel[ch] = bits_get(&core->bits, 3);
+            enforce(x96->joint_scale_sel[ch] < 7, "Invalid joint scale factor code book");
+        }
+    }
+
+    // Scale factors for joint subband coding
+    for (ch = 0; ch < core->nchannels; ch++) {
+        // Only if joint subband coding is enabled
+        if (x96->joint_intensity_index[ch]) {
+            // Select codebook
+            int sel = x96->joint_scale_sel[ch];
+            // Get source channel
+            int src_ch = x96->joint_intensity_index[ch] - 1;
+            for (band = x96->nsubbands[ch]; band < x96->nsubbands[src_ch]; band++) {
+                if ((ret = parse_joint_scale(core, sel)) < 0)
+                    return ret;
+                x96->joint_scale_factors[ch][band] = ret;
+            }
+        }
+    }
+
+    // Side information CRC check word
+    if (core->crc_present)
+        bits_skip(&core->bits, 16);
+
+    return 0;
+}
+
+static int parse_x96_coding_header(struct x96_decoder *x96)
+{
+    struct core_decoder *core = x96->core;
+    int ch, n;
+
+    // High resolution flag
+    x96->high_res = bits_get1(&core->bits);
+
+    // First encoded subband
+    if (x96->rev_no < 8) {
+        x96->subband_start = bits_get(&core->bits, 5);
+        enforce(x96->subband_start <= 27, "Invalid X96 subband start index");
+    } else {
+        x96->subband_start = 32;
+    }
+
+    /*
+    printf("x96_rev_no %d\n", x96->rev_no);
+    printf("x96_high_res %d\n", x96->high_res);
+    printf("x96_subband_start %d\n", x96->subband_start);
+    */
+
+    // Subband activity count
+    for (ch = 0; ch < core->nchannels; ch++)
+        x96->nsubbands[ch] = bits_get(&core->bits, 6) + 1;
+
+    // Joint intensity coding index
+    for (ch = 0; ch < core->nchannels; ch++) {
+        x96->joint_intensity_index[ch] = bits_get(&core->bits, 3);
+        enforce(x96->joint_intensity_index[ch] <= core->nchannels,
+                "Invalid joint intensity coding index");
+    }
+
+    // Scale factor code book
+    for (ch = 0; ch < core->nchannels; ch++) {
+        x96->scale_factor_sel[ch] = bits_get(&core->bits, 3);
+        enforce(x96->scale_factor_sel[ch] < 6, "Invalid scale factor code book");
+    }
+
+    // Bit allocation quantizer select
+    for (ch = 0; ch < core->nchannels; ch++)
+        x96->bit_allocation_sel[ch] = bits_get(&core->bits, 3);
+
+    // Quantization index codebook select
+    for (n = 0; n < 6 + 4 * x96->high_res; n++)
+        for (ch = 0; ch < core->nchannels; ch++)
+            x96->quant_index_sel[ch][n] = bits_get(&core->bits, quant_index_sel_nbits[n]);
+
+    if (core->crc_present)
+        bits_skip(&core->bits, 16);
+
+    return 0;
+}
+
+static int parse_x96_frame(struct x96_decoder *x96)
+{
+    struct core_decoder *core = x96->core;
+    size_t frame_pos = core->bits.index;
+
+    // X96 frame size
+    size_t frame_size = bits_get(&core->bits, 12) + 1;
+    enforce(frame_size > 4, "Invalid X96 frame size");
+
+    // Revision number
+    x96->rev_no = bits_get(&core->bits, 4);
+    require(x96->rev_no >= 1 && x96->rev_no <= 8, "Unsupported X96 revision");
+
+    int ret;
+    if ((ret = parse_x96_coding_header(x96)) < 0)
+        return ret;
+
+    if ((ret = alloc_x96_sample_buffer(x96)) < 0)
+        return ret;
+
+    int sub_pos = 0;
+    for (int sf = 0; sf < core->nsubframes; sf++) {
+        if ((ret = parse_x96_subframe_header(x96)) < 0)
+            return ret;
+        if ((ret = parse_x96_subframe_audio(x96, sf, &sub_pos)) < 0)
+            return ret;
+    }
+
+    for (int ch = 0; ch < core->nchannels; ch++) {
+        // Number of active subbands for this channel
+        int nsubbands;
+        if (x96->joint_intensity_index[ch]) {
+            nsubbands = x96->nsubbands[x96->joint_intensity_index[ch] - 1];
+            if (nsubbands < x96->nsubbands[ch])
+                nsubbands = x96->nsubbands[ch];
+        } else {
+            nsubbands = x96->nsubbands[ch];
+        }
+
+        // Update history for ADPCM
+        // Clear inactive subbands
+        for (int band = 0; band < MAX_SUBBANDS_X96; band++) {
+            int *samples = x96->subband_samples[ch][band] - NUM_ADPCM_COEFFS;
+            if (band >= x96->subband_start && band < nsubbands) {
+                for (int n = NUM_ADPCM_COEFFS - 1; n >= 0; n--)
+                    samples[n] = samples[core->npcmblocks + n];
+            } else {
+                memset(samples, 0, (NUM_ADPCM_COEFFS + core->npcmblocks) * sizeof(int));
+            }
+        }
+    }
+
+    return bits_seek(&core->bits, frame_pos + frame_size * 8 - 32);
+}
+
 // Revert to base core channel set in case (X)XCH parsing fails
 static void revert_to_base_chset(struct core_decoder *core)
 {
@@ -1430,6 +1829,14 @@ static int parse_optional_info(struct core_decoder *core, int flags)
 
         if (x96_pos) {
             //printf("found X96 @ %zu\n", x96_pos);
+            core->bits.index = x96_pos * 32;
+            if (!core->x96_decoder) {
+                if (!(core->x96_decoder = ta_znew(core, struct x96_decoder)))
+                    return -DCADEC_ENOMEM;
+                core->x96_decoder->core = core;
+                core->x96_decoder->rand = 1;
+            }
+            core->x96_present = !parse_x96_frame(core->x96_decoder);
         }
 
         if (xbr_pos) {
@@ -1500,9 +1907,10 @@ void core_clear(struct core_decoder *core)
     if (core) {
         if (core->subband_buffer) {
             erase_adpcm_history(core);
-            for (int n = 0; n < MAX_LFE_HISTORY; n++)
-                core->lfe_samples[n] = 0;
+            memset(core->lfe_samples, 0, MAX_LFE_HISTORY * sizeof(int));
         }
+        if (core->x96_decoder && core->x96_decoder->subband_buffer)
+            erase_x96_adpcm_history(core->x96_decoder);
         for (int ch = 0; ch < MAX_CHANNELS; ch++)
             interpolator_clear(core->subband_dsp[ch]);
         core->output_history_lfe = 0;

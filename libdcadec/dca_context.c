@@ -107,6 +107,8 @@ static int filter_core_frame(struct dcadec_context *dca)
         dca->profile = DCADEC_PROFILE_HD_HRA;
     else if (core->es_format && core->xch_present)
         dca->profile = DCADEC_PROFILE_DS_ES;
+    else if (core->x96_present && !(dca->flags & DCADEC_FLAG_CORE_SYNTH_X96))
+        dca->profile = DCADEC_PROFILE_DS_96_24;
     else
         dca->profile = DCADEC_PROFILE_DS;
     return 0;
@@ -431,6 +433,7 @@ struct dcadec_core_info *dcadec_context_get_core_info(struct dcadec_context *dca
     info->xch_present = dca->core->xch_present;
     info->xxch_present = dca->core->xxch_present;
     info->xbr_present = dca->core->xbr_present;
+    info->x96_present = dca->core->x96_present;
     return info;
 }
 

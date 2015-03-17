@@ -51,6 +51,8 @@ INTERPOLATE_LFE(lfe_fixed_fir)
 
 INTERPOLATE_SUB(sub32_fixed)
 {
+    assert(subband_samples_hi == NULL);
+
     // Get history pointer
     int *history = dsp->history;
 
@@ -64,12 +66,8 @@ INTERPOLATE_SUB(sub32_fixed)
 
         // Load in one sample from each subband
         int input[32];
-        for (i = 0; i < nsubbands; i++)
-            input[i] = subband_samples[i][sample];
-
-        // Clear inactive subband_samples
-        for (i = nsubbands; i < 32; i++)
-            input[i] = 0;
+        for (i = 0; i < 32; i++)
+            input[i] = subband_samples_lo[i][sample];
 
         // Inverse DCT
         int output[32];
@@ -131,12 +129,19 @@ INTERPOLATE_SUB(sub64_fixed)
 
         // Load in one sample from each subband
         int input[64];
-        for (i = 0; i < nsubbands; i++)
-            input[i] = subband_samples[i][sample];
-
-        // Clear inactive subband_samples
-        for (i = nsubbands; i < 64; i++)
-            input[i] = 0;
+        if (subband_samples_hi) {
+            // Full 64 subbands, first 32 are residual coded
+            for (i =  0; i < 32; i++)
+                input[i] = subband_samples_lo[i][sample] + subband_samples_hi[i][sample];
+            for (i = 32; i < 64; i++)
+                input[i] = subband_samples_hi[i][sample];
+        } else {
+            // Only first 32 subbands
+            for (i =  0; i < 32; i++)
+                input[i] = subband_samples_lo[i][sample];
+            for (i = 32; i < 64; i++)
+                input[i] = 0;
+        }
 
         // Inverse DCT
         int output[64];

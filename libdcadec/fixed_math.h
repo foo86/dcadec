@@ -76,6 +76,7 @@ static inline int32_t mul15(int32_t a, int32_t b) { return mul__(a, b, 15); }
 static inline int32_t mul16(int32_t a, int32_t b) { return mul__(a, b, 16); }
 static inline int32_t mul17(int32_t a, int32_t b) { return mul__(a, b, 17); }
 static inline int32_t mul23(int32_t a, int32_t b) { return mul__(a, b, 23); }
+static inline int32_t mul31(int32_t a, int32_t b) { return mul__(a, b, 31); }
 
 static inline int32_t clip23(int32_t a) { return clip__(a, 23); }
 

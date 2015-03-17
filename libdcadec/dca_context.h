@@ -39,7 +39,11 @@
 /** Force bit exact DTS core decoding */
 #define DCADEC_FLAG_CORE_BIT_EXACT      0x02
 
-/** Force DTS core synthesis using X96 filter */
+/**
+ * Force DTS core synthesis using X96 filter, with high frequency subbands set
+ * to zero. If actual X96 data is present, it is discarded when this flag is
+ * set. Effectively doubles output sample rate.
+ */
 #define DCADEC_FLAG_CORE_SYNTH_X96      0x04
 
 /** Force DTS core bit width reducion to source PCM resolution */

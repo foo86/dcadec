@@ -30,8 +30,35 @@
 #define NUM_ADPCM_COEFFS        4
 #define NUM_CODE_BOOKS          10
 
+#define MAX_SUBBANDS_X96        64
+
 struct core_decoder;
 struct exss_asset;
+
+struct x96_decoder {
+    struct core_decoder *core;
+
+    int     rev_no;
+    bool    high_res;
+    int     subband_start;
+    int     nsubbands[MAX_CHANNELS];
+    int     joint_intensity_index[MAX_CHANNELS];
+    int     scale_factor_sel[MAX_CHANNELS];
+    int     bit_allocation_sel[MAX_CHANNELS];
+    int     quant_index_sel[MAX_CHANNELS][NUM_CODE_BOOKS];
+
+    bool    prediction_mode[MAX_CHANNELS][MAX_SUBBANDS_X96];
+    int     prediction_vq_index[MAX_CHANNELS][MAX_SUBBANDS_X96];
+    int     bit_allocation[MAX_CHANNELS][MAX_SUBBANDS_X96];
+    int     scale_factors[MAX_CHANNELS][MAX_SUBBANDS_X96];
+    int     joint_scale_sel[MAX_CHANNELS];
+    int     joint_scale_factors[MAX_CHANNELS][MAX_SUBBANDS_X96];
+
+    int     rand;
+
+    int     *subband_buffer;
+    int     *subband_samples[MAX_CHANNELS][MAX_SUBBANDS_X96];
+};
 
 struct core_decoder {
     struct bitstream    bits;
@@ -99,6 +126,9 @@ struct core_decoder {
     int     xxch_core_mask;
 
     bool    xbr_present;
+
+    bool                x96_present;
+    struct x96_decoder  *x96_decoder;
 
     int     *output_buffer;
     int     *output_samples[SPEAKER_COUNT];

@@ -29,7 +29,8 @@ typedef void (*interpolate_lfe_t)(int *pcm_samples, int *lfe_samples,
                                   bool synth_x96);
 
 typedef void (*interpolate_sub_t)(struct interpolator *dsp, int *pcm_samples,
-                                  int **subband_samples, int nsubbands,
+                                  int **subband_samples_lo,
+                                  int **subband_samples_hi,
                                   int nsamples, bool perfect);
 
 struct interpolator {
@@ -47,7 +48,8 @@ void interpolator_clear(struct interpolator *dsp);
 
 #define INTERPOLATE_SUB(x) \
     void interpolate_##x(struct interpolator *dsp, int *pcm_samples, \
-                         int **subband_samples, int nsubbands, \
+                         int **subband_samples_lo, \
+                         int **subband_samples_hi, \
                          int nsamples, bool perfect)
 
 INTERPOLATE_LFE(lfe_float_fir);
