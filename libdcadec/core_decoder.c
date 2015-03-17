@@ -740,18 +740,6 @@ static void erase_adpcm_history(struct core_decoder *core)
     }
 }
 
-static void update_adpcm_history(struct core_decoder *core, int xch_base)
-{
-    // Update history for ADPCM
-    for (int ch = xch_base; ch < core->nchannels; ch++) {
-        for (int band = 0; band < core->nsubbands[ch]; band++) {
-            int *samples = core->subband_samples[ch][band] - NUM_ADPCM_COEFFS;
-            for (int n = NUM_ADPCM_COEFFS - 1; n >= 0; n--)
-                samples[n] = samples[core->npcmblocks + n];
-        }
-    }
-}
-
 static int alloc_sample_buffer(struct core_decoder *core)
 {
     int nchsamples = NUM_ADPCM_COEFFS + core->npcmblocks;
@@ -785,14 +773,37 @@ static int parse_frame_data(struct core_decoder *core, enum header_type header, 
     int sub_pos = 0;
     int lfe_pos = MAX_LFE_HISTORY;
     for (int sf = 0; sf < core->nsubframes; sf++) {
-        int ret;
         if ((ret = parse_subframe_header(core, sf, header, xch_base)) < 0)
             return ret;
         if ((ret = parse_subframe_audio(core, sf, header, xch_base, &sub_pos, &lfe_pos)) < 0)
             return ret;
     }
 
-    update_adpcm_history(core, xch_base);
+    for (int ch = xch_base; ch < core->nchannels; ch++) {
+        // Number of active subbands for this channel
+        int nsubbands;
+        if (core->joint_intensity_index[ch]) {
+            nsubbands = core->nsubbands[core->joint_intensity_index[ch] - 1];
+            if (nsubbands < core->nsubbands[ch])
+                nsubbands = core->nsubbands[ch];
+        } else {
+            nsubbands = core->nsubbands[ch];
+        }
+
+        // Update history for ADPCM
+        for (int band = 0; band < nsubbands; band++) {
+            int *samples = core->subband_samples[ch][band] - NUM_ADPCM_COEFFS;
+            for (int n = NUM_ADPCM_COEFFS - 1; n >= 0; n--)
+                samples[n] = samples[core->npcmblocks + n];
+        }
+
+        // Clear inactive subbands
+        for (int band = nsubbands; band < MAX_SUBBANDS; band++) {
+            int *samples = core->subband_samples[ch][band] - NUM_ADPCM_COEFFS;
+            memset(samples, 0, (NUM_ADPCM_COEFFS + core->npcmblocks) * sizeof(int));
+        }
+    }
+
     return 0;
 }
 
@@ -871,10 +882,6 @@ int core_filter(struct core_decoder *core, int flags)
 
     // Filter primary channels
     for (int ch = 0; ch < core->nchannels; ch++) {
-        int nsubbands = core->nsubbands[ch];
-        if (core->joint_intensity_index[ch])
-            nsubbands = core->nsubbands[core->joint_intensity_index[ch] - 1];
-
         // Allocate subband DSP
         if (!core->subband_dsp[ch])
             if (!(core->subband_dsp[ch] = interpolator_create(core, flags)))
@@ -889,7 +896,7 @@ int core_filter(struct core_decoder *core, int flags)
         core->subband_dsp[ch]->interpolate(core->subband_dsp[ch],
                                            core->output_samples[spkr],
                                            core->subband_samples[ch],
-                                           nsubbands,
+                                           MAX_SUBBANDS,
                                            core->npcmblocks,
                                            core->filter_perfect);
     }
