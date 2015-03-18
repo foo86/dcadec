@@ -930,11 +930,18 @@ int core_filter(struct core_decoder *core, int flags)
         if (spkr < 0)
             return -DCADEC_EINVAL;
 
+        // Get the pointer to high frequency subbands for this channel, if present
+        int **subband_samples_hi;
+        if (x96 && ch < x96->nchannels)
+            subband_samples_hi = x96->subband_samples[ch];
+        else
+            subband_samples_hi = NULL;
+
         // Filter bank reconstruction
         core->subband_dsp[ch]->interpolate(core->subband_dsp[ch],
                                            core->output_samples[spkr],
                                            core->subband_samples[ch],
-                                           x96 ? x96->subband_samples[ch] : NULL,
+                                           subband_samples_hi,
                                            core->npcmblocks,
                                            core->filter_perfect);
     }
@@ -1353,7 +1360,7 @@ static int rand_x96(struct x96_decoder *x96)
     return (x96->rand & 0x7fffffff) - 0x40000000;
 }
 
-static int parse_x96_subframe_audio(struct x96_decoder *x96, int sf, int *sub_pos)
+static int parse_x96_subframe_audio(struct x96_decoder *x96, int sf, int xch_base, int *sub_pos)
 {
     struct core_decoder *core = x96->core;
     int ssf, ch, band;
@@ -1368,7 +1375,7 @@ static int parse_x96_subframe_audio(struct x96_decoder *x96, int sf, int *sub_po
         n_ssf_iter++;
 
     // VQ encoded or unallocated subbands
-    for (ch = 0; ch < core->nchannels; ch++) {
+    for (ch = xch_base; ch < x96->nchannels; ch++) {
         for (band = x96->subband_start; band < x96->nsubbands[ch]; band++) {
             // Get the sample pointer
             int *samples = x96->subband_samples[ch][band] + *sub_pos;
@@ -1411,7 +1418,7 @@ static int parse_x96_subframe_audio(struct x96_decoder *x96, int sf, int *sub_po
     for (ssf = 0; ssf < core->nsubsubframes[sf]; ssf++) {
         int ret;
 
-        for (ch = 0; ch < core->nchannels; ch++)
+        for (ch = xch_base; ch < x96->nchannels; ch++)
             for (band = x96->subband_start; band < x96->nsubbands[ch]; band++)
                 // Not VQ encoded or unallocated subbands
                 if (x96->bit_allocation[ch][band] > 1)
@@ -1424,7 +1431,7 @@ static int parse_x96_subframe_audio(struct x96_decoder *x96, int sf, int *sub_po
     }
 
     // Inverse ADPCM
-    for (ch = 0; ch < core->nchannels; ch++) {
+    for (ch = xch_base; ch < x96->nchannels; ch++) {
         for (band = x96->subband_start; band < x96->nsubbands[ch]; band++) {
             // Only if prediction mode is on
             if (x96->prediction_mode[ch][band]) {
@@ -1446,7 +1453,7 @@ static int parse_x96_subframe_audio(struct x96_decoder *x96, int sf, int *sub_po
     }
 
     // Joint subband coding
-    for (ch = 0; ch < core->nchannels; ch++) {
+    for (ch = xch_base; ch < x96->nchannels; ch++) {
         // Only if joint subband coding is enabled
         if (x96->joint_intensity_index[ch]) {
             // Get source channel
@@ -1502,24 +1509,24 @@ static int alloc_x96_sample_buffer(struct x96_decoder *x96)
     return 0;
 }
 
-static int parse_x96_subframe_header(struct x96_decoder *x96)
+static int parse_x96_subframe_header(struct x96_decoder *x96, int xch_base)
 {
     struct core_decoder *core = x96->core;
     int ch, band, ret;
 
     // Prediction mode
-    for (ch = 0; ch < core->nchannels; ch++)
+    for (ch = xch_base; ch < x96->nchannels; ch++)
         for (band = x96->subband_start; band < x96->nsubbands[ch]; band++)
             x96->prediction_mode[ch][band] = bits_get1(&core->bits);
 
     // Prediction coefficients VQ address
-    for (ch = 0; ch < core->nchannels; ch++)
+    for (ch = xch_base; ch < x96->nchannels; ch++)
         for (band = x96->subband_start; band < x96->nsubbands[ch]; band++)
             if (x96->prediction_mode[ch][band])
                 x96->prediction_vq_index[ch][band] = bits_get(&core->bits, 12);
 
     // Bit allocation index
-    for (ch = 0; ch < core->nchannels; ch++) {
+    for (ch = xch_base; ch < x96->nchannels; ch++) {
         // Select codebook
         int sel = x96->bit_allocation_sel[ch];
 
@@ -1550,7 +1557,7 @@ static int parse_x96_subframe_header(struct x96_decoder *x96)
     }
 
     // Scale factors
-    for (ch = 0; ch < core->nchannels; ch++) {
+    for (ch = xch_base; ch < x96->nchannels; ch++) {
         // Clear accumulation
         int scale_index = 0;
 
@@ -1564,7 +1571,7 @@ static int parse_x96_subframe_header(struct x96_decoder *x96)
     }
 
     // Joint subband codebook select
-    for (ch = 0; ch < core->nchannels; ch++) {
+    for (ch = xch_base; ch < x96->nchannels; ch++) {
         // Only if joint subband coding is enabled
         if (x96->joint_intensity_index[ch]) {
             x96->joint_scale_sel[ch] = bits_get(&core->bits, 3);
@@ -1573,7 +1580,7 @@ static int parse_x96_subframe_header(struct x96_decoder *x96)
     }
 
     // Scale factors for joint subband coding
-    for (ch = 0; ch < core->nchannels; ch++) {
+    for (ch = xch_base; ch < x96->nchannels; ch++) {
         // Only if joint subband coding is enabled
         if (x96->joint_intensity_index[ch]) {
             // Select codebook
@@ -1595,10 +1602,22 @@ static int parse_x96_subframe_header(struct x96_decoder *x96)
     return 0;
 }
 
-static int parse_x96_coding_header(struct x96_decoder *x96)
+static int parse_x96_coding_header(struct x96_decoder *x96, bool exss, int xch_base)
 {
     struct core_decoder *core = x96->core;
-    int ch, n;
+    size_t header_pos = core->bits.index;
+    size_t header_size = 0;
+    int ch, n, ret;
+
+    if (exss) {
+        // Channel set header length
+        header_size = bits_get(&core->bits, 7) + 1;
+
+        // Check CRC
+        if (x96->crc_present)
+            if ((ret = bits_check_crc(&core->bits, header_pos, header_pos + header_size * 8)) < 0)
+                return ret;
+    }
 
     // High resolution flag
     x96->high_res = bits_get1(&core->bits);
@@ -1611,73 +1630,60 @@ static int parse_x96_coding_header(struct x96_decoder *x96)
         x96->subband_start = 32;
     }
 
-    /*
-    printf("x96_rev_no %d\n", x96->rev_no);
-    printf("x96_high_res %d\n", x96->high_res);
-    printf("x96_subband_start %d\n", x96->subband_start);
-    */
-
     // Subband activity count
-    for (ch = 0; ch < core->nchannels; ch++)
+    for (ch = xch_base; ch < x96->nchannels; ch++)
         x96->nsubbands[ch] = bits_get(&core->bits, 6) + 1;
 
     // Joint intensity coding index
-    for (ch = 0; ch < core->nchannels; ch++) {
+    for (ch = xch_base; ch < x96->nchannels; ch++)
         x96->joint_intensity_index[ch] = bits_get(&core->bits, 3);
-        enforce(x96->joint_intensity_index[ch] <= core->nchannels,
-                "Invalid joint intensity coding index");
-    }
 
     // Scale factor code book
-    for (ch = 0; ch < core->nchannels; ch++) {
+    for (ch = xch_base; ch < x96->nchannels; ch++) {
         x96->scale_factor_sel[ch] = bits_get(&core->bits, 3);
         enforce(x96->scale_factor_sel[ch] < 6, "Invalid scale factor code book");
     }
 
     // Bit allocation quantizer select
-    for (ch = 0; ch < core->nchannels; ch++)
+    for (ch = xch_base; ch < x96->nchannels; ch++)
         x96->bit_allocation_sel[ch] = bits_get(&core->bits, 3);
 
     // Quantization index codebook select
     for (n = 0; n < 6 + 4 * x96->high_res; n++)
-        for (ch = 0; ch < core->nchannels; ch++)
+        for (ch = xch_base; ch < x96->nchannels; ch++)
             x96->quant_index_sel[ch][n] = bits_get(&core->bits, quant_index_sel_nbits[n]);
 
-    if (core->crc_present)
-        bits_skip(&core->bits, 16);
+    if (exss) {
+        // Reserved
+        // Byte align
+        // CRC16 of channel set header
+        if ((ret = bits_seek(&core->bits, header_pos + header_size * 8)) < 0)
+            return ret;
+    } else {
+        if (core->crc_present)
+            bits_skip(&core->bits, 16);
+    }
 
     return 0;
 }
 
-static int parse_x96_frame(struct x96_decoder *x96)
+static int parse_x96_frame_data(struct x96_decoder *x96, bool exss, int xch_base)
 {
     struct core_decoder *core = x96->core;
-    size_t frame_pos = core->bits.index;
-
-    // X96 frame size
-    size_t frame_size = bits_get(&core->bits, 12) + 1;
-    enforce(frame_size > 4, "Invalid X96 frame size");
-
-    // Revision number
-    x96->rev_no = bits_get(&core->bits, 4);
-    require(x96->rev_no >= 1 && x96->rev_no <= 8, "Unsupported X96 revision");
 
     int ret;
-    if ((ret = parse_x96_coding_header(x96)) < 0)
-        return ret;
-
-    if ((ret = alloc_x96_sample_buffer(x96)) < 0)
+    if ((ret = parse_x96_coding_header(x96, exss, xch_base)) < 0)
         return ret;
 
     int sub_pos = 0;
     for (int sf = 0; sf < core->nsubframes; sf++) {
-        if ((ret = parse_x96_subframe_header(x96)) < 0)
+        if ((ret = parse_x96_subframe_header(x96, xch_base)) < 0)
             return ret;
-        if ((ret = parse_x96_subframe_audio(x96, sf, &sub_pos)) < 0)
+        if ((ret = parse_x96_subframe_audio(x96, sf, xch_base, &sub_pos)) < 0)
             return ret;
     }
 
-    for (int ch = 0; ch < core->nchannels; ch++) {
+    for (int ch = xch_base; ch < x96->nchannels; ch++) {
         // Number of active subbands for this channel
         int nsubbands;
         if (x96->joint_intensity_index[ch]) {
@@ -1701,7 +1707,99 @@ static int parse_x96_frame(struct x96_decoder *x96)
         }
     }
 
+    return 0;
+}
+
+static int parse_x96_frame(struct x96_decoder *x96)
+{
+    struct core_decoder *core = x96->core;
+    size_t frame_pos = core->bits.index;
+
+    // X96 frame size
+    size_t frame_size = bits_get(&core->bits, 12) + 1;
+    enforce(frame_size > 4, "Invalid X96 frame size");
+
+    // Revision number
+    x96->rev_no = bits_get(&core->bits, 4);
+    require(x96->rev_no >= 1 && x96->rev_no <= 8, "Unsupported X96 revision");
+
+    x96->crc_present = false;
+    x96->nchannels = core->nchannels;
+
+    int ret;
+    if ((ret = alloc_x96_sample_buffer(x96)) < 0)
+        return ret;
+
+    if ((ret = parse_x96_frame_data(x96, false, 0)) < 0)
+        return ret;
+
     return bits_seek(&core->bits, frame_pos + frame_size * 8 - 32);
+}
+
+static int parse_x96_frame_exss(struct x96_decoder *x96)
+{
+    size_t  x96_frame_size[4];
+    int     x96_nchannels[4];
+
+    struct core_decoder *core = x96->core;
+    size_t header_pos = core->bits.index;
+
+    // X96 frame header length
+    size_t header_size = bits_get(&core->bits, 6) + 1;
+    enforce(header_size > 4, "Invalid X96 header size");
+
+    size_t header_end = header_pos + header_size * 8 - 32;
+
+    // Check X96 frame header CRC
+    int ret;
+    if ((ret = bits_check_crc(&core->bits, header_pos, header_end)) < 0)
+        return ret;
+
+    // Revision number
+    x96->rev_no = bits_get(&core->bits, 4);
+    require(x96->rev_no >= 1 && x96->rev_no <= 8, "Unsupported X96 revision");
+
+    // CRC presence flag for channel set header
+    x96->crc_present = bits_get1(&core->bits);
+
+    // Number of channel sets
+    int x96_nchsets = bits_get(&core->bits, 2) + 1;
+
+    // Channel set data byte size
+    for (int i = 0; i < x96_nchsets; i++)
+        x96_frame_size[i] = bits_get(&core->bits, 12) + 1;
+
+    // Number of channels in channel set
+    for (int i = 0; i < x96_nchsets; i++)
+        x96_nchannels[i] = bits_get(&core->bits, 3) + 1;
+
+    // Reserved
+    // Byte align
+    // CRC16 of X96 frame header
+    if ((ret = bits_seek(&core->bits, header_end)) < 0)
+        return ret;
+
+    if ((ret = alloc_x96_sample_buffer(x96)) < 0)
+        return ret;
+
+    // Channel set data
+    int x96_base_ch = 0;
+    for (int i = 0; i < x96_nchsets; i++) {
+        header_pos = core->bits.index;
+
+        if (x96_base_ch + x96_nchannels[i] <= MAX_CHANNELS) {
+            x96->nchannels = x96_base_ch + x96_nchannels[i];
+            if ((ret = parse_x96_frame_data(x96, true, x96_base_ch)) < 0)
+                return ret;
+        }
+
+        x96_base_ch += x96_nchannels[i];
+
+        if ((ret = bits_seek(&core->bits, header_pos + x96_frame_size[i] * 8)) < 0)
+            return ret;
+    }
+
+    return 0;
 }
 
 // Revert to base core channel set in case (X)XCH parsing fails
@@ -1873,13 +1971,14 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
     return 0;
 }
 
-void core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
-                     int flags, struct exss_asset *asset)
+int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
+                    int flags, struct exss_asset *asset)
 {
     (void)size;
     (void)flags;
 
     if ((asset->extension_mask & EXSS_XXCH) && !core->xxch_present) {
+        //printf("found XXCH @ EXSS\n");
         bits_init(&core->bits, data + asset->xxch_offset, asset->xxch_size);
         if (bits_get(&core->bits, 32) == SYNC_WORD_XXCH) {
             if (!parse_xxch_frame(core))
@@ -1889,11 +1988,28 @@ void core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
         }
     }
 
+    if ((asset->extension_mask & EXSS_X96) && !core->x96_present) {
+        //printf("found X96 @ EXSS\n");
+        bits_init(&core->bits, data + asset->x96_offset, asset->x96_size);
+        if (bits_get(&core->bits, 32) == SYNC_WORD_X96) {
+            if (!core->x96_decoder) {
+                if (!(core->x96_decoder = ta_znew(core, struct x96_decoder)))
+                    return -DCADEC_ENOMEM;
+                core->x96_decoder->core = core;
+                core->x96_decoder->rand = 1;
+            }
+            core->x96_present = !parse_x96_frame_exss(core->x96_decoder);
+        }
+    }
+
     if ((asset->extension_mask & EXSS_XBR) && !core->xbr_present) {
+        //printf("found XBR @ EXSS\n");
         bits_init(&core->bits, data + asset->xbr_offset, asset->xbr_size);
         core->xbr_present =
             bits_get(&core->bits, 32) == SYNC_WORD_XBR && !parse_xbr_frame(core);
     }
+
+    return 0;
 }
 
 void core_clear(struct core_decoder *core)

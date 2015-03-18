@@ -39,6 +39,8 @@ struct x96_decoder {
     struct core_decoder *core;
 
     int     rev_no;
+    bool    crc_present;
+    int     nchannels;
     bool    high_res;
     int     subband_start;
     int     nsubbands[MAX_CHANNELS];
@@ -143,8 +145,8 @@ struct core_decoder {
 
 int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
                int flags, struct exss_asset *asset);
-void core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
-                     int flags, struct exss_asset *asset);
+int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
+                    int flags, struct exss_asset *asset);
 int core_filter(struct core_decoder *core, int flags);
 void core_clear(struct core_decoder *core);
 
