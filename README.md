@@ -8,11 +8,12 @@ Supported features:
 * Decoding of standard DTS core streams with up to 5.1 channels
 * Decoding of DTS-ES 6.x streams with discrete back channel
 * Decoding of High-Resolution streams with up to 7.1 channels and extended bitrate
+* Decoding of 96/24 core streams
 * Lossless decoding of Master Audio streams with up to 7.1 channels
 
 Features needing more work:
 
-* Support for sampling frequencies above 48 kHz
+* Support for sampling frequencies above 96 kHz
 * Support for downmixed output
 * Error recovery capabilities
 
