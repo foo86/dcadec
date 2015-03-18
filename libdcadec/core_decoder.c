@@ -589,12 +589,10 @@ static int parse_subband_samples(struct core_decoder *core, int sf, int ssf,
 {
     int abits = core->bit_allocation[ch][band];
     int audio[NUM_SUBBAND_SAMPLES];
-    int ret;
+    int ret, step_size, trans_ssf, scale;
 
     if ((ret = extract_audio(core, audio, abits, core->quant_index_sel[ch])) < 0)
         return ret;
-
-    int step_size, trans_ssf, scale;
 
     // Select quantization step size table
     // Look up quantization step size
@@ -1321,14 +1319,15 @@ static int parse_xbr_frame(struct core_decoder *core)
 static int parse_x96_subband_samples(struct x96_decoder *x96, int ssf,
                                      int ch, int band, int sub_pos)
 {
+    // Subtract 1 from ABITS to account for VQ case (Table 6-8: Quantization
+    // index code book select SEL96). ABITS = 0 and ABITS = 1 have already been
+    // dealt with by the caller.
     int abits = x96->bit_allocation[ch][band] - 1;
     int audio[NUM_SUBBAND_SAMPLES];
-    int ret;
+    int ret, step_size;
 
     if ((ret = extract_audio(x96->core, audio, abits, x96->quant_index_sel[ch])) < 0)
         return ret;
-
-    int step_size;
 
     // Select quantization step size table
     // Look up quantization step size
