@@ -275,14 +275,8 @@ static int parse_coding_header(struct core_decoder *core, enum header_type heade
         core->subband_vq_start[ch] = bits_get(&core->bits, 5) + 1;
 
     // Joint intensity coding index
-    for (ch = xch_base; ch < core->nchannels; ch++) {
+    for (ch = xch_base; ch < core->nchannels; ch++)
         core->joint_intensity_index[ch] = bits_get(&core->bits, 3);
-        if (core->joint_intensity_index[ch]) {
-            core->joint_intensity_index[ch] += xch_base;
-            enforce(core->joint_intensity_index[ch] <= core->nchannels,
-                    "Invalid joint intensity coding index");
-        }
-    }
 
     // Transient mode code book
     for (ch = xch_base; ch < core->nchannels; ch++)
