@@ -78,7 +78,7 @@ static int parse_hd_hdr(struct dcadec_stream *stream)
     return 0;
 }
 
-struct dcadec_stream *dcadec_stream_open(const char *name)
+DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name)
 {
     struct dcadec_stream *stream = ta_znew(NULL, struct dcadec_stream);
     if (!stream)
@@ -132,7 +132,7 @@ fail1:
     return NULL;
 }
 
-void dcadec_stream_close(struct dcadec_stream *stream)
+DCADEC_API void dcadec_stream_close(struct dcadec_stream *stream)
 {
     if (stream) {
         fclose(stream->fp);
@@ -280,7 +280,7 @@ static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
     return 1;
 }
 
-int dcadec_stream_read(struct dcadec_stream *stream, uint8_t **data, size_t *size)
+DCADEC_API int dcadec_stream_read(struct dcadec_stream *stream, uint8_t **data, size_t *size)
 {
     uint32_t sync;
     int ret;
@@ -312,7 +312,7 @@ int dcadec_stream_read(struct dcadec_stream *stream, uint8_t **data, size_t *siz
     return 1;
 }
 
-int dcadec_stream_progress(struct dcadec_stream *stream)
+DCADEC_API int dcadec_stream_progress(struct dcadec_stream *stream)
 {
     if (stream->stream_size > 0) {
         off_t pos = ftello(stream->fp);

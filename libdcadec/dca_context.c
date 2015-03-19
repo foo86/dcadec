@@ -330,7 +330,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     return 0;
 }
 
-int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, size_t size)
+DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, size_t size)
 {
     int ret;
 
@@ -413,7 +413,7 @@ fail:
     return dca->packet ? 0 : ret;
 }
 
-struct dcadec_core_info *dcadec_context_get_core_info(struct dcadec_context *dca)
+DCADEC_API struct dcadec_core_info *dcadec_context_get_core_info(struct dcadec_context *dca)
 {
     if (!dca)
         return NULL;
@@ -437,12 +437,12 @@ struct dcadec_core_info *dcadec_context_get_core_info(struct dcadec_context *dca
     return info;
 }
 
-void dcadec_context_free_core_info(struct dcadec_core_info *info)
+DCADEC_API void dcadec_context_free_core_info(struct dcadec_core_info *info)
 {
     ta_free(info);
 }
 
-struct dcadec_exss_info *dcadec_context_get_exss_info(struct dcadec_context *dca)
+DCADEC_API struct dcadec_exss_info *dcadec_context_get_exss_info(struct dcadec_context *dca)
 {
     if (!dca)
         return NULL;
@@ -468,14 +468,15 @@ struct dcadec_exss_info *dcadec_context_get_exss_info(struct dcadec_context *dca
     return info;
 }
 
-void dcadec_context_free_exss_info(struct dcadec_exss_info *info)
+DCADEC_API void dcadec_context_free_exss_info(struct dcadec_exss_info *info)
 {
     ta_free(info);
 }
 
-int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
-                          int *nsamples, int *channel_mask, int *sample_rate,
-                          int *bits_per_sample, int *profile)
+DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
+                                     int *nsamples, int *channel_mask,
+                                     int *sample_rate, int *bits_per_sample,
+                                     int *profile)
 {
     int ret;
 
@@ -507,7 +508,7 @@ int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
     return 0;
 }
 
-void dcadec_context_clear(struct dcadec_context *dca)
+DCADEC_API void dcadec_context_clear(struct dcadec_context *dca)
 {
     if (dca) {
         core_clear(dca->core);
@@ -515,7 +516,7 @@ void dcadec_context_clear(struct dcadec_context *dca)
     }
 }
 
-struct dcadec_context *dcadec_context_create(int flags)
+DCADEC_API struct dcadec_context *dcadec_context_create(int flags)
 {
     struct dcadec_context *dca = ta_znew(NULL, struct dcadec_context);
     if (dca)
@@ -523,12 +524,12 @@ struct dcadec_context *dcadec_context_create(int flags)
     return dca;
 }
 
-void dcadec_context_destroy(struct dcadec_context *dca)
+DCADEC_API void dcadec_context_destroy(struct dcadec_context *dca)
 {
     ta_free(dca);
 }
 
-const char *dcadec_strerror(int errnum)
+DCADEC_API const char *dcadec_strerror(int errnum)
 {
     static const char * const errors[] = {
         "Invalid argument",

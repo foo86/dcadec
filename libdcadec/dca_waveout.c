@@ -124,9 +124,9 @@ static int write_header(struct dcadec_waveout *wave, int channel_mask,
     return 0;
 }
 
-int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
-                         int nsamples, int channel_mask, int sample_rate,
-                         int bits_per_sample)
+DCADEC_API int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
+                                    int nsamples, int channel_mask,
+                                    int sample_rate, int bits_per_sample)
 {
     int ret;
 
@@ -208,7 +208,7 @@ int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
     return 0;
 }
 
-struct dcadec_waveout *dcadec_waveout_open(const char *name)
+DCADEC_API struct dcadec_waveout *dcadec_waveout_open(const char *name)
 {
     struct dcadec_waveout *wave = ta_znew(NULL, struct dcadec_waveout);
     if (!wave)
@@ -247,7 +247,7 @@ fail:
     return NULL;
 }
 
-void dcadec_waveout_close(struct dcadec_waveout *wave)
+DCADEC_API void dcadec_waveout_close(struct dcadec_waveout *wave)
 {
     if (!wave)
         return;

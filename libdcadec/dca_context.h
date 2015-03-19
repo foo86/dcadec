@@ -19,6 +19,30 @@
 #ifndef DCA_CONTEXT_H
 #define DCA_CONTEXT_H
 
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+/**@{*/
+#ifdef _WIN32
+#define DCADEC_SHARED_EXPORT    __declspec(dllexport)
+#define DCADEC_SHARED_IMPORT    __declspec(dllimport)
+#else
+#define DCADEC_SHARED_EXPORT    __attribute__((visibility("default")))
+#define DCADEC_SHARED_IMPORT    __attribute__((visibility("default")))
+#endif
+
+#ifdef DCADEC_SHARED
+#ifdef DCADEC_INTERNAL
+#define DCADEC_API  DCADEC_SHARED_EXPORT
+#else
+#define DCADEC_API  DCADEC_SHARED_IMPORT
+#endif
+#else
+#define DCADEC_API
+#endif
+/**@}*/
+
 /**@{*/
 #define DCADEC_EINVAL       1   /**< Invalid argument */
 #define DCADEC_EBADDATA     2   /**< Invalid bitstream format */
@@ -122,7 +146,7 @@ struct dcadec_exss_info {
  *
  * @return      0 on success, negative error code on failure.
  */
-int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, size_t size);
+DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, size_t size);
 
 /**
  * Get information about DTS core payload of the parsed packet.
@@ -133,14 +157,14 @@ int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, size_t size)
  *              NULL on failure. Returned data should be freed with
  *              dcadec_context_free_core_info() function.
  */
-struct dcadec_core_info *dcadec_context_get_core_info(struct dcadec_context *dca);
+DCADEC_API struct dcadec_core_info *dcadec_context_get_core_info(struct dcadec_context *dca);
 
 /**
  * Free DTS core information structure.
  *
  * @param info  Pointer to DTS core information structure.
  */
-void dcadec_context_free_core_info(struct dcadec_core_info *info);
+DCADEC_API void dcadec_context_free_core_info(struct dcadec_core_info *info);
 
 /**
  * Get information about extension sub-stream (EXSS) payload of the parsed
@@ -152,14 +176,14 @@ void dcadec_context_free_core_info(struct dcadec_core_info *info);
  *              NULL on failure. Returned data should be freed with
  *              dcadec_context_free_exss_info() function.
  */
-struct dcadec_exss_info *dcadec_context_get_exss_info(struct dcadec_context *dca);
+DCADEC_API struct dcadec_exss_info *dcadec_context_get_exss_info(struct dcadec_context *dca);
 
 /**
  * Free EXSS information structure.
  *
  * @param info  Pointer to EXSS information structure.
  */
-void dcadec_context_free_exss_info(struct dcadec_exss_info *info);
+DCADEC_API void dcadec_context_free_exss_info(struct dcadec_exss_info *info);
 
 /**
  * Filter the parsed packet and return per-channel PCM data. All parameters
@@ -197,16 +221,17 @@ void dcadec_context_free_exss_info(struct dcadec_exss_info *info);
  *
  * @return                  0 on success, negative error code on failure.
  */
-int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
-                          int *nsamples, int *channel_mask, int *sample_rate,
-                          int *bits_per_sample, int *profile);
+DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
+                                     int *nsamples, int *channel_mask,
+                                     int *sample_rate, int *bits_per_sample,
+                                     int *profile);
 
 /**
  * Clear all inter-frame history of the decoder.
  *
  * @param dca   Pointer to decoder context.
  */
-void dcadec_context_clear(struct dcadec_context *dca);
+DCADEC_API void dcadec_context_clear(struct dcadec_context *dca);
 
 /**
  * Create DTS decoder context.
@@ -215,14 +240,14 @@ void dcadec_context_clear(struct dcadec_context *dca);
  *
  * @return      Pointer to decoder context on success, NULL on failure.
  */
-struct dcadec_context *dcadec_context_create(int flags);
+DCADEC_API struct dcadec_context *dcadec_context_create(int flags);
 
 /**
  * Destroy DTS decoder context.
  *
  * @param dca   Pointer to decoder context.
  */
-void dcadec_context_destroy(struct dcadec_context *dca);
+DCADEC_API void dcadec_context_destroy(struct dcadec_context *dca);
 
 /**
  * Convert negative libdcadec error code into string.
@@ -231,6 +256,6 @@ void dcadec_context_destroy(struct dcadec_context *dca);
  *
  * @return          Constant string describing error code.
  */
-const char *dcadec_strerror(int errnum);
+DCADEC_API const char *dcadec_strerror(int errnum);
 
 #endif

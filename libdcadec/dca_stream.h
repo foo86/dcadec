@@ -19,11 +19,13 @@
 #ifndef DCA_STREAM_H
 #define DCA_STREAM_H
 
+#include "dca_context.h"
+
 struct dcadec_stream;
 
-struct dcadec_stream *dcadec_stream_open(const char *name);
-void dcadec_stream_close(struct dcadec_stream *stream);
-int dcadec_stream_read(struct dcadec_stream *stream, uint8_t **data, size_t *size);
-int dcadec_stream_progress(struct dcadec_stream *stream);
+DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name);
+DCADEC_API void dcadec_stream_close(struct dcadec_stream *stream);
+DCADEC_API int dcadec_stream_read(struct dcadec_stream *stream, uint8_t **data, size_t *size);
+DCADEC_API int dcadec_stream_progress(struct dcadec_stream *stream);
 
 #endif

@@ -19,12 +19,14 @@
 #ifndef WAVEOUT_H
 #define WAVEOUT_H
 
+#include "dca_context.h"
+
 struct dcadec_waveout;
 
-int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
-                         int nsamples, int channel_mask, int sample_rate,
-                         int bits_per_sample);
-struct dcadec_waveout *dcadec_waveout_open(const char *name);
-void dcadec_waveout_close(struct dcadec_waveout *wave);
+DCADEC_API int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
+                                    int nsamples, int channel_mask,
+                                    int sample_rate, int bits_per_sample);
+DCADEC_API struct dcadec_waveout *dcadec_waveout_open(const char *name);
+DCADEC_API void dcadec_waveout_close(struct dcadec_waveout *wave);
 
 #endif
