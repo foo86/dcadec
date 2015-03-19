@@ -60,8 +60,8 @@ Single dash in place of input or output file name argument means to read from
 stdin or write to stdout, respectively.
 
 dcadec comes with ABSOLUTELY NO WARRANTY. This is free software, and you are
-welcome to redistribute it under certain conditions; see GNU General Public
-License version 2 for details.
+welcome to redistribute it under certain conditions; see GNU Lesser General
+Public License version 2.1 for details.
 ```
 
 Examples
