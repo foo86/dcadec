@@ -1,10 +1,10 @@
--include .config
-
-CC ?= gcc
-AR ?= ar
-CFLAGS ?= -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall -Wextra -O3 -g -MMD
-LDFLAGS ?=
+CC = gcc
+AR = ar
+CFLAGS = -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall -Wextra -O3 -g -MMD
+LDFLAGS =
 ARFLAGS = crsu
+
+-include .config
 
 ifdef CONFIG_NDEBUG
     CFLAGS += -DNDEBUG
