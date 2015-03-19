@@ -51,6 +51,7 @@ INTERPOLATE_LFE(lfe_fixed_fir)
 
 INTERPOLATE_SUB(sub32_fixed)
 {
+    (void)subband_samples_hi;
     assert(subband_samples_hi == NULL);
 
     // Get history pointer
