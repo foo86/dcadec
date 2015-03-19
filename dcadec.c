@@ -81,30 +81,41 @@ static void print_help(char *name)
 
 static void print_info(struct dcadec_context *context)
 {
-    struct dcadec_core_info *core = dcadec_context_get_core_info(context);
-    if (core) {
-        fprintf(stderr, "DTS Core Audio: %d.%d ch, %d Hz, %d bit",
-            core->nchannels, !!core->lfe_present, core->sample_rate,
-            core->source_pcm_res);
-        if (core->es_format)
-            fprintf(stderr, ", ES");
-        if (core->bit_rate > 0)
-            fprintf(stderr, ", %.f kbps", core->bit_rate / 1000.0f);
-        fprintf(stderr, "\n");
-        dcadec_context_free_core_info(core);
-    }
-
     struct dcadec_exss_info *exss = dcadec_context_get_exss_info(context);
     if (exss) {
         if (exss->profile & DCADEC_PROFILE_HD_MA)
             fprintf(stderr, "DTS-HD Master Audio");
         else if (exss->profile & DCADEC_PROFILE_HD_HRA)
             fprintf(stderr, "DTS-HD High-Resolution Audio");
+        else if (exss->profile & DCADEC_PROFILE_DS_ES)
+            fprintf(stderr, "DTS-ES Discrete");
+        else if (exss->profile & DCADEC_PROFILE_DS_96_24)
+            fprintf(stderr, "DTS 96/24");
+        else if (exss->profile & DCADEC_PROFILE_EXPRESS)
+            fprintf(stderr, "DTS Express");
         else
-            fprintf(stderr, "DTS-HD Unknown Profile");
-        fprintf(stderr, ": %d ch, %d Hz, %d bit\n",
-            exss->nchannels, exss->sample_rate, exss->bits_per_sample);
+            fprintf(stderr, "Unknown Extension Profile");
+        fprintf(stderr, ": %d ch, %.f kHz, %d bit\n",
+            exss->nchannels, exss->sample_rate / 1000.0f,
+            exss->bits_per_sample);
         dcadec_context_free_exss_info(exss);
+    }
+
+    struct dcadec_core_info *core = dcadec_context_get_core_info(context);
+    if (core) {
+        if (exss)
+            fprintf(stderr, "(");
+        fprintf(stderr, "DTS Core Audio: %d.%d ch, %.f kHz, %d bit",
+            core->nchannels, !!core->lfe_present, core->sample_rate / 1000.f,
+            core->source_pcm_res);
+        if (core->es_format)
+            fprintf(stderr, ", ES");
+        if (core->bit_rate > 0)
+            fprintf(stderr, ", %.f kbps", core->bit_rate / 1000.0f);
+        if (exss)
+            fprintf(stderr, ")");
+        fprintf(stderr, "\n");
+        dcadec_context_free_core_info(core);
     }
 }
 

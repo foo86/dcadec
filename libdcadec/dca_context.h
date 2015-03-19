@@ -106,8 +106,7 @@
 struct dcadec_context;
 
 struct dcadec_core_info {
-    int     nchannels;      /**< Number of primary audio channels (including
-                                 extension channels from XCH and XXCH) */
+    int     nchannels;      /**< Number of primary audio channels */
     int     audio_mode;     /**< Core audio channel arrangement (AMODE) */
     int     lfe_present;    /**< LFE channel presence flag (can be 0, 1 or 2) */
     int     sample_rate;    /**< Core audio sample rate in Hz */
@@ -124,7 +123,7 @@ struct dcadec_core_info {
 
 struct dcadec_exss_info {
     int nchannels;          /**< Number of audio channels encoded among all
-                                 substreams */
+                                 extension sub-streams */
     int sample_rate;        /**< Maximum encoded audio sample rate in Hz */
     int bits_per_sample;    /**< Highest encoded PCM resolution in bits */
     int profile;            /**< Type of DTS profile encoded */
@@ -168,7 +167,9 @@ DCADEC_API void dcadec_context_free_core_info(struct dcadec_core_info *info);
 
 /**
  * Get information about extension sub-stream (EXSS) payload of the parsed
- * packet.
+ * packet. When no EXSS is present but backward compatible DTS core sub-stream
+ * contains extended audio, then information about extended audio in core
+ * sub-stream is returned.
  *
  * @param dca   Pointer to decoder context.
  *

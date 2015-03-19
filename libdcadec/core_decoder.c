@@ -2024,3 +2024,23 @@ void core_clear(struct core_decoder *core)
         core->output_history_lfe = 0;
     }
 }
+
+struct dcadec_core_info *core_get_info(struct core_decoder *core)
+{
+    struct dcadec_core_info *info = ta_znew(NULL, struct dcadec_core_info);
+    if (!info)
+        return NULL;
+    info->nchannels = audio_mode_nch[core->audio_mode];
+    info->audio_mode = core->audio_mode;
+    info->lfe_present = core->lfe_present;
+    info->sample_rate = core->sample_rate;
+    info->source_pcm_res = core->source_pcm_res;
+    info->es_format = core->es_format;
+    info->bit_rate = core->bit_rate;
+    info->npcmblocks = core->npcmblocks;
+    info->xch_present = core->xch_present;
+    info->xxch_present = core->xxch_present;
+    info->xbr_present = core->xbr_present;
+    info->x96_present = core->x96_present;
+    return info;
+}
