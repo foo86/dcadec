@@ -1063,11 +1063,8 @@ static int parse_xch_frame(struct core_decoder *core)
 {
     enforce(!(core->ch_mask & SPEAKER_MASK_Cs), "XCH with Cs speaker already present");
 
-    size_t frame_pos = core->bits.index;
-
-    // XCH frame size
-    size_t frame_size = bits_get(&core->bits, 10) + 1;
-    enforce(frame_size > 4, "Invalid XCH frame size");
+    // XCH frame size (already checked)
+    bits_skip(&core->bits, 10);
 
     // Extension channel arrangement
     require(bits_get(&core->bits, 4) == 1, "Unsupported XCH audio mode");
@@ -1076,7 +1073,8 @@ static int parse_xch_frame(struct core_decoder *core)
     if ((ret = parse_frame_data(core, HEADER_XCH, core->nchannels)) < 0)
         return ret;
 
-    return bits_seek(&core->bits, frame_pos + frame_size * 8 - 32);
+    // Seek to the end of core frame, don't trust XCH frame size
+    return bits_seek(&core->bits, core->frame_size * 8);
 }
 
 static int parse_xxch_frame(struct core_decoder *core)
