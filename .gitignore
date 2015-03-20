@@ -4,5 +4,6 @@
 *.so
 *.a
 dcadec
+dcacut
 *.exe
 *.pc
