@@ -913,7 +913,7 @@ int core_filter(struct core_decoder *core, int flags)
         }
     }
 
-    if (diff & DCADEC_FLAG_CORE_LFE_FIR)
+    if (diff & (DCADEC_FLAG_CORE_BIT_EXACT | DCADEC_FLAG_CORE_LFE_FIR))
         memset(core->lfe_samples, 0, MAX_LFE_HISTORY * sizeof(int));
 
     core->filter_flags = flags;
