@@ -60,6 +60,8 @@ static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dc
     if (dca->flags & DCADEC_FLAG_NATIVE_LAYOUT) {
         for (int dca_ch = 0; dca_ch < SPEAKER_COUNT; dca_ch++) {
             if (dca_mask & (1 << dca_ch)) {
+                if (!dca_samples[dca_ch])
+                    return -DCADEC_EINVAL;
                 dca->samples[nchannels++] = dca_samples[dca_ch];
             }
         }
@@ -69,6 +71,8 @@ static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dc
         int *wav_samples[WAVESPKR_COUNT] = { NULL };
         for (size_t dca_ch = 0; dca_ch < sizeof(dca2wav); dca_ch++) {
             if (dca_mask & (1 << dca_ch)) {
+                if (!dca_samples[dca_ch])
+                    return -DCADEC_EINVAL;
                 int wav_ch = dca2wav[dca_ch];
                 if (!wav_samples[wav_ch]) {
                     wav_samples[wav_ch] = dca_samples[dca_ch];
@@ -300,7 +304,9 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             continue;
         for (int ch = 0; ch < c->nchannels; ch++) {
             int spkr = xll_map_ch_to_spkr(c, ch);
-            if (spkr >= 0 && !spkr_map[spkr])
+            if (spkr < 0)
+                return -DCADEC_EINVAL;
+            if (!spkr_map[spkr])
                 spkr_map[spkr] = c->msb_sample_buffer[ch];
             samples[nchannels++] = c->msb_sample_buffer[ch];
         }
