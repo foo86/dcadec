@@ -1,0 +1,8 @@
+*.d
+*.o
+*.dll
+*.so
+*.a
+dcadec
+*.exe
+*.pc
