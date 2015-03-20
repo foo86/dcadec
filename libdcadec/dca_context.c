@@ -174,9 +174,8 @@ static int undo_down_mix(struct xll_decoder *xll,
     if (c->freq != o->freq)
         return -DCADEC_ENOSUP;
 
-    int shift = c->pcm_bit_res - o->pcm_bit_res;
-    if (shift < 0)
-        return -DCADEC_EINVAL;
+    if (c->pcm_bit_res != o->pcm_bit_res)
+        return -DCADEC_ENOSUP;
 
     int *coeff_ptr = o->dmix_coeff;
     for (int i = 0; i < nchannels; i++) {
@@ -189,7 +188,7 @@ static int undo_down_mix(struct xll_decoder *xll,
                 int *src = o->msb_sample_buffer[j];
                 int *dst = samples[i];
                 for (int k = 0; k < xll->nframesamples; k++)
-                    dst[k] -= mul15(src[k] << shift, coeff);
+                    dst[k] -= mul15(src[k], coeff);
             }
         }
     }
