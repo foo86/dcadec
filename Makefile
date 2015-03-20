@@ -80,7 +80,7 @@ ifdef CONFIG_SHARED
     LDFLAGS_DLL = $(LDFLAGS) -shared
 
     ifdef CONFIG_WINDOWS
-        IMP_LIB = libdcadec/libdcadecdll$(LIBSUF)
+        IMP_LIB = libdcadec/libdcadec$(DLLSUF)$(LIBSUF)
         IMP_DEF = libdcadec/libdcadec.def
         EXTRA_LIB = $(IMP_LIB) $(IMP_DEF)
         LDFLAGS_DLL += -static-libgcc
