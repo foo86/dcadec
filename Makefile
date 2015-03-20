@@ -118,10 +118,10 @@ $(OUT_CUT): $(OBJ_CUT) $(OUT_LIB)
 endif
 
 clean:
-	rm -f $(OUT_LIB) $(OBJ_LIB) $(DEP_LIB) $(EXTRA_LIB)
-	rm -f $(OUT_DEC) $(OBJ_DEC) $(DEP_DEC)
-	rm -f $(OUT_CUT) $(OBJ_CUT) $(DEP_CUT)
-	rm -f dcadec.pc
+	$(RM) $(OUT_LIB) $(OBJ_LIB) $(DEP_LIB) $(EXTRA_LIB)
+	$(RM) $(OUT_DEC) $(OBJ_DEC) $(DEP_DEC)
+	$(RM) $(OUT_CUT) $(OBJ_CUT) $(DEP_CUT)
+	$(RM) dcadec.pc
 
 install: $(OUT_LIB) $(OUT_DEC)
 	sed "s,%PREFIX%,$(PREFIX),;s,%LIBDIR%,$(LIBDIR),;s,%INCLUDEDIR%,$(INCLUDEDIR)," dcadec.pc.in > dcadec.pc
