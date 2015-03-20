@@ -1,8 +1,12 @@
 CC = gcc
 AR = ar
-CFLAGS = -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall -Wextra -O3 -g -MMD
+override CFLAGS := -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall -Wextra -O3 -g -MMD $(CFLAGS)
 LDFLAGS =
-ARFLAGS = crsu
+
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
+LIBDIR ?= $(PREFIX)/lib
+INCLUDEDIR ?= $(PREFIX)/include
 
 -include .config
 
@@ -30,8 +34,6 @@ endif
 
 OUT_DEC ?= dcadec$(EXESUF)
 OUT_CUT ?= dcacut$(EXESUF)
-
-DESTDIR ?= /usr/local
 
 SRC_LIB = \
 libdcadec/bitstream.c \
@@ -104,7 +106,7 @@ $(OUT_CUT): $(OBJ_CUT) $(OUT_LIB)
 else
 
 $(OUT_LIB): $(OBJ_LIB)
-	$(AR) $(ARFLAGS) $@ $(OBJ_LIB)
+	$(AR) crsu $@ $(OBJ_LIB)
 
 $(OUT_DEC): $(OBJ_DEC) $(OUT_LIB)
 	$(CC) $(LDFLAGS) -o $@ $(OBJ_DEC) $(OUT_LIB) $(LIBS)
@@ -120,7 +122,7 @@ clean:
 	rm -f $(OUT_CUT) $(OBJ_CUT) $(DEP_CUT)
 
 install: $(OUT_LIB) $(OUT_DEC)
-	mkdir -p $(DESTDIR)/lib $(DESTDIR)/include/libdcadec $(DESTDIR)/bin
-	install -m 644 -s $(OUT_LIB) $(DESTDIR)/lib
-	install -m 644 $(INC_LIB) $(DESTDIR)/include/libdcadec
-	install -s $(OUT_DEC) $(DESTDIR)/bin
+	install -d -m 755 $(DESTDIR)$(LIBDIR) $(DESTDIR)$(INCLUDEDIR)/libdcadec $(DESTDIR)$(BINDIR)
+	install -m 644 $(OUT_LIB) $(DESTDIR)$(LIBDIR)
+	install -m 644 $(INC_LIB) $(DESTDIR)$(INCLUDEDIR)/libdcadec
+	install -m 755 $(OUT_DEC) $(DESTDIR)$(BINDIR)
