@@ -7,6 +7,7 @@ PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 LIBDIR ?= $(PREFIX)/lib
 INCLUDEDIR ?= $(PREFIX)/include
+PKG_CONFIG_PATH ?= $(LIBDIR)/pkgconfig
 
 -include .config
 
@@ -122,7 +123,9 @@ clean:
 	rm -f $(OUT_CUT) $(OBJ_CUT) $(DEP_CUT)
 
 install: $(OUT_LIB) $(OUT_DEC)
-	install -d -m 755 $(DESTDIR)$(LIBDIR) $(DESTDIR)$(INCLUDEDIR)/libdcadec $(DESTDIR)$(BINDIR)
+	sed "s,%PREFIX%,$(PREFIX),;s,%LIBDIR%,$(LIBDIR),;s,%INCLUDEDIR%,$(INCLUDEDIR)," dcadec.pc.in > dcadec.pc
+	install -d -m 755 $(DESTDIR)$(LIBDIR) $(DESTDIR)$(PKG_CONFIG_PATH) $(DESTDIR)$(INCLUDEDIR)/libdcadec $(DESTDIR)$(BINDIR)
 	install -m 644 $(OUT_LIB) $(DESTDIR)$(LIBDIR)
 	install -m 644 $(INC_LIB) $(DESTDIR)$(INCLUDEDIR)/libdcadec
+	install -m 644 dcadec.pc $(DESTDIR)$(PKG_CONFIG_PATH)
 	install -m 755 $(OUT_DEC) $(DESTDIR)$(BINDIR)
