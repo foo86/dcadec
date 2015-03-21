@@ -69,20 +69,27 @@ Examples
 
 Some dcadec usage examples follow.
 
-* Decode DTS file to WAV:
-```
-$ ./dcadec input.dts output.wav
-```
-* Decode DTS file and play with mpv:
-```
-$ ./dcadec input.dts - | mpv -
-```
-* Decode DTS file and re-encode to FLAC:
-```
-$ ./dcadec input.dts - | flac --ignore-chunk-sizes -o output.flac -
-```
+* Decode DTS file to WAV:  
+
+  ```
+  $ ./dcadec input.dts output.wav
+  ```
+
+* Decode DTS file and play with mpv:  
+
+  ```
+  $ ./dcadec input.dts - | mpv -
+  ```
+
+* Decode DTS file and re-encode to FLAC:  
+
+  ```
+  $ ./dcadec input.dts - | flac --ignore-chunk-sizes -o output.flac -
+  ```
+
 * Demux DTS track #1 from MKV file, decode and re-encode to FLAC:
-```
-$ mkvextract tracks input.mkv -r /dev/null 1:/dev/stdout | \
-./dcadec - - | flac --ignore-chunk-sizes -o output.flac -
-```
+
+  ```
+  $ mkvextract tracks input.mkv -r /dev/null 1:/dev/stdout | \
+  ./dcadec - - | flac --ignore-chunk-sizes -o output.flac -
+  ```
