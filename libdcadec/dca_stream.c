@@ -316,8 +316,11 @@ DCADEC_API int dcadec_stream_progress(struct dcadec_stream *stream)
 {
     if (stream->stream_size > 0) {
         off_t pos = ftello(stream->fp);
-        if (pos >= stream->stream_start)
-            return (int)((pos - stream->stream_start) * 100 / stream->stream_size);
+        if (pos < stream->stream_start)
+            return 0;
+        if (pos >= stream->stream_start + stream->stream_size)
+            return 100;
+        return (int)((pos - stream->stream_start) * 100 / stream->stream_size);
     }
     return -1;
 }
