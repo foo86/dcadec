@@ -41,6 +41,8 @@ struct dcadec_stream {
     uint8_t     *buffer;
     size_t      packet_size;
     uint32_t    backup_sync;
+
+    bool    core_plus_exss;
 };
 
 // Check for DTS-HD container format. Such files have an extra `blackout'
@@ -303,6 +305,13 @@ DCADEC_API int dcadec_stream_read(struct dcadec_stream *stream, uint8_t **data, 
         ret = read_frame(stream, NULL);
         if (ret == -1)
             return -DCADEC_ENOMEM;
+        // If the previous frame was core + EXSS, skip the incomplete (core
+        // only) frame at end of file
+        if (ret == 0 && stream->core_plus_exss)
+            return 0;
+        stream->core_plus_exss = (ret == 1);
+    } else {
+        stream->core_plus_exss = false;
     }
 
     *data = stream->buffer;
