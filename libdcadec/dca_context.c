@@ -45,7 +45,7 @@ struct dcadec_context {
     int *samples[SPEAKER_COUNT];
 };
 
-static const uint8_t dca2wav[] = {
+static const uint8_t dca2wav_norm[] = {
     WAVESPKR_FC,  WAVESPKR_FL,  WAVESPKR_FR,  WAVESPKR_SL,
     WAVESPKR_SR,  WAVESPKR_LFE, WAVESPKR_BC,  WAVESPKR_BL,
     WAVESPKR_BR,  WAVESPKR_SL,  WAVESPKR_SR,  WAVESPKR_FLC,
@@ -54,6 +54,24 @@ static const uint8_t dca2wav[] = {
     WAVESPKR_TFL, WAVESPKR_TFR, WAVESPKR_TBC, WAVESPKR_TBL,
     WAVESPKR_TBR, WAVESPKR_BC,  WAVESPKR_BL,  WAVESPKR_BR
 };
+
+static const uint8_t dca2wav_wide[] = {
+    WAVESPKR_FC,  WAVESPKR_FL,  WAVESPKR_FR,  WAVESPKR_BL,
+    WAVESPKR_BR,  WAVESPKR_LFE, WAVESPKR_BC,  WAVESPKR_BL,
+    WAVESPKR_BR,  WAVESPKR_SL,  WAVESPKR_SR,  WAVESPKR_FLC,
+    WAVESPKR_FRC, WAVESPKR_TFL, WAVESPKR_TFC, WAVESPKR_TFR,
+    WAVESPKR_LFE, WAVESPKR_SL,  WAVESPKR_SR , WAVESPKR_TC,
+    WAVESPKR_TFL, WAVESPKR_TFR, WAVESPKR_TBC, WAVESPKR_TBL,
+    WAVESPKR_TBR, WAVESPKR_BC,  WAVESPKR_BL,  WAVESPKR_BR
+};
+
+#define DCADEC_LAYOUT_7POINT0_WIDE  \
+    (SPEAKER_MASK_C  | SPEAKER_MASK_L  | SPEAKER_MASK_R |   \
+     SPEAKER_MASK_Ls | SPEAKER_MASK_Rs |                    \
+     SPEAKER_MASK_Lw | SPEAKER_MASK_Rw)
+
+#define DCADEC_LAYOUT_7POINT1_WIDE  \
+    (DCADEC_LAYOUT_7POINT0_WIDE | SPEAKER_MASK_LFE1)
 
 static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dca_mask)
 {
@@ -71,7 +89,13 @@ static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dc
     } else {
         int wav_mask = 0;
         int *wav_samples[WAVESPKR_COUNT] = { NULL };
-        for (size_t dca_ch = 0; dca_ch < sizeof(dca2wav); dca_ch++) {
+        const uint8_t *dca2wav;
+        if (dca_mask == DCADEC_LAYOUT_7POINT0_WIDE ||
+            dca_mask == DCADEC_LAYOUT_7POINT1_WIDE)
+            dca2wav = dca2wav_wide;
+        else
+            dca2wav = dca2wav_norm;
+        for (size_t dca_ch = 0; dca_ch < sizeof(dca2wav_norm); dca_ch++) {
             if (dca_mask & (1 << dca_ch)) {
                 if (!dca_samples[dca_ch])
                     return -DCADEC_EINVAL;
