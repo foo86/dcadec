@@ -35,6 +35,8 @@ struct dcadec_context {
     struct exss_parser *exss;
     struct xll_decoder *xll;
 
+    unsigned int ncoreframes;
+
     int nframesamples;
     int sample_rate;
     int bits_per_sample;
@@ -94,6 +96,8 @@ static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dc
 static int filter_core_frame(struct dcadec_context *dca)
 {
     struct core_decoder *core = dca->core;
+
+    dca->ncoreframes = 0;
 
     // Filter core frame
     int ret;
@@ -214,6 +218,15 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             flags |= DCADEC_FLAG_CORE_SYNTH_X96;
         if ((ret = core_filter(core, flags)) < 0)
             return ret;
+        // Force lossy downmixed output if this is the first core frame since
+        // the last time history was cleared
+        if (dca->ncoreframes == 0 && xll->nchsets > 1) {
+            for_each_chset(xll, c) {
+                xll_clear_band_data(c);
+                c->dmix_embedded = false;
+            }
+        }
+        dca->ncoreframes++;
     }
 
     int nchannels = 0;
@@ -542,6 +555,7 @@ DCADEC_API void dcadec_context_clear(struct dcadec_context *dca)
     if (dca) {
         core_clear(dca->core);
         xll_clear(dca->xll);
+        dca->ncoreframes = 0;
     }
 }
 

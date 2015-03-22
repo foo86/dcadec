@@ -105,6 +105,7 @@ struct xll_decoder {
     int         pbr_delay;
 };
 
+void xll_clear_band_data(struct xll_chset *chs);
 void xll_filter_band_data(struct xll_chset *chs);
 int xll_get_lsb_width(struct xll_chset *chs, int ch);
 void xll_assemble_msbs_lsbs(struct xll_chset *chs);

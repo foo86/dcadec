@@ -432,6 +432,17 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
     return bits_seek(&xll->bits, band_data_end);
 }
 
+void xll_clear_band_data(struct xll_chset *chs)
+{
+    struct xll_decoder *xll = chs->decoder;
+
+    for (int i = 0; i < chs->nchannels; i++) {
+        memset(chs->msb_sample_buffer[i], 0, xll->nframesamples * sizeof(int));
+        if (xll->scalable_lsbs)
+            memset(chs->lsb_sample_buffer[i], 0, xll->nframesamples * sizeof(int));
+    }
+}
+
 void xll_filter_band_data(struct xll_chset *chs)
 {
     struct xll_decoder *xll = chs->decoder;
