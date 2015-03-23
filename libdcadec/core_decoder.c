@@ -1858,7 +1858,8 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 // must be equal to XCH frame size. Off by one error is
                 // allowed for compatibility with legacy bitstreams.
                 dist = core->frame_size - sync_pos * 4;
-                if (hdr_size == dist || hdr_size - 1 == dist) {
+                if ((hdr_size == dist || hdr_size - 1 == dist)
+                    && bits_get(&core->bits, 7) == 0x08) {
                     xch_pos = sync_pos + 1;
                     sync_pos = last_pos - 1;
                 }
