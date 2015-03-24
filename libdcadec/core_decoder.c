@@ -202,7 +202,7 @@ static int parse_coding_header(struct core_decoder *core, enum header_type heade
         break;
 
     case HEADER_XCH:
-        core->nchannels++;
+        core->nchannels = audio_mode_nch[core->audio_mode] + 1;
         assert(core->nchannels <= MAX_CHANNELS - 1);
         core->ch_mask |= SPEAKER_MASK_Cs;
         break;
@@ -219,7 +219,7 @@ static int parse_coding_header(struct core_decoder *core, enum header_type heade
         // Number of channels in a channel set
         n = bits_get(&core->bits, 3) + 1;
         require(n < 3, "Too many XXCH audio channels");
-        core->nchannels += n;
+        core->nchannels = audio_mode_nch[core->audio_mode] + n;
         assert(core->nchannels <= MAX_CHANNELS);
 
         // Loudspeaker activity mask
