@@ -195,16 +195,9 @@ static int conv_dmix_scale_inv(int code)
 }
 
 static int undo_down_mix(struct xll_decoder *xll,
-                         struct xll_chset *c,
                          struct xll_chset *o,
                          int **samples, int nchannels)
 {
-    if (c->freq != o->freq)
-        return -DCADEC_ENOSUP;
-
-    if (c->pcm_bit_res != o->pcm_bit_res)
-        return -DCADEC_ENOSUP;
-
     int *coeff_ptr = o->dmix_coeff;
     for (int i = 0; i < nchannels; i++) {
         // Get |InvDmixScale|
@@ -235,6 +228,12 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     if (!p->primary_chset || p->replace_set_index)
         return -DCADEC_ENOSUP;
 
+    if (p->storage_bit_res != 16 && p->storage_bit_res != 24)
+        return -DCADEC_ENOSUP;
+
+    if (p->pcm_bit_res > p->storage_bit_res)
+        return -DCADEC_EINVAL;
+
     // Filter core frame if present
     if (dca->packet & DCADEC_PACKET_CORE) {
         int flags = DCADEC_FLAG_CORE_BIT_EXACT | DCADEC_FLAG_KEEP_DMIX_6CH;
@@ -259,6 +258,16 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     for_each_chset(xll, c) {
         if (c->replace_set_index)
             continue;
+
+        // For now, PCM characteristics of all channel sets must be the same
+        if (c->freq != p->freq)
+            return -DCADEC_ENOSUP;
+
+        if (c->pcm_bit_res != p->pcm_bit_res)
+            return -DCADEC_ENOSUP;
+
+        if (c->storage_bit_res != p->storage_bit_res)
+            return -DCADEC_ENOSUP;
 
         xll_filter_band_data(c);
 
@@ -357,14 +366,12 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         nchannels += c->nchannels;
         struct xll_chset *o = find_hier_dmix_chset(xll, c);
         if (o)
-            if ((ret = undo_down_mix(xll, c, o, samples, nchannels)) < 0)
+            if ((ret = undo_down_mix(xll, o, samples, nchannels)) < 0)
                 return ret;
     }
 
     // Shift samples to account for storage bit width
     int shift = p->storage_bit_res - p->pcm_bit_res;
-    if (shift < 0)
-        return -DCADEC_EINVAL;
     if (shift > 0) {
         for (int spkr = 0; spkr < SPEAKER_COUNT; spkr++) {
             if (ch_mask & (1 << spkr)) {
