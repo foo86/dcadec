@@ -38,6 +38,9 @@ dcadec is a free DTS Coherent Acoustics decoder. Supported options:
 -h
     Show this help message.
 
+-l
+    Enable lenient decoding mode. Attempt to recover from errors.
+
 -P
     Disable progress indicator.
 

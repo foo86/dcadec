@@ -53,6 +53,9 @@ static void print_help(char *name)
 "-h\n"
 "    Show this help message.\n"
 "\n"
+"-l\n"
+"    Enable lenient decoding mode. Attempt to recover from errors.\n"
+"\n"
 "-P\n"
 "    Disable progress indicator.\n"
 "\n"
@@ -138,12 +141,12 @@ static void signal_handler(int sig)
 
 int main(int argc, char **argv)
 {
-    int flags = 0;
+    int flags = DCADEC_FLAG_STRICT;
     bool no_progress = false;
     bool quiet = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "bcfhPqsx")) != -1) {
+    while ((opt = getopt(argc, argv, "bcfhlPqsx")) != -1) {
         switch (opt) {
         case 'b':
             flags |= DCADEC_FLAG_CORE_BIT_EXACT;
@@ -157,6 +160,9 @@ int main(int argc, char **argv)
         case 'h':
             print_help(argv[0]);
             return 0;
+        case 'l':
+            flags &= ~DCADEC_FLAG_STRICT;
+            break;
         case 'P':
             no_progress = true;
             break;
