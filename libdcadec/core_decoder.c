@@ -202,10 +202,7 @@ static int parse_coding_header(struct core_decoder *core, enum header_type heade
         break;
 
     case HEADER_XCH:
-        // Number of extension channels
-        n = bits_get(&core->bits, 3) + 1;
-        require(n == 1, "Too many XCH audio channels");
-        core->nchannels += n;
+        core->nchannels++;
         assert(core->nchannels <= MAX_CHANNELS - 1);
         core->ch_mask |= SPEAKER_MASK_Cs;
         break;
@@ -1063,12 +1060,6 @@ static int parse_xch_frame(struct core_decoder *core)
 {
     enforce(!(core->ch_mask & SPEAKER_MASK_Cs), "XCH with Cs speaker already present");
 
-    // XCH frame size (already checked)
-    bits_skip(&core->bits, 10);
-
-    // Extension channel arrangement
-    require(bits_get(&core->bits, 4) == 1, "Unsupported XCH audio mode");
-
     int ret;
     if ((ret = parse_frame_data(core, HEADER_XCH, core->nchannels)) < 0)
         return ret;
@@ -1707,11 +1698,6 @@ static int parse_x96_frame_data(struct x96_decoder *x96, bool exss, int xch_base
 static int parse_x96_frame(struct x96_decoder *x96)
 {
     struct core_decoder *core = x96->core;
-    size_t frame_pos = core->bits.index;
-
-    // X96 frame size
-    size_t frame_size = bits_get(&core->bits, 12) + 1;
-    enforce(frame_size > 4, "Invalid X96 frame size");
 
     // Revision number
     x96->rev_no = bits_get(&core->bits, 4);
@@ -1727,7 +1713,8 @@ static int parse_x96_frame(struct x96_decoder *x96)
     if ((ret = parse_x96_frame_data(x96, false, 0)) < 0)
         return ret;
 
-    return bits_seek(&core->bits, frame_pos + frame_size * 8 - 32);
+    // Seek to the end of core frame
+    return bits_seek(&core->bits, core->frame_size * 8);
 }
 
 static int parse_x96_frame_exss(struct x96_decoder *x96, int flags)
@@ -1905,7 +1892,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
 
         if (xch_pos) {
             //printf("found XCH @ %zu\n", xch_pos);
-            core->bits.index = xch_pos * 32;
+            core->bits.index = xch_pos * 32 + 17;
             if ((ret = parse_xch_frame(core)) < 0) {
                 if (flags & DCADEC_FLAG_STRICT)
                     return ret;
@@ -1929,7 +1916,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
 
         if (x96_pos) {
             //printf("found X96 @ %zu\n", x96_pos);
-            core->bits.index = x96_pos * 32;
+            core->bits.index = x96_pos * 32 + 12;
             if (!core->x96_decoder) {
                 if (!(core->x96_decoder = ta_znew(core, struct x96_decoder)))
                     return -DCADEC_ENOMEM;
