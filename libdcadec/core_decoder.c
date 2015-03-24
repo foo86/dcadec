@@ -1244,7 +1244,7 @@ static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xb
     return 0;
 }
 
-static int parse_xbr_frame(struct core_decoder *core)
+static int parse_xbr_frame(struct core_decoder *core, int flags)
 {
     int     xbr_frame_size[4];
     int     xbr_nchannels[4];
@@ -1284,12 +1284,8 @@ static int parse_xbr_frame(struct core_decoder *core)
         xbr_base_ch += xbr_nchannels[i];
     }
 
-    /*
-    printf("xbr_nchsets %d\n", xbr_nchsets);
-    printf("xbr_transition_mode %d\n", xbr_transition_mode);
-    for (int i = 0; i < xbr_nchsets; i++)
-        printf("xbr_nchannels[%d] %d\n", i, xbr_nchannels[i]);
-    */
+    if (flags & DCADEC_FLAG_STRICT)
+        require(xbr_base_ch <= MAX_CHANNELS, "Too many XBR channels");
 
     // Reserved
     // Byte align
@@ -1734,7 +1730,7 @@ static int parse_x96_frame(struct x96_decoder *x96)
     return bits_seek(&core->bits, frame_pos + frame_size * 8 - 32);
 }
 
-static int parse_x96_frame_exss(struct x96_decoder *x96)
+static int parse_x96_frame_exss(struct x96_decoder *x96, int flags)
 {
     size_t  x96_frame_size[4];
     int     x96_nchannels[4];
@@ -1768,8 +1764,14 @@ static int parse_x96_frame_exss(struct x96_decoder *x96)
         x96_frame_size[i] = bits_get(&core->bits, 12) + 1;
 
     // Number of channels in channel set
-    for (int i = 0; i < x96_nchsets; i++)
+    int x96_base_ch = 0;
+    for (int i = 0; i < x96_nchsets; i++) {
         x96_nchannels[i] = bits_get(&core->bits, 3) + 1;
+        x96_base_ch += x96_nchannels[i];
+    }
+
+    if (flags & DCADEC_FLAG_STRICT)
+        require(x96_base_ch <= MAX_CHANNELS, "Too many X96 channels");
 
     // Reserved
     // Byte align
@@ -1781,7 +1783,7 @@ static int parse_x96_frame_exss(struct x96_decoder *x96)
         return ret;
 
     // Channel set data
-    int x96_base_ch = 0;
+    x96_base_ch = 0;
     for (int i = 0; i < x96_nchsets; i++) {
         header_pos = core->bits.index;
 
@@ -1810,6 +1812,8 @@ static void revert_to_base_chset(struct core_decoder *core)
 
 static int parse_optional_info(struct core_decoder *core, int flags)
 {
+    int ret;
+
     // Only when extensions decoding is requested
     if (!core->ext_audio_present || (flags & DCADEC_FLAG_CORE_ONLY))
         return 0;
@@ -1902,19 +1906,25 @@ static int parse_optional_info(struct core_decoder *core, int flags)
         if (xch_pos) {
             //printf("found XCH @ %zu\n", xch_pos);
             core->bits.index = xch_pos * 32;
-            if (!parse_xch_frame(core))
-                core->xch_present = true;
-            else
+            if ((ret = parse_xch_frame(core)) < 0) {
+                if (flags & DCADEC_FLAG_STRICT)
+                    return ret;
                 revert_to_base_chset(core);
+            } else {
+                core->xch_present = true;
+            }
         }
 
         if (xxch_pos) {
             //printf("found XXCH @ %zu\n", xxch_pos);
             core->bits.index = xxch_pos * 32;
-            if (!parse_xxch_frame(core))
-                core->xxch_present = true;
-            else
+            if ((ret = parse_xxch_frame(core)) < 0) {
+                if (flags & DCADEC_FLAG_STRICT)
+                    return ret;
                 revert_to_base_chset(core);
+            } else {
+                core->xxch_present = true;
+            }
         }
 
         if (x96_pos) {
@@ -1926,13 +1936,23 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 core->x96_decoder->core = core;
                 core->x96_decoder->rand = 1;
             }
-            core->x96_present = !parse_x96_frame(core->x96_decoder);
+            if ((ret = parse_x96_frame(core->x96_decoder)) < 0) {
+                if (flags & DCADEC_FLAG_STRICT)
+                    return ret;
+            } else {
+                core->x96_present = true;
+            }
         }
 
         if (xbr_pos) {
             //printf("found XBR @ %zu\n", xbr_pos);
             core->bits.index = xbr_pos * 32;
-            core->xbr_present = !parse_xbr_frame(core);
+            if ((ret = parse_xbr_frame(core, flags)) < 0) {
+                if (flags & DCADEC_FLAG_STRICT)
+                    return ret;
+            } else {
+                core->xbr_present = true;
+            }
         }
     }
 
@@ -1973,17 +1993,23 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
 int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
                     int flags, struct exss_asset *asset)
 {
+    int ret;
+
     (void)size;
-    (void)flags;
 
     if ((asset->extension_mask & EXSS_XXCH) && !core->xxch_present) {
         //printf("found XXCH @ EXSS\n");
         bits_init(&core->bits, data + asset->xxch_offset, asset->xxch_size);
         if (bits_get(&core->bits, 32) == SYNC_WORD_XXCH) {
-            if (!parse_xxch_frame(core))
-                core->xxch_present = true;
-            else
+            if ((ret = parse_xxch_frame(core)) < 0) {
+                if (flags & DCADEC_FLAG_STRICT)
+                    return ret;
                 revert_to_base_chset(core);
+            } else {
+                core->xxch_present = true;
+            }
+        } else if (flags & DCADEC_FLAG_STRICT) {
+            return -DCADEC_ENOSYNC;
         }
     }
 
@@ -1997,15 +2023,30 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
                 core->x96_decoder->core = core;
                 core->x96_decoder->rand = 1;
             }
-            core->x96_present = !parse_x96_frame_exss(core->x96_decoder);
+            if ((ret = parse_x96_frame_exss(core->x96_decoder, flags)) < 0) {
+                if (flags & DCADEC_FLAG_STRICT)
+                    return ret;
+            } else {
+                core->x96_present = true;
+            }
+        } else if (flags & DCADEC_FLAG_STRICT) {
+            return -DCADEC_ENOSYNC;
         }
     }
 
     if ((asset->extension_mask & EXSS_XBR) && !core->xbr_present) {
         //printf("found XBR @ EXSS\n");
         bits_init(&core->bits, data + asset->xbr_offset, asset->xbr_size);
-        core->xbr_present =
-            bits_get(&core->bits, 32) == SYNC_WORD_XBR && !parse_xbr_frame(core);
+        if (bits_get(&core->bits, 32) == SYNC_WORD_XBR) {
+            if ((ret = parse_xbr_frame(core, flags)) < 0) {
+                if (flags & DCADEC_FLAG_STRICT)
+                    return ret;
+            } else {
+                core->xbr_present = true;
+            }
+        } else if (flags & DCADEC_FLAG_STRICT) {
+            return -DCADEC_ENOSYNC;
+        }
     }
 
     return 0;

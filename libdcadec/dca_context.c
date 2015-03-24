@@ -425,8 +425,6 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
         }
     }
 
-    ret = -DCADEC_ENOSYNC;
-
     if (sync == SYNC_WORD_EXSS) {
         if (!dca->exss)
             if (!(dca->exss = ta_znew(dca, struct exss_parser)))
@@ -452,7 +450,8 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
 
         if (!(dca->flags & DCADEC_FLAG_CORE_ONLY)) {
             if ((dca->packet & DCADEC_PACKET_CORE) && (asset->extension_mask & (EXSS_XBR | EXSS_XXCH | EXSS_X96)))
-                core_parse_exss(dca->core, data, size, dca->flags, asset);
+                if ((ret = core_parse_exss(dca->core, data, size, dca->flags, asset)) < 0)
+                    goto fail;
 
             if (asset->extension_mask & EXSS_XLL) {
                 if (!dca->xll)
@@ -465,10 +464,16 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
                 dca->packet |= DCADEC_PACKET_XLL;
             }
         }
+    } else if (!dca->packet) {
+        return -DCADEC_ENOSYNC;
     }
 
+    return 0;
+
 fail:
-    return dca->packet ? 0 : ret;
+    if (!dca->packet || (dca->flags & DCADEC_FLAG_STRICT))
+        return ret;
+    return 0;
 }
 
 DCADEC_API struct dcadec_core_info *dcadec_context_get_core_info(struct dcadec_context *dca)

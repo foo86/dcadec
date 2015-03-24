@@ -85,6 +85,9 @@
 
 /** Output native DTS channel layout, not WAVEFORMATEX layout */
 #define DCADEC_FLAG_NATIVE_LAYOUT       0x80
+
+/** Don't conceal errors */
+#define DCADEC_FLAG_STRICT              0x100
 /**@}*/
 
 /**@{*/
