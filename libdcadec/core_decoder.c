@@ -969,8 +969,9 @@ int core_filter(struct core_decoder *core, int flags)
             for (int n = 0; n < core->npcmsamples; n += 2) {
                 int64_t res1 = INT64_C(2097471) * samples[n] + INT64_C(6291137) * history;
                 int64_t res2 = INT64_C(6291137) * samples[n] + INT64_C(2097471) * history;
-                samples[n    ]           = clip23(norm23(res1));
-                samples[n + 1] = history = clip23(norm23(res2));
+                history = samples[n];
+                samples[n    ] = clip23(norm23(res1));
+                samples[n + 1] = clip23(norm23(res2));
             }
 
             // Update LFE PCM history
