@@ -370,23 +370,16 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
                 return ret;
     }
 
+    // Reorder sample buffer pointers
+    if ((ret = reorder_samples(dca, spkr_map, ch_mask)) <= 0)
+        return -DCADEC_EINVAL;
+
     // Shift samples to account for storage bit width
     int shift = p->storage_bit_res - p->pcm_bit_res;
-    if (shift > 0) {
-        for (int spkr = 0; spkr < SPEAKER_COUNT; spkr++) {
-            if (ch_mask & (1 << spkr)) {
-                int *buf = spkr_map[spkr];
-                if (!buf)
-                    return -DCADEC_EINVAL;
-                for (int n = 0; n < xll->nframesamples; n++)
-                    buf[n] <<= shift;
-            }
-        }
-    }
-
-    // Reorder sample buffer pointers
-    if (reorder_samples(dca, spkr_map, ch_mask) <= 0)
-        return -DCADEC_EINVAL;
+    if (shift > 0)
+        for (int ch = 0; ch < ret; ch++)
+            for (int n = 0; n < xll->nframesamples; n++)
+                dca->samples[ch][n] <<= shift;
 
     dca->nframesamples = xll->nframesamples;
     dca->sample_rate = p->freq;
