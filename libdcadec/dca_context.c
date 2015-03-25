@@ -217,15 +217,14 @@ static int undo_down_mix(struct xll_decoder *xll,
     return 0;
 }
 
-static int filter_hd_ma_frame(struct dcadec_context *dca)
+static int validate_hd_ma_frame(struct dcadec_context *dca)
 {
-    struct core_decoder *core = dca->core;
-    struct xll_decoder *xll = dca->xll;
-    int ret;
-
-    // Select the first (primary) channel set
-    struct xll_chset *p = &xll->chset[0];
+    // Validate the first (primary) channel set
+    struct xll_chset *p = &dca->xll->chset[0];
     if (!p->primary_chset || p->replace_set_index)
+        return -DCADEC_ENOSUP;
+
+    if (!p->ch_mask_enabled && p->nchannels != 2)
         return -DCADEC_ENOSUP;
 
     if (p->storage_bit_res != 16 && p->storage_bit_res != 24)
@@ -233,6 +232,60 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
 
     if (p->pcm_bit_res > p->storage_bit_res)
         return -DCADEC_EINVAL;
+
+    // Validate channel sets
+    bool residual = false;
+    for_each_chset(dca->xll, c) {
+        if (c->replace_set_index)
+            continue;
+
+        // Reject multiple primary channel sets
+        if (c->primary_chset && c != p)
+            return -DCADEC_ENOSUP;
+
+        // Reject parallel downmix
+        // Reject hierarchial downmix without channel mask
+        if (!c->primary_chset && c->dmix_embedded && (!c->hier_chset || !c->ch_mask_enabled))
+            return -DCADEC_ENOSUP;
+
+        // For now, PCM characteristics of all channel sets must be the same
+        if (c->freq != p->freq)
+            return -DCADEC_ENOSUP;
+
+        if (c->pcm_bit_res != p->pcm_bit_res)
+            return -DCADEC_ENOSUP;
+
+        if (c->storage_bit_res != p->storage_bit_res)
+            return -DCADEC_ENOSUP;
+
+        // Validate channel masks
+        for (int ch = 0; ch < c->nchannels; ch++)
+            if (xll_map_ch_to_spkr(c, ch) < 0)
+                return -DCADEC_EINVAL;
+
+        residual |= c->residual_encode != (1 << c->nchannels) - 1;
+    }
+
+    if (residual) {
+        if (!(dca->packet & DCADEC_PACKET_CORE))
+            return -DCADEC_EINVAL;
+        if (p->freq != dca->core->sample_rate &&
+            p->freq != dca->core->sample_rate * 2)
+            return -DCADEC_ENOSUP;
+        if (dca->xll->nframesamples != dca->core->npcmblocks * NUM_PCMBLOCK_SAMPLES &&
+            dca->xll->nframesamples != dca->core->npcmblocks * NUM_PCMBLOCK_SAMPLES * 2)
+            return -DCADEC_EINVAL;
+    }
+
+    return 0;
+}
+
+static int filter_hd_ma_frame(struct dcadec_context *dca)
+{
+    struct core_decoder *core = dca->core;
+    struct xll_decoder *xll = dca->xll;
+    struct xll_chset *p = &xll->chset[0];
+    int ret;
 
     // Filter core frame if present
     if (dca->packet & DCADEC_PACKET_CORE) {
@@ -258,16 +311,6 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     for_each_chset(xll, c) {
         if (c->replace_set_index)
             continue;
-
-        // For now, PCM characteristics of all channel sets must be the same
-        if (c->freq != p->freq)
-            return -DCADEC_ENOSUP;
-
-        if (c->pcm_bit_res != p->pcm_bit_res)
-            return -DCADEC_ENOSUP;
-
-        if (c->storage_bit_res != p->storage_bit_res)
-            return -DCADEC_ENOSUP;
 
         xll_filter_band_data(c);
 
@@ -555,8 +598,17 @@ DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
         return -DCADEC_EINVAL;
 
     if (dca->packet & DCADEC_PACKET_XLL) {
-        if ((ret = filter_hd_ma_frame(dca)) < 0)
-            return ret;
+        if ((ret = validate_hd_ma_frame(dca)) < 0) {
+            if (dca->flags & DCADEC_FLAG_STRICT)
+                return ret;
+            if (!(dca->packet & DCADEC_PACKET_CORE))
+                return ret;
+            if ((ret = filter_core_frame(dca)) < 0)
+                return ret;
+        } else {
+            if ((ret = filter_hd_ma_frame(dca)) < 0)
+                return ret;
+        }
     } else if (dca->packet & DCADEC_PACKET_CORE) {
         if ((ret = filter_core_frame(dca)) < 0)
             return ret;
