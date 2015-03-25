@@ -913,6 +913,9 @@ int core_filter(struct core_decoder *core, int flags)
     if (diff & (DCADEC_FLAG_CORE_BIT_EXACT | DCADEC_FLAG_CORE_LFE_FIR))
         memset(core->lfe_samples, 0, MAX_LFE_HISTORY * sizeof(int));
 
+    if (diff & DCADEC_FLAG_CORE_SYNTH_X96)
+        core->output_history_lfe = 0;
+
     core->filter_flags = flags;
 
     // Filter primary channels
