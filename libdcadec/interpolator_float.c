@@ -30,10 +30,8 @@ static const double lfe_iir[12] = {
 };
 
 static double cos_mod_32[32][32];
-static double filter_coeff_32[2][512];
 
 static double cos_mod_64[64][64];
-static double filter_coeff_64[1024];
 
 static inline int convert(double a)
 {
@@ -121,7 +119,7 @@ INTERPOLATE_SUB(sub32_float)
     double *history = dsp->history;
 
     // Select filter
-    const double *filter_coeff = filter_coeff_32[perfect];
+    const double *filter_coeff = perfect ? band_fir_perfect : band_fir_nonperfect;
 
     // Interpolation begins
     for (int sample = 0; sample < nsamples; sample++) {
@@ -231,9 +229,9 @@ INTERPOLATE_SUB(sub64_float)
 
             // Accumulate
             for (j =  0; j < 1024; j += 128)
-                res += history[     i + j] * filter_coeff_64[i + j];
+                res += history[     i + j] * band_fir_x96[i + j];
             for (j = 64; j < 1024; j += 128)
-                res += history[32 + i + j] * filter_coeff_64[i + j];
+                res += history[32 + i + j] * band_fir_x96[i + j];
 
             // Save interpolated samples
             pcm_samples[sample * 64 + i] = convert(res);
@@ -245,9 +243,9 @@ INTERPOLATE_SUB(sub64_float)
 
             // Accumulate
             for (j =  0; j < 1024; j += 128)
-                res += history[     k + j] * filter_coeff_64[i + j];
+                res += history[     k + j] * band_fir_x96[i + j];
             for (j = 64; j < 1024; j += 128)
-                res += history[32 + k + j] * filter_coeff_64[i + j];
+                res += history[32 + k + j] * band_fir_x96[i + j];
 
             // Save interpolated samples
             pcm_samples[sample * 64 + i] = convert(res);
@@ -270,17 +268,6 @@ void interpolate_sub32_float_init(void)
         for (int j = 0; j < 32; j++)
             cos_mod_32[i][j] = 0.25 * cos((2 * i + 1) * (2 * j + 1) * M_PI / 128);
 
-    // Pre-scale floating point FIR coefficients
-    for (int i = 0; i < 512; i++) {
-        filter_coeff_32[0][i] = band_fir_nonperfect[i] * M_SQRT2 * 128;
-        filter_coeff_32[1][i] = band_fir_perfect[i] * M_SQRT2 * 128;
-        if ((i & 63) >= 16) {
-            // Invert sign to make all equations positive
-            filter_coeff_32[0][i] = -filter_coeff_32[0][i];
-            filter_coeff_32[1][i] = -filter_coeff_32[1][i];
-        }
-    }
-
     initialized = true;
 }
 
@@ -294,14 +281,6 @@ void interpolate_sub64_float_init(void)
     for (int i = 0; i < 64; i++)
         for (int j = 0; j < 64; j++)
             cos_mod_64[i][j] = 0.125 * cos((2 * i + 1) * (2 * j + 1) * M_PI / 256);
-
-    // Pre-scale floating point FIR coefficients
-    for (int i = 0; i < 1024; i++) {
-        filter_coeff_64[i] = band_fir_x96[i] * M_SQRT2 * 512;
-        if ((i & 127) >= 32)
-            // Invert sign to make all equations positive
-            filter_coeff_64[i] = -filter_coeff_64[i];
-    }
 
     initialized = true;
 }
