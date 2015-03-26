@@ -1,7 +1,6 @@
-CC = gcc
-AR = ar
-override CFLAGS := -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall -Wextra -O3 -g -MMD $(CFLAGS)
-LDFLAGS =
+CC ?= gcc
+AR ?= ar
+CFLAGS := -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall -Wextra -O3 -g -MMD $(CFLAGS)
 
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
