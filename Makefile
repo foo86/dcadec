@@ -1,3 +1,5 @@
+VERSION = 0.0.0
+
 CC = gcc
 AR = ar
 override CFLAGS := -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall -Wextra -O3 -g -MMD $(CFLAGS)
@@ -123,8 +125,11 @@ clean:
 	$(RM) $(OUT_CUT) $(OBJ_CUT) $(DEP_CUT)
 	$(RM) dcadec.pc
 
-install: $(OUT_LIB) $(OUT_DEC)
-	sed "s,%PREFIX%,$(PREFIX),;s,%LIBDIR%,$(LIBDIR),;s,%INCLUDEDIR%,$(INCLUDEDIR)," dcadec.pc.in > dcadec.pc
+.PHONY: dcadec.pc
+dcadec.pc: dcadec.pc.in
+	sed 's,%PREFIX%,$(PREFIX),;s,%LIBDIR%,$(LIBDIR),;s,%INCLUDEDIR%,$(INCLUDEDIR),;s,%VERSION%,$(VERSION),' $< > $@
+
+install: $(OUT_LIB) $(OUT_DEC) dcadec.pc
 	install -d -m 755 $(DESTDIR)$(LIBDIR) $(DESTDIR)$(PKG_CONFIG_PATH) $(DESTDIR)$(INCLUDEDIR)/libdcadec $(DESTDIR)$(BINDIR)
 	install -m 644 $(OUT_LIB) $(DESTDIR)$(LIBDIR)
 	install -m 644 $(INC_LIB) $(DESTDIR)$(INCLUDEDIR)/libdcadec
