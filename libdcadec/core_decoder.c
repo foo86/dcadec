@@ -918,11 +918,15 @@ int core_filter(struct core_decoder *core, int flags)
 
     core->filter_flags = flags;
 
+    if (!core->subband_dsp_data)
+        if (!(core->subband_dsp_data = interpolator_init(core)))
+            return -DCADEC_ENOMEM;
+
     // Filter primary channels
     for (int ch = 0; ch < core->nchannels; ch++) {
         // Allocate subband DSP
         if (!core->subband_dsp[ch])
-            if (!(core->subband_dsp[ch] = interpolator_create(core, flags)))
+            if (!(core->subband_dsp[ch] = interpolator_create(core->subband_dsp_data, flags)))
                 return -DCADEC_ENOMEM;
 
         // Map this primary channel to speaker

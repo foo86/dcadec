@@ -29,10 +29,6 @@ static const double lfe_iir[12] = {
      1.9922787089263100,  1.0000000000000000, -1.9974180593495760
 };
 
-static double cos_mod_32[32][32];
-
-static double cos_mod_64[64][64];
-
 static inline int convert(double a)
 {
     if (a > 0x7fffff)
@@ -118,6 +114,9 @@ INTERPOLATE_SUB(sub32_float)
     // Get history pointer
     double *history = dsp->history;
 
+    // Get IDCT coefficients
+    const double *cos_mod = dsp->data->cos_mod_32;
+
     // Select filter
     const double *filter_coeff = perfect ? band_fir_perfect : band_fir_nonperfect;
 
@@ -132,10 +131,10 @@ INTERPOLATE_SUB(sub32_float)
 
         // Inverse DCT
         double output[32];
-        for (i = 0; i < 32; i++) {
+        for (i = 0, k = 0; i < 32; i++) {
             double res = 0.0;
             for (j = 0; j < 32; j++)
-                res += input[j] * cos_mod_32[i][j];
+                res += input[j] * cos_mod[k++];
             output[i] = res;
         }
 
@@ -187,6 +186,9 @@ INTERPOLATE_SUB(sub64_float)
     // Get history pointer
     double *history = dsp->history;
 
+    // Get IDCT coefficients
+    const double *cos_mod = dsp->data->cos_mod_64;
+
     // Interpolation begins
     for (int sample = 0; sample < nsamples; sample++) {
         int i, j, k;
@@ -209,10 +211,10 @@ INTERPOLATE_SUB(sub64_float)
 
         // Inverse DCT
         double output[64];
-        for (i = 0; i < 64; i++) {
+        for (i = 0, k = 0; i < 64; i++) {
             double res = 0.0;
             for (j = 0; j < 64; j++)
-                res += input[j] * cos_mod_64[i][j];
+                res += input[j] * cos_mod[k++];
             output[i] = res;
         }
 
@@ -255,32 +257,4 @@ INTERPOLATE_SUB(sub64_float)
         for (i = 1023; i >= 64; i--)
             history[i] = history[i - 64];
     }
-}
-
-void interpolate_sub32_float_init(void)
-{
-    static bool initialized;
-
-    if (initialized)
-        return;
-
-    for (int i = 0; i < 32; i++)
-        for (int j = 0; j < 32; j++)
-            cos_mod_32[i][j] = 0.25 * cos((2 * i + 1) * (2 * j + 1) * M_PI / 128);
-
-    initialized = true;
-}
-
-void interpolate_sub64_float_init(void)
-{
-    static bool initialized;
-
-    if (initialized)
-        return;
-
-    for (int i = 0; i < 64; i++)
-        for (int j = 0; j < 64; j++)
-            cos_mod_64[i][j] = 0.125 * cos((2 * i + 1) * (2 * j + 1) * M_PI / 256);
-
-    initialized = true;
 }

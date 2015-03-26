@@ -19,12 +19,30 @@
 #include "common.h"
 #include "interpolator.h"
 
-struct interpolator *interpolator_create(struct core_decoder *parent, int flags)
+struct interpolator_data *interpolator_init(struct core_decoder *parent)
+{
+    struct interpolator_data *data = ta_new(parent, struct interpolator_data);
+    if (!data)
+        return NULL;
+
+    for (int i = 0, k = 0; i < 32; i++)
+        for (int j = 0; j < 32; j++)
+            data->cos_mod_32[k++] = 0.250 * cos((2 * i + 1) * (2 * j + 1) * M_PI / 128);
+
+    for (int i = 0, k = 0; i < 64; i++)
+        for (int j = 0; j < 64; j++)
+            data->cos_mod_64[k++] = 0.125 * cos((2 * i + 1) * (2 * j + 1) * M_PI / 256);
+
+    return data;
+}
+
+struct interpolator *interpolator_create(struct interpolator_data *parent, int flags)
 {
     struct interpolator *dsp = ta_new(parent, struct interpolator);
     if (!dsp)
         return NULL;
 
+    dsp->data = parent;
     dsp->history = ta_znew_array_size(dsp,
         (flags & DCADEC_FLAG_CORE_BIT_EXACT) ? sizeof(int) : sizeof(double),
         (flags & DCADEC_FLAG_CORE_SYNTH_X96) ? 1024 : 512);
@@ -34,19 +52,15 @@ struct interpolator *interpolator_create(struct core_decoder *parent, int flags)
     }
 
     if (flags & DCADEC_FLAG_CORE_BIT_EXACT) {
-        if (flags & DCADEC_FLAG_CORE_SYNTH_X96) {
+        if (flags & DCADEC_FLAG_CORE_SYNTH_X96)
             dsp->interpolate = interpolate_sub64_fixed;
-        } else {
+        else
             dsp->interpolate = interpolate_sub32_fixed;
-        }
     } else {
-        if (flags & DCADEC_FLAG_CORE_SYNTH_X96) {
-            interpolate_sub64_float_init();
+        if (flags & DCADEC_FLAG_CORE_SYNTH_X96)
             dsp->interpolate = interpolate_sub64_float;
-        } else {
-            interpolate_sub32_float_init();
+        else
             dsp->interpolate = interpolate_sub32_float;
-        }
     }
 
     return dsp;

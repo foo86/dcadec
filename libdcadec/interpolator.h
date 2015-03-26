@@ -33,12 +33,19 @@ typedef void (*interpolate_sub_t)(struct interpolator *dsp, int *pcm_samples,
                                   int **subband_samples_hi,
                                   int nsamples, bool perfect);
 
+struct interpolator_data {
+    double cos_mod_32[32 * 32];
+    double cos_mod_64[64 * 64];
+};
+
 struct interpolator {
+    struct interpolator_data *data;
     void *history;
     interpolate_sub_t interpolate;
 };
 
-struct interpolator *interpolator_create(struct core_decoder *parent, int flags);
+struct interpolator_data *interpolator_init(struct core_decoder *parent);
+struct interpolator *interpolator_create(struct interpolator_data *parent, int flags);
 void interpolator_clear(struct interpolator *dsp);
 
 #define INTERPOLATE_LFE(x) \
@@ -56,9 +63,6 @@ INTERPOLATE_LFE(lfe_float_fir);
 INTERPOLATE_LFE(lfe_float_iir);
 INTERPOLATE_SUB(sub32_float);
 INTERPOLATE_SUB(sub64_float);
-
-void interpolate_sub32_float_init(void);
-void interpolate_sub64_float_init(void);
 
 INTERPOLATE_LFE(lfe_fixed_fir);
 INTERPOLATE_SUB(sub32_fixed);
