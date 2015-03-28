@@ -18,7 +18,7 @@
 
 #include "common.h"
 #include "fixed_math.h"
-#include "idct_fixed.h"
+#include "idct.h"
 
 static inline void sum_a(const int *input, int *output, int len)
 {
@@ -162,7 +162,7 @@ static inline void clp_v(int *input, int len)
         input[i] = clip23(input[i]);
 }
 
-void inverse_dct32_fixed(int *input, int *output)
+void idct_perform32_fixed(int *input, int *output)
 {
     int mag = 0;
     for (int i = 0; i < 32; i++)
@@ -273,7 +273,7 @@ static inline void mod64_c(const int *input, int *output)
         output[i] = mul23(cos_mod[i], input[k] - input[32 + k]);
 }
 
-void inverse_dct64_fixed(int *input, int *output)
+void idct_perform64_fixed(int *input, int *output)
 {
     int mag = 0;
     for (int i = 0; i < 32; i++)

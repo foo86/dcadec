@@ -19,6 +19,7 @@
 #include "common.h"
 #include "bitstream.h"
 #include "interpolator.h"
+#include "idct.h"
 #include "fixed_math.h"
 #include "core_decoder.h"
 #include "exss_parser.h"
@@ -918,15 +919,15 @@ int core_filter(struct core_decoder *core, int flags)
 
     core->filter_flags = flags;
 
-    if (!core->subband_dsp_data)
-        if (!(core->subband_dsp_data = interpolator_init(core)))
+    if (!core->subband_dsp_idct)
+        if (!(core->subband_dsp_idct = idct_init(core)))
             return -DCADEC_ENOMEM;
 
     // Filter primary channels
     for (int ch = 0; ch < core->nchannels; ch++) {
         // Allocate subband DSP
         if (!core->subband_dsp[ch])
-            if (!(core->subband_dsp[ch] = interpolator_create(core->subband_dsp_data, flags)))
+            if (!(core->subband_dsp[ch] = interpolator_create(core->subband_dsp_idct, flags)))
                 return -DCADEC_ENOMEM;
 
         // Map this primary channel to speaker

@@ -16,10 +16,32 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef IDCT_FIXED_H
-#define IDCT_FIXED_H
+#ifndef IDCT_H
+#define IDCT_H
 
-void inverse_dct32_fixed(int *input, int *output);
-void inverse_dct64_fixed(int *input, int *output);
+struct core_decoder;
+
+struct idct_context {
+    double dct_a[8][8];
+    double dct_b[8][7];
+
+    double mod_a[16];
+    double mod_b[ 8];
+    double mod_c[32];
+
+    double mod64_a[32];
+    double mod64_b[16];
+    double mod64_c[64];
+};
+
+struct idct_context *idct_init(struct core_decoder *parent);
+
+void idct_perform32_float(const struct idct_context *idct,
+                          double *input, double *output);
+void idct_perform64_float(const struct idct_context *idct,
+                          double *input, double *output);
+
+void idct_perform32_fixed(int *input, int *output);
+void idct_perform64_fixed(int *input, int *output);
 
 #endif

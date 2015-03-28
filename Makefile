@@ -42,6 +42,7 @@ libdcadec/dca_context.c \
 libdcadec/dmix_tables.c \
 libdcadec/exss_parser.c \
 libdcadec/idct_fixed.c \
+libdcadec/idct_float.c \
 libdcadec/interpolator.c \
 libdcadec/interpolator_fixed.c \
 libdcadec/interpolator_float.c \

@@ -118,7 +118,7 @@ struct core_decoder {
     int                 *subband_buffer;
     int                 *subband_samples[MAX_CHANNELS][MAX_SUBBANDS];
     struct interpolator *subband_dsp[MAX_CHANNELS];
-    struct interpolator_data    *subband_dsp_data;
+    struct idct_context *subband_dsp_idct;
 
     int     *lfe_samples;
 

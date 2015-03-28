@@ -18,8 +18,8 @@
 
 #include "common.h"
 #include "interpolator.h"
+#include "idct.h"
 #include "fixed_math.h"
-#include "idct_fixed.h"
 #include "fir_fixed.h"
 
 INTERPOLATE_LFE(lfe_fixed_fir)
@@ -72,7 +72,7 @@ INTERPOLATE_SUB(sub32_fixed)
 
         // Inverse DCT
         int output[32];
-        inverse_dct32_fixed(input, output);
+        idct_perform32_fixed(input, output);
 
         // Store history
         for (i = 0, k = 31; i < 16; i++, k--) {
@@ -146,7 +146,7 @@ INTERPOLATE_SUB(sub64_fixed)
 
         // Inverse DCT
         int output[64];
-        inverse_dct64_fixed(input, output);
+        idct_perform64_fixed(input, output);
 
         // Store history
         for (i = 0, k = 63; i < 32; i++, k--) {

@@ -22,7 +22,7 @@
 #define MAX_LFE_HISTORY     12
 
 struct interpolator;
-struct core_decoder;
+struct idct_context;
 
 typedef void (*interpolate_lfe_t)(int *pcm_samples, int *lfe_samples,
                                   int nsamples, bool dec_select,
@@ -33,19 +33,13 @@ typedef void (*interpolate_sub_t)(struct interpolator *dsp, int *pcm_samples,
                                   int **subband_samples_hi,
                                   int nsamples, bool perfect);
 
-struct interpolator_data {
-    double cos_mod_32[32 * 32];
-    double cos_mod_64[64 * 64];
-};
-
 struct interpolator {
-    struct interpolator_data *data;
+    struct idct_context *idct;
     void *history;
     interpolate_sub_t interpolate;
 };
 
-struct interpolator_data *interpolator_init(struct core_decoder *parent);
-struct interpolator *interpolator_create(struct interpolator_data *parent, int flags);
+struct interpolator *interpolator_create(struct idct_context *parent, int flags);
 void interpolator_clear(struct interpolator *dsp);
 
 #define INTERPOLATE_LFE(x) \

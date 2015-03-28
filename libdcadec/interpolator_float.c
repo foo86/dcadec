@@ -18,6 +18,7 @@
 
 #include "common.h"
 #include "interpolator.h"
+#include "idct.h"
 #include "fir_float.h"
 
 static const double lfe_iir_scale = 0.001985816114019982;
@@ -114,9 +115,6 @@ INTERPOLATE_SUB(sub32_float)
     // Get history pointer
     double *history = dsp->history;
 
-    // Get IDCT coefficients
-    const double *cos_mod = dsp->data->cos_mod_32;
-
     // Select filter
     const double *filter_coeff = perfect ? band_fir_perfect : band_fir_nonperfect;
 
@@ -131,12 +129,7 @@ INTERPOLATE_SUB(sub32_float)
 
         // Inverse DCT
         double output[32];
-        for (i = 0, k = 0; i < 32; i++) {
-            double res = 0.0;
-            for (j = 0; j < 32; j++)
-                res += input[j] * cos_mod[k++];
-            output[i] = res;
-        }
+        idct_perform32_float(dsp->idct, input, output);
 
         // Store history
         for (i = 0, k = 31; i < 16; i++, k--) {
@@ -186,9 +179,6 @@ INTERPOLATE_SUB(sub64_float)
     // Get history pointer
     double *history = dsp->history;
 
-    // Get IDCT coefficients
-    const double *cos_mod = dsp->data->cos_mod_64;
-
     // Interpolation begins
     for (int sample = 0; sample < nsamples; sample++) {
         int i, j, k;
@@ -211,12 +201,7 @@ INTERPOLATE_SUB(sub64_float)
 
         // Inverse DCT
         double output[64];
-        for (i = 0, k = 0; i < 64; i++) {
-            double res = 0.0;
-            for (j = 0; j < 64; j++)
-                res += input[j] * cos_mod[k++];
-            output[i] = res;
-        }
+        idct_perform64_float(dsp->idct, input, output);
 
         // Store history
         for (i = 0, k = 63; i < 32; i++, k--) {

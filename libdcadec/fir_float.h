@@ -804,7 +804,7 @@ static const double lfe_fir_128[512] = {
      2.164336300E-04,  1.887860900E-04,  1.635869100E-04,  5.316857100E-04
 };
 
-#define SCALE(x)    ((x) * M_SQRT2 * 512)
+#define SCALE(x)    ((x) * M_SQRT2 * 256)
 
 // Annex D.9 - 1024 tap FIR for X96 synthesis QMF
 static const double band_fir_x96[1024] = {
