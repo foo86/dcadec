@@ -1,6 +1,6 @@
 VERSION = 0.0.0
 
-CFLAGS := -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall -Wextra -O3 -g -MMD $(CFLAGS)
+override CFLAGS := -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall -Wextra -O3 -g -MMD $(CFLAGS)
 
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
@@ -11,7 +11,7 @@ PKG_CONFIG_PATH ?= $(LIBDIR)/pkgconfig
 -include .config
 
 ifdef CONFIG_NDEBUG
-    CFLAGS += -DNDEBUG
+    override CFLAGS += -DNDEBUG
 endif
 
 ifdef CONFIG_WINDOWS
