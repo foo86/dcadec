@@ -79,13 +79,13 @@ struct idct_context *idct_init(struct core_decoder *parent)
     return idct;
 }
 
-static inline void sum_a(const double *input, double *output, int len)
+static void sum_a(const double * restrict input, double * restrict output, int len)
 {
     for (int i = 0; i < len; i++)
         output[i] = input[2 * i] + input[2 * i + 1];
 }
 
-static inline void sum_b(const double *input, double *output, int len)
+static void sum_b(const double * restrict input, double * restrict output, int len)
 {
     for (int i = 0; i < len; i++) {
         if (i > 0)
@@ -95,13 +95,13 @@ static inline void sum_b(const double *input, double *output, int len)
     }
 }
 
-static inline void sum_c(const double *input, double *output, int len)
+static void sum_c(const double * restrict input, double * restrict output, int len)
 {
     for (int i = 0; i < len; i++)
         output[i] = input[2 * i];
 }
 
-static inline void sum_d(const double *input, double *output, int len)
+static void sum_d(const double * restrict input, double * restrict output, int len)
 {
     for (int i = 0; i < len; i++) {
         if (i > 0)
@@ -111,8 +111,8 @@ static inline void sum_d(const double *input, double *output, int len)
     }
 }
 
-static inline void dct_a(const struct idct_context *idct,
-                         const double *input, double *output)
+static void dct_a(const struct idct_context * restrict idct,
+                  const double * restrict input, double * restrict output)
 {
     for (int i = 0; i < 8; i++) {
         double res = 0.0;
@@ -122,8 +122,8 @@ static inline void dct_a(const struct idct_context *idct,
     }
 }
 
-static inline void dct_b(const struct idct_context *idct,
-                         const double *input, double *output)
+static void dct_b(const struct idct_context * restrict idct,
+                  const double * restrict input, double * restrict output)
 {
     for (int i = 0; i < 8; i++) {
         double res = input[0];
@@ -133,8 +133,8 @@ static inline void dct_b(const struct idct_context *idct,
     }
 }
 
-static inline void mod_a(const struct idct_context *idct,
-                         const double *input, double *output)
+static void mod_a(const struct idct_context * restrict idct,
+                  const double * restrict input, double * restrict output)
 {
     for (int i = 0; i < 8; i++)
         output[i] = idct->mod_a[i] * (input[i] + input[8 + i]);
@@ -143,8 +143,8 @@ static inline void mod_a(const struct idct_context *idct,
         output[i] = idct->mod_a[i] * (input[k] - input[8 + k]);
 }
 
-static inline void mod_b(const struct idct_context *idct,
-                         double *input, double *output)
+static void mod_b(const struct idct_context * restrict idct,
+                  double * restrict input, double * restrict output)
 {
     for (int i = 0; i < 8; i++)
         input[8 + i] = idct->mod_b[i] * input[8 + i];
@@ -156,8 +156,8 @@ static inline void mod_b(const struct idct_context *idct,
         output[i] = input[k] - input[8 + k];
 }
 
-static inline void mod_c(const struct idct_context *idct,
-                         const double *input, double *output)
+static void mod_c(const struct idct_context * restrict idct,
+                  const double * restrict input, double * restrict output)
 {
     for (int i = 0; i < 16; i++)
         output[i] = idct->mod_c[i] * (input[i] + input[16 + i]);
@@ -166,8 +166,8 @@ static inline void mod_c(const struct idct_context *idct,
         output[i] = idct->mod_c[i] * (input[k] - input[16 + k]);
 }
 
-void idct_perform32_float(const struct idct_context *idct,
-                          double *input, double *output)
+void idct_perform32_float(const struct idct_context * restrict idct,
+                          double * restrict input, double * restrict output)
 {
     sum_a(input, output +  0, 16);
     sum_b(input, output + 16, 16);
@@ -188,8 +188,8 @@ void idct_perform32_float(const struct idct_context *idct,
     mod_c(idct, input, output);
 }
 
-static inline void mod64_a(const struct idct_context *idct,
-                           const double *input, double *output)
+static void mod64_a(const struct idct_context * restrict idct,
+                    const double * restrict input, double * restrict output)
 {
     for (int i = 0; i < 16; i++)
         output[i] = idct->mod64_a[i] * (input[i] + input[16 + i]);
@@ -198,8 +198,8 @@ static inline void mod64_a(const struct idct_context *idct,
         output[i] = idct->mod64_a[i] * (input[k] - input[16 + k]);
 }
 
-static inline void mod64_b(const struct idct_context *idct,
-                           double *input, double *output)
+static void mod64_b(const struct idct_context * restrict idct,
+                    double * restrict input, double * restrict output)
 {
     for (int i = 0; i < 16; i++)
         input[16 + i] = idct->mod64_b[i] * input[16 + i];
@@ -211,8 +211,8 @@ static inline void mod64_b(const struct idct_context *idct,
         output[i] = input[k] - input[16 + k];
 }
 
-static inline void mod64_c(const struct idct_context *idct,
-                           const double *input, double *output)
+static void mod64_c(const struct idct_context * restrict idct,
+                    const double * restrict input, double * restrict output)
 {
     for (int i = 0; i < 32; i++)
         output[i] = idct->mod64_c[i] * (input[i] + input[32 + i]);
@@ -221,8 +221,8 @@ static inline void mod64_c(const struct idct_context *idct,
         output[i] = idct->mod64_c[i] * (input[k] - input[32 + k]);
 }
 
-void idct_perform64_float(const struct idct_context *idct,
-                          double *input, double *output)
+void idct_perform64_float(const struct idct_context * restrict idct,
+                          double * restrict input, double * restrict output)
 {
     sum_a(input, output +  0, 32);
     sum_b(input, output + 32, 32);

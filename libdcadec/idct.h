@@ -36,12 +36,12 @@ struct idct_context {
 
 struct idct_context *idct_init(struct core_decoder *parent);
 
-void idct_perform32_float(const struct idct_context *idct,
-                          double *input, double *output);
-void idct_perform64_float(const struct idct_context *idct,
-                          double *input, double *output);
+void idct_perform32_float(const struct idct_context * restrict idct,
+                          double * restrict input, double * restrict output);
+void idct_perform64_float(const struct idct_context * restrict idct,
+                          double * restrict input, double * restrict output);
 
-void idct_perform32_fixed(int *input, int *output);
-void idct_perform64_fixed(int *input, int *output);
+void idct_perform32_fixed(int * restrict input, int * restrict output);
+void idct_perform64_fixed(int * restrict input, int * restrict output);
 
 #endif

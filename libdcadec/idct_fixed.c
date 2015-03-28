@@ -20,13 +20,13 @@
 #include "fixed_math.h"
 #include "idct.h"
 
-static inline void sum_a(const int *input, int *output, int len)
+static void sum_a(const int * restrict input, int * restrict output, int len)
 {
     for (int i = 0; i < len; i++)
         output[i] = input[2 * i] + input[2 * i + 1];
 }
 
-static inline void sum_b(const int *input, int *output, int len)
+static void sum_b(const int * restrict input, int * restrict output, int len)
 {
     for (int i = 0; i < len; i++) {
         if (i > 0)
@@ -36,13 +36,13 @@ static inline void sum_b(const int *input, int *output, int len)
     }
 }
 
-static inline void sum_c(const int *input, int *output, int len)
+static void sum_c(const int * restrict input, int * restrict output, int len)
 {
     for (int i = 0; i < len; i++)
         output[i] = input[2 * i];
 }
 
-static inline void sum_d(const int *input, int *output, int len)
+static void sum_d(const int * restrict input, int * restrict output, int len)
 {
     for (int i = 0; i < len; i++) {
         if (i > 0)
@@ -52,7 +52,7 @@ static inline void sum_d(const int *input, int *output, int len)
     }
 }
 
-static inline void dct_a(const int *input, int *output)
+static void dct_a(const int * restrict input, int * restrict output)
 {
     //  floor(sin((2 * i + 1) * (2 * (7 - j) + 1) * PI / 32) * (1 << 23) + 0.5), i = 2 * k
     // -floor(sin((2 * i + 1) * (2 * (7 - j) + 1) * PI / 32) * (1 << 23) + 0.5), i = 2 * k + 1
@@ -75,7 +75,7 @@ static inline void dct_a(const int *input, int *output)
     }
 }
 
-static inline void dct_b(const int *input, int *output)
+static void dct_b(const int * restrict input, int * restrict output)
 {
     // floor(cos((2 * i + 1) * (j + 1) * PI / 16) * (1 << 23) + 0.5)
     static const int cos_mod[8][7] = {
@@ -97,7 +97,7 @@ static inline void dct_b(const int *input, int *output)
     }
 }
 
-static inline void mod_a(const int *input, int *output)
+static void mod_a(const int * restrict input, int * restrict output)
 {
     //  floor(0.5 / cos((2 * (     i) + 1) * PI / 64) * (1 << 23) + 0.5), i = 0 ..  8
     // -floor(0.5 / sin((2 * (15 - i) + 1) * PI / 64) * (1 << 23) + 0.5), i = 8 .. 16
@@ -115,7 +115,7 @@ static inline void mod_a(const int *input, int *output)
         output[i] = mul23(cos_mod[i], input[k] - input[8 + k]);
 }
 
-static inline void mod_b(int *input, int *output)
+static void mod_b(int * restrict input, int * restrict output)
 {
     // floor(0.5 / cos((2 * (    i) + 1) * PI / 32) * (1 << 23) + 0.5), i = 0 .. 4
     // floor(0.5 / sin((2 * (7 - i) + 1) * PI / 32) * (1 << 23) + 0.5), i = 4 .. 8
@@ -134,7 +134,7 @@ static inline void mod_b(int *input, int *output)
         output[i] = input[k] - input[8 + k];
 }
 
-static inline void mod_c(const int *input, int *output)
+static void mod_c(const int * restrict input, int * restrict output)
 {
     //  floor(0.125 / cos((2 * (     i) + 1) * PI / 128) * (1 << 23) + 0.5), i =  0 .. 16
     // -floor(0.125 / sin((2 * (31 - i) + 1) * PI / 128) * (1 << 23) + 0.5), i = 16 .. 32
@@ -156,13 +156,13 @@ static inline void mod_c(const int *input, int *output)
         output[i] = mul23(cos_mod[i], input[k] - input[16 + k]);
 }
 
-static inline void clp_v(int *input, int len)
+static void clp_v(int *input, int len)
 {
     for (int i = 0; i < len; i++)
         input[i] = clip23(input[i]);
 }
 
-void idct_perform32_fixed(int *input, int *output)
+void idct_perform32_fixed(int * restrict input, int * restrict output)
 {
     int mag = 0;
     for (int i = 0; i < 32; i++)
@@ -200,7 +200,7 @@ void idct_perform32_fixed(int *input, int *output)
         output[i] = clip23(output[i] << shift);
 }
 
-static inline void mod64_a(const int *input, int *output)
+static void mod64_a(const int * restrict input, int * restrict output)
 {
     //  floor(0.5 / cos((2 * (     i) + 1) * PI / 128) * (1 << 23) + 0.5), i =  0 .. 16
     // -floor(0.5 / sin((2 * (31 - i) + 1) * PI / 128) * (1 << 23) + 0.5), i = 16 .. 32
@@ -222,7 +222,7 @@ static inline void mod64_a(const int *input, int *output)
         output[i] = mul23(cos_mod[i], input[k] - input[16 + k]);
 }
 
-static inline void mod64_b(int *input, int *output)
+static void mod64_b(int * restrict input, int * restrict output)
 {
     // floor(0.5 / cos((2 * (     i) + 1) * PI / 64) * (1 << 23) + 0.5), i = 0 ..  8
     // floor(0.5 / sin((2 * (15 - i) + 1) * PI / 64) * (1 << 23) + 0.5), i = 8 .. 16
@@ -243,7 +243,7 @@ static inline void mod64_b(int *input, int *output)
         output[i] = input[k] - input[16 + k];
 }
 
-static inline void mod64_c(const int *input, int *output)
+static void mod64_c(const int * restrict input, int * restrict output)
 {
     //  floor(0.125 / SQRT2 / cos((2 * (     i) + 1) * PI / 256) * (1 << 23) + 0.5), i =  0 .. 32
     // -floor(0.125 / SQRT2 / sin((2 * (63 - i) + 1) * PI / 256) * (1 << 23) + 0.5), i = 32 .. 64
@@ -273,7 +273,7 @@ static inline void mod64_c(const int *input, int *output)
         output[i] = mul23(cos_mod[i], input[k] - input[32 + k]);
 }
 
-void idct_perform64_fixed(int *input, int *output)
+void idct_perform64_fixed(int * restrict input, int * restrict output)
 {
     int mag = 0;
     for (int i = 0; i < 32; i++)
