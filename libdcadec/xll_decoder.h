@@ -46,6 +46,8 @@ struct xll_chset {
     int     dmix_type;
     bool    hier_chset;
     int     *dmix_coeff;
+    int     *dmix_scale;
+    int     *dmix_scale_inv;
     bool    ch_mask_enabled;
     int     ch_mask;
 

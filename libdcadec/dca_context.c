@@ -21,7 +21,6 @@
 #include "exss_parser.h"
 #include "xll_decoder.h"
 #include "fixed_math.h"
-#include "dmix_tables.h"
 
 #define DCADEC_PACKET_CORE  0x01
 #define DCADEC_PACKET_EXSS  0x02
@@ -157,8 +156,10 @@ static int map_spkr_to_core_ch(struct core_decoder *core, int spkr)
     return -1;
 }
 
-static struct xll_chset *find_hier_dmix_chset(struct xll_decoder *xll, struct xll_chset *c)
+static struct xll_chset *find_hier_dmix_chset(struct xll_chset *c)
 {
+    struct xll_decoder *xll = c->decoder;
+
     c++;
     while (c != &xll->chset[xll->nchsets]) {
         if (!c->primary_chset
@@ -172,49 +173,36 @@ static struct xll_chset *find_hier_dmix_chset(struct xll_decoder *xll, struct xl
     return NULL;
 }
 
-static int conv_dmix_scale(int code)
+static void undo_down_mix(struct xll_chset *c, int **samples, int nchannels)
 {
-    unsigned int index = (code & 0xff) - 1;
-    if (index < dca_countof(dmix_table)) {
-        int sign = (code >> 8) - 1;
-        int coeff = dmix_table[index];
-        return (coeff ^ sign) - sign;
-    }
-    return 0;
-}
+    struct xll_decoder *xll = c->decoder;
 
-static int conv_dmix_scale_inv(int code)
-{
-    unsigned int index = (code & 0xff) - 41;
-    if (index < dca_countof(dmix_table_inv)) {
-        int sign = (code >> 8) - 1;
-        int coeff = dmix_table_inv[index];
-        return (coeff ^ sign) - sign;
+    // Pre-scale by next channel set in hierarchy
+    struct xll_chset *o = find_hier_dmix_chset(c);
+    if (o) {
+        int *coeff_ptr = c->dmix_coeff;
+        for (int i = 0; i < nchannels; i++) {
+            int scale_inv = o->dmix_scale_inv[i];
+            for (int j = 0; j < c->nchannels; j++) {
+                int coeff = mul16(*coeff_ptr, scale_inv);
+                *coeff_ptr++ = mul15(coeff, o->dmix_scale[nchannels + j]);
+            }
+        }
     }
-    return 0;
-}
 
-static int undo_down_mix(struct xll_decoder *xll,
-                         struct xll_chset *o,
-                         int **samples, int nchannels)
-{
-    int *coeff_ptr = o->dmix_coeff;
+    // Undo down mix of preceding channels
+    int *coeff_ptr = c->dmix_coeff;
     for (int i = 0; i < nchannels; i++) {
-        // Get |InvDmixScale|
-        int scale_inv = conv_dmix_scale_inv(*coeff_ptr++ | 0x100);
-        for (int j = 0; j < o->nchannels; j++) {
-            // Multiply by |InvDmixScale| to get UndoDmixScale
-            int coeff = mul16(conv_dmix_scale(*coeff_ptr++), scale_inv);
+        for (int j = 0; j < c->nchannels; j++) {
+            int coeff = *coeff_ptr++;
             if (coeff) {
-                int *src = o->msb_sample_buffer[j];
+                int *src = c->msb_sample_buffer[j];
                 int *dst = samples[i];
                 for (int k = 0; k < xll->nframesamples; k++)
                     dst[k] -= mul15(src[k], coeff);
             }
         }
     }
-
-    return 0;
 }
 
 static int validate_hd_ma_frame(struct dcadec_context *dca)
@@ -328,7 +316,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             // See if this channel set is downmixed and find the source
             // channel set. If downmixed, undo core pre-scaling before
             // combining with residual (residual is not scaled).
-            struct xll_chset *o = find_hier_dmix_chset(xll, c);
+            struct xll_chset *o = find_hier_dmix_chset(c);
 
             // Reduce core bit width and combine with residual
             for (int ch = 0; ch < c->nchannels; ch++) {
@@ -353,8 +341,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
                 int *src = core->output_samples[core_ch];
                 if (o) {
                     // Undo embedded core downmix pre-scaling
-                    int coeff = o->dmix_coeff[(nchannels + ch) * (o->nchannels + 1)];
-                    int scale_inv = conv_dmix_scale_inv(coeff);
+                    int scale_inv = o->dmix_scale_inv[nchannels + ch];
                     for (int n = 0; n < xll->nframesamples; n++)
                         dst[n] += clip23((mul16(src[n], scale_inv) + round) >> shift);
                 } else {
@@ -407,10 +394,9 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         if (c->replace_set_index)
             continue;
         nchannels += c->nchannels;
-        struct xll_chset *o = find_hier_dmix_chset(xll, c);
+        struct xll_chset *o = find_hier_dmix_chset(c);
         if (o)
-            if ((ret = undo_down_mix(xll, o, samples, nchannels)) < 0)
-                return ret;
+            undo_down_mix(o, samples, nchannels);
     }
 
     // Reorder sample buffer pointers

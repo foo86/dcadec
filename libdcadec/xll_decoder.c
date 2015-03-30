@@ -21,6 +21,7 @@
 #include "fixed_math.h"
 #include "xll_decoder.h"
 #include "exss_parser.h"
+#include "dmix_tables.h"
 
 #include "xll_tables.h"
 
@@ -36,7 +37,7 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
         n = chs->nchannels;
     } else {
         m = xll->nchannels;
-        n = chs->nchannels + 1;
+        n = chs->nchannels + 2; // Two extra columns for scales
     }
 
     // Reallocate downmix coefficients matrix
@@ -44,11 +45,54 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
     if ((ret = dca_realloc(xll->chset, &chs->dmix_coeff, m * n, sizeof(int))) < 0)
         return ret;
 
-    // Parse downmix coefficients
+    if (chs->primary_chset) {
+        chs->dmix_scale = NULL;
+        chs->dmix_scale_inv = NULL;
+    } else {
+        chs->dmix_scale = chs->dmix_coeff + m * chs->nchannels;
+        chs->dmix_scale_inv = chs->dmix_coeff + m * (chs->nchannels + 1);
+    }
+
     int *coeff_ptr = chs->dmix_coeff;
-    for (int i = 0; i < m; i++)
-        for (int j = 0; j < n; j++)
-            *coeff_ptr++ = bits_get(&xll->bits, 9);
+    for (int i = 0; i < m; i++) {
+        int scale_inv = 0;
+
+        // Downmix scale
+        // Only for non-primary channel sets
+        if (!chs->primary_chset) {
+            int code = bits_get(&xll->bits, 9);
+            int sign = (code >> 8) - 1; code &= 0xff;
+            if (code > 0) {
+                unsigned int index = code - 1;
+                enforce(index >= 40 && index < dca_countof(dmix_table), "Invalid downmix scale index");
+                int scale = dmix_table[index];
+                scale_inv = dmix_table_inv[index - 40];
+                chs->dmix_scale[i] = (scale ^ sign) - sign;
+                chs->dmix_scale_inv[i] = (scale_inv ^ sign) - sign;
+            } else {
+                chs->dmix_scale[i] = 0;
+                chs->dmix_scale_inv[i] = 0;
+            }
+        }
+
+        // Downmix coefficients
+        for (int j = 0; j < chs->nchannels; j++) {
+            int code = bits_get(&xll->bits, 9);
+            int sign = (code >> 8) - 1; code &= 0xff;
+            if (code > 0) {
+                unsigned int index = code - 1;
+                enforce(index < dca_countof(dmix_table), "Invalid downmix coefficient index");
+                int coeff = dmix_table[index];
+                if (!chs->primary_chset)
+                    // Multiply by |InvDmixScale| to get |UndoDmixScale|
+                    coeff = mul16(scale_inv, coeff);
+                // Convert sign
+                *coeff_ptr++ = (coeff ^ sign) - sign;
+            } else {
+                *coeff_ptr++ = 0;
+            }
+        }
+    }
 
     return 0;
 }
