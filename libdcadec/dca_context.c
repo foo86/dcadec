@@ -283,10 +283,22 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         if ((ret = core_filter(core, flags)) < 0)
             return ret;
         // Force lossy downmixed output if this is the first core frame since
-        // the last time history was cleared
+        // the last time history was cleared. Clear all band data and replace
+        // non-residual encoded channels with their lossy counterparts.
         if (dca->ncoreframes == 0 && xll->nchsets > 1) {
             for_each_chset(xll, c) {
                 xll_clear_band_data(c);
+                for (int ch = 0; ch < c->nchannels; ch++) {
+                    if (!(c->residual_encode & (1 << ch)))
+                        continue;
+                    int spkr = xll_map_ch_to_spkr(c, ch);
+                    if (spkr < 0)
+                        continue;
+                    int core_ch = map_spkr_to_core_ch(core, spkr);
+                    if (core_ch < 0)
+                        continue;
+                    c->residual_encode &= ~(1 << ch);
+                }
                 c->dmix_embedded = false;
             }
         }
