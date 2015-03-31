@@ -36,7 +36,7 @@ static inline int convert(double a)
         return 0x7fffff;
     if (a < -0x800000)
         return -0x800000;
-    return (int)floor(a + 0.5);
+    return ((a > 0.0) ? (int)(a + 0.5) : (int)(a - 0.5));
 }
 
 INTERPOLATE_LFE(lfe_float_fir)
