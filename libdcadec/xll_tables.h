@@ -43,3 +43,21 @@ static const uint8_t ch_nbits[16] = {
 static const uint8_t prim_dmix_nch[7] = {
     1, 2, 2, 3, 3, 4, 4
 };
+
+#define SCALE(x)    (INT64_C(x) << 10)
+
+static const int64_t band_coeff_table0[] = {
+    SCALE(868669), SCALE(-5931642), SCALE(-1228483)
+};
+
+static const int64_t band_coeff_table1[] = {
+    SCALE(  -20577), SCALE( 122631), SCALE( -393647), SCALE( 904476),
+    SCALE(-1696305), SCALE(2825313), SCALE(-4430736), SCALE(6791313)
+};
+
+static const int64_t band_coeff_table2[] = {
+    SCALE(  41153), SCALE( -245210), SCALE( 785564), SCALE(-1788164),
+    SCALE(3259333), SCALE(-5074941), SCALE(6928550), SCALE(-8204883)
+};
+
+#undef SCALE

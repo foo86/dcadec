@@ -173,7 +173,8 @@ static struct xll_chset *find_hier_dmix_chset(struct xll_chset *c)
     return NULL;
 }
 
-static void undo_down_mix(struct xll_chset *c, int **samples, int nchannels)
+static void undo_down_mix(struct xll_chset *c, int **samples0, int **samples1,
+                          int **deci_history, int nchannels)
 {
     struct xll_decoder *xll = c->decoder;
 
@@ -190,16 +191,39 @@ static void undo_down_mix(struct xll_chset *c, int **samples, int nchannels)
         }
     }
 
-    // Undo down mix of preceding channels
+    // Undo downmix of preceding channels in frequency band 0
     int *coeff_ptr = c->dmix_coeff;
     for (int i = 0; i < nchannels; i++) {
         for (int j = 0; j < c->nchannels; j++) {
             int coeff = *coeff_ptr++;
             if (coeff) {
-                int *src = c->msb_sample_buffer[j];
-                int *dst = samples[i];
+                int *src = c->msb_sample_buffer[0][j];
+                int *dst = samples0[i];
                 for (int k = 0; k < xll->nframesamples; k++)
                     dst[k] -= mul15(src[k], coeff);
+            }
+        }
+    }
+
+    // Undo downmix of preceding channels in frequency band 1
+    if (c->nfreqbands > 1 && c->band_dmix_embedded[1]) {
+        int *coeff_ptr = c->dmix_coeff;
+        for (int i = 0; i < nchannels; i++) {
+            for (int j = 0; j < c->nchannels; j++) {
+                int coeff = *coeff_ptr++;
+                if (coeff) {
+                    // Undo downmix of channel samples
+                    int *src = c->msb_sample_buffer[1][j];
+                    int *dst = samples1[i];
+                    for (int k = 0; k < xll->nframesamples; k++)
+                        dst[k] -= mul15(src[k], coeff);
+
+                    // Undo downmix of decimator history
+                    src = c->deci_history[j];
+                    dst = deci_history[i];
+                    for (int k = 1; k < XLL_DECI_HISTORY; k++)
+                        dst[k] -= mul15(src[k], coeff);
+                }
             }
         }
     }
@@ -244,6 +268,9 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
             return -DCADEC_ENOSUP;
 
         if (c->storage_bit_res != p->storage_bit_res)
+            return -DCADEC_ENOSUP;
+
+        if (c->nfreqbands != p->nfreqbands)
             return -DCADEC_ENOSUP;
 
         // Reject sampling frequency modifier
@@ -292,7 +319,9 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
     // non-residual encoded channels with their lossy counterparts.
     if (dca->core_residual_valid == false && xll->nchsets > 1) {
         for_each_chset(xll, c) {
-            xll_clear_band_data(c);
+            for (int band = 0; band < c->nfreqbands; band++)
+                xll_clear_band_data(c, band);
+            memset(c->deci_history, 0, sizeof(c->deci_history));
             for (int ch = 0; ch < c->nchannels; ch++) {
                 if (!(c->residual_encode & (1 << ch)))
                     continue;
@@ -324,14 +353,13 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         if ((ret = filter_residual_core_frame(dca)) < 0)
             return ret;
 
+    // Process frequency band 0 for all channel sets
     int nchannels = 0;
-
-    // Process channel sets
     for_each_chset(xll, c) {
         if (c->replace_set_index)
             continue;
 
-        xll_filter_band_data(c);
+        xll_filter_band_data(c, 0);
 
         // Check for residual encoded channel set
         if (c->residual_encode != (1 << c->nchannels) - 1) {
@@ -365,10 +393,10 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
                 int shift = 24 - c->pcm_bit_res;
                 // Account for LSB width
                 if (xll->scalable_lsbs)
-                    shift += xll_get_lsb_width(c, ch);
+                    shift += xll_get_lsb_width(c, 0, ch);
                 int round = shift > 0 ? 1 << (shift - 1) : 0;
 
-                int *dst = c->msb_sample_buffer[ch];
+                int *dst = c->msb_sample_buffer[0][ch];
                 int *src = core->output_samples[core_ch];
                 if (o) {
                     // Undo embedded core downmix pre-scaling
@@ -385,11 +413,59 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
 
         // Assemble MSB and LSB parts after combining with core
         if (xll->scalable_lsbs)
-            xll_assemble_msbs_lsbs(c);
+            xll_assemble_msbs_lsbs(c, 0);
 
         nchannels += c->nchannels;
     }
 
+    // Process frequency band 1 for all channel sets
+    if (xll->nfreqbands > 1) {
+        for_each_chset(xll, c) {
+            if (c->replace_set_index)
+                continue;
+            xll_filter_band_data(c, 1);
+            xll_assemble_msbs_lsbs(c, 1);
+        }
+    }
+
+    // Undo downmix
+    if (xll->nchsets > 1) {
+        // Channel vectors for downmix reversal
+        int *samples0[XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
+        int *samples1[XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
+        int *deci_history[XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
+        int nchannels = 0;
+
+        // Undo embedded hierarchial downmix
+        for_each_chset(xll, c) {
+            if (c->replace_set_index)
+                continue;
+            for (int ch = 0; ch < c->nchannels; ch++) {
+                samples0[nchannels] = c->msb_sample_buffer[0][ch];
+                samples1[nchannels] = c->msb_sample_buffer[1][ch];
+                deci_history[nchannels] = c->deci_history[ch];
+                nchannels++;
+            }
+            struct xll_chset *o = find_hier_dmix_chset(c);
+            if (o)
+                undo_down_mix(o, samples0, samples1, deci_history, nchannels);
+        }
+    }
+
+    // Assemble frequency bands 0 and 1 for all channel sets
+    if (xll->nfreqbands > 1) {
+        for_each_chset(xll, c) {
+            if (c->replace_set_index)
+                continue;
+            if ((ret = xll_assemble_freq_bands(c)) < 0)
+                return ret;
+        }
+        // Double sampling frequency
+        xll->nframesamples *= 2;
+        p->freq *= 2;
+    }
+
+    // Output speaker map and channel mask
     int *spkr_map[SPEAKER_COUNT] = { NULL };
     int ch_mask = 0;
 
@@ -401,10 +477,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             return -DCADEC_ENOSUP;
     }
 
-    int *samples[256];
-
-    // Build the output speaker map and channel vector for downmix reversal
-    nchannels = 0;
+    // Build the output speaker map
     for_each_chset(xll, c) {
         if (c->replace_set_index)
             continue;
@@ -413,21 +486,9 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             if (spkr < 0)
                 return -DCADEC_EINVAL;
             if (!spkr_map[spkr])
-                spkr_map[spkr] = c->msb_sample_buffer[ch];
-            samples[nchannels++] = c->msb_sample_buffer[ch];
+                spkr_map[spkr] = c->out_sample_buffer[ch];
         }
         ch_mask |= c->ch_mask;
-    }
-
-    // Undo embedded hierarchial downmix
-    nchannels = 0;
-    for_each_chset(xll, c) {
-        if (c->replace_set_index)
-            continue;
-        nchannels += c->nchannels;
-        struct xll_chset *o = find_hier_dmix_chset(c);
-        if (o)
-            undo_down_mix(o, samples, nchannels);
     }
 
     // Reorder sample buffer pointers

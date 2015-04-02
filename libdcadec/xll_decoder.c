@@ -125,6 +125,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
 
     // Original sampling frequency
     chs->freq = exss_sample_rates[bits_get(&xll->bits, 4)];
+    require(chs->freq <= 192000, "Too high sampling frequency");
 
     // Sampling frequency modifier
     chs->interpolate = bits_get(&xll->bits, 2);
@@ -226,6 +227,14 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
     else
         chs->nfreqbands = 1;
 
+    // Extra frequency bands are not supported
+    require(chs->nfreqbands <= XLL_MAX_BANDS, "Too many frequency bands");
+
+    // Clamp the sampling frequency to 96 kHz. The rest of the code will use
+    // the number of bands to determine maximum frequency.
+    if (chs->freq > 96000)
+        chs->freq = 96000;
+
     if (chs->storage_bit_res > 16)
         chs->nabits = 5;
     else if (chs->storage_bit_res > 8)
@@ -235,105 +244,148 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
     if ((xll->nchsets > 1 || chs->nfreqbands > 1) && chs->nabits < 5)
         chs->nabits++;
 
-    // Pairwise channel decorrelation for frequency band 0
-    chs->decor_enabled = bits_get1(&xll->bits);
-    if (chs->decor_enabled && chs->nchannels > 1) {
-        // Original channel order
-        for (i = 0; i < chs->nchannels; i++)
-            chs->orig_order[i] = bits_get(&xll->bits, ch_nbits[chs->nchannels - 1]);
-        // Pairwise channel coefficients
-        for (i = 0; i < chs->nchannels / 2; i++) {
-            if (bits_get1(&xll->bits))
-                chs->decor_coeff[i] = bits_get_signed_linear(&xll->bits, 7);
-            else
-                chs->decor_coeff[i] = 0;
+    for (int band = 0; band < chs->nfreqbands; band++) {
+        // Pairwise channel decorrelation
+        chs->decor_enabled[band] = bits_get1(&xll->bits);
+        if (chs->decor_enabled[band] && chs->nchannels > 1) {
+            // Original channel order
+            for (i = 0; i < chs->nchannels; i++)
+                chs->orig_order[band][i] = bits_get(&xll->bits, ch_nbits[chs->nchannels - 1]);
+            // Pairwise channel coefficients
+            for (i = 0; i < chs->nchannels / 2; i++) {
+                if (bits_get1(&xll->bits))
+                    chs->decor_coeff[band][i] = bits_get_signed_linear(&xll->bits, 7);
+                else
+                    chs->decor_coeff[band][i] = 0;
+            }
+        } else {
+            for (i = 0; i < chs->nchannels; i++)
+                chs->orig_order[band][i] = i;
+            for (i = 0; i < chs->nchannels / 2; i++)
+                chs->decor_coeff[band][i] = 0;
         }
-    } else {
-        for (i = 0; i < chs->nchannels; i++)
-            chs->orig_order[i] = i;
-        for (i = 0; i < chs->nchannels / 2; i++)
-            chs->decor_coeff[i] = 0;
-    }
 
-    // Adaptive predictor order for frequency band 0
-    chs->highest_pred_order = 0;
-    for (i = 0; i < chs->nchannels; i++) {
-        chs->adapt_pred_order[i] = bits_get(&xll->bits, 4);
-        if (chs->adapt_pred_order[i] > chs->highest_pred_order)
-            chs->highest_pred_order = chs->adapt_pred_order[i];
-    }
-    enforce(chs->highest_pred_order <= xll->nsegsamples,
-            "Invalid adaptive predicition order");
-
-    // Fixed predictor order for frequency band 0
-    for (i = 0; i < chs->nchannels; i++) {
-        if (chs->adapt_pred_order[i] == 0)
-            chs->fixed_pred_order[i] = bits_get(&xll->bits, 2);
-        else
-            chs->fixed_pred_order[i] = 0;
-    }
-
-    // Adaptive predictor quantized reflection coefficients for frequency band 0
-    for (i = 0; i < chs->nchannels; i++) {
-        for (j = 0; j < chs->adapt_pred_order[i]; j++) {
-            k = bits_get_signed_linear(&xll->bits, 8);
-            enforce(k > -128, "Invalid reflection coefficient index");
-            if (k < 0)
-                chs->adapt_refl_coeff[i][j] = -(int)refl_coeff_table[-k];
-            else
-                chs->adapt_refl_coeff[i][j] = (int)refl_coeff_table[k];
-        }
-    }
-
-    if (xll->scalable_lsbs) {
-        // Size of LSB section in any segment of frequency band 0
-        chs->lsb_section_size = bits_get(&xll->bits, xll->seg_size_nbits);
-
-        // Number of bits to represent the samples in LSB part of frequency band 0
-        int tmp = 0;
-        for (i = 0; i < chs->nchannels; i++)
-            tmp |= (chs->nscalablelsbs[i] = bits_get(&xll->bits, 4));
-        enforce(!tmp || chs->lsb_section_size,
-                "LSB section missing with non-zero LSB width");
-
-        // Number of bits discarded by authoring in frequency band 0
-        for (i = 0; i < chs->nchannels; i++)
-            chs->bit_width_adjust[i] = bits_get(&xll->bits, 4);
-    } else {
-        chs->lsb_section_size = 0;
+        // Adaptive predictor order
+        chs->highest_pred_order[band] = 0;
         for (i = 0; i < chs->nchannels; i++) {
-            chs->nscalablelsbs[i] = 0;
-            chs->bit_width_adjust[i] = 0;
+            chs->adapt_pred_order[band][i] = bits_get(&xll->bits, 4);
+            if (chs->adapt_pred_order[band][i] > chs->highest_pred_order[band])
+                chs->highest_pred_order[band] = chs->adapt_pred_order[band][i];
+        }
+        enforce(chs->highest_pred_order[band] <= xll->nsegsamples,
+                "Invalid adaptive predicition order");
+
+        // Fixed predictor order
+        for (i = 0; i < chs->nchannels; i++) {
+            if (chs->adapt_pred_order[band][i] == 0)
+                chs->fixed_pred_order[band][i] = bits_get(&xll->bits, 2);
+            else
+                chs->fixed_pred_order[band][i] = 0;
+        }
+
+        // Adaptive predictor quantized reflection coefficients
+        for (i = 0; i < chs->nchannels; i++) {
+            for (j = 0; j < chs->adapt_pred_order[band][i]; j++) {
+                k = bits_get_signed_linear(&xll->bits, 8);
+                enforce(k > -128, "Invalid reflection coefficient index");
+                if (k < 0)
+                    chs->adapt_refl_coeff[band][i][j] = -(int)refl_coeff_table[-k];
+                else
+                    chs->adapt_refl_coeff[band][i][j] =  (int)refl_coeff_table[ k];
+            }
+        }
+
+        // Downmix performed by encoder in extension frequency band
+        chs->band_dmix_embedded[band] = chs->dmix_embedded && (band == 0 || bits_get1(&xll->bits));
+
+        // MSB/LSB split flag in extension frequency band
+        if ((band == 0 && xll->scalable_lsbs) || (band != 0 && bits_get1(&xll->bits))) {
+            // Size of LSB section in any segment
+            chs->lsb_section_size[band] = bits_get(&xll->bits, xll->seg_size_nbits);
+
+            // Number of bits to represent the samples in LSB part
+            int tmp = 0;
+            for (i = 0; i < chs->nchannels; i++)
+                tmp |= (chs->nscalablelsbs[band][i] = bits_get(&xll->bits, 4));
+            enforce(!tmp || chs->lsb_section_size[band],
+                    "LSB section missing with non-zero LSB width");
+        } else {
+            chs->lsb_section_size[band] = 0;
+            for (i = 0; i < chs->nchannels; i++)
+                chs->nscalablelsbs[band][i] = 0;
+        }
+
+        // Scalable resolution flag in extension frequency band
+        if ((band == 0 && xll->scalable_lsbs) || (band != 0 && bits_get1(&xll->bits))) {
+            // Number of bits discarded by authoring
+            for (i = 0; i < chs->nchannels; i++)
+                chs->bit_width_adjust[band][i] = bits_get(&xll->bits, 4);
+        } else {
+            for (i = 0; i < chs->nchannels; i++)
+                chs->bit_width_adjust[band][i] = 0;
         }
     }
 
-    // Extra frequency band parameters
     // Reserved
     // Byte align
     // CRC16 of channel set sub-header
     return bits_seek(&xll->bits, header_pos + header_size * 8);
 }
 
-static int chs_alloc_band_data(struct xll_chset *chs)
+static int chs_alloc_msb_band_data(struct xll_chset *chs)
 {
     struct xll_decoder *xll = chs->decoder;
 
-    int ret = dca_realloc(xll->chset, &chs->sample_buffer, (xll->nframesamples * chs->nchannels) << xll->scalable_lsbs, sizeof(int));
+    // Reallocate MSB sample buffer
+    int ret = dca_realloc(xll->chset, &chs->sample_buffer1,
+                          (xll->nframesamples + XLL_DECI_HISTORY) *
+                          chs->nchannels * chs->nfreqbands, sizeof(int));
+    if (ret < 0)
+        return ret;
 
-    if (ret) {
-        memset(chs->msb_sample_buffer, 0, sizeof(chs->msb_sample_buffer));
-        memset(chs->lsb_sample_buffer, 0, sizeof(chs->lsb_sample_buffer));
-    }
-
-    if (ret > 0) {
+    int *ptr = chs->sample_buffer1 + XLL_DECI_HISTORY;
+    for (int band = 0; band < chs->nfreqbands; band++) {
         for (int i = 0; i < chs->nchannels; i++) {
-            chs->msb_sample_buffer[i] = chs->sample_buffer + i * xll->nframesamples;
-            if (xll->scalable_lsbs)
-                chs->lsb_sample_buffer[i] = chs->sample_buffer + (chs->nchannels + i) * xll->nframesamples;
+            chs->msb_sample_buffer[band][i] = ptr;
+            ptr += xll->nframesamples + XLL_DECI_HISTORY;
         }
     }
 
-    return ret;
+    return 0;
+}
+
+static int chs_alloc_lsb_band_data(struct xll_chset *chs)
+{
+    struct xll_decoder *xll = chs->decoder;
+
+    // Number of frequency bands that have MSB/LSB split
+    int nfreqbands = 0;
+    for (int band = 0; band < chs->nfreqbands; band++)
+        if (chs->lsb_section_size[band])
+            nfreqbands++;
+    if (!nfreqbands)
+        return 0;
+
+    // Reallocate LSB sample buffer
+    int ret = dca_realloc(xll->chset, &chs->sample_buffer2,
+                          xll->nframesamples * chs->nchannels * nfreqbands, sizeof(int));
+    if (ret < 0)
+        return ret;
+
+    int *ptr = chs->sample_buffer2;
+    for (int band = 0; band < chs->nfreqbands; band++) {
+        if (chs->lsb_section_size[band]) {
+            for (int i = 0; i < chs->nchannels; i++) {
+                chs->lsb_sample_buffer[band][i] = ptr;
+                ptr += xll->nframesamples;
+            }
+        } else {
+            for (int i = 0; i < chs->nchannels; i++)
+                chs->lsb_sample_buffer[band][i] = NULL;
+        }
+    }
+
+    return 0;
 }
 
 static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t band_data_nbytes)
@@ -343,10 +395,6 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
 
     // Calculate bit index where band data ends
     size_t band_data_end = xll->bits.index + band_data_nbytes * 8;
-
-    // Ignore all but the first band
-    if (band)
-        return bits_seek(&xll->bits, band_data_end);
 
     // Start unpacking MSB portion of the segment
     if (seg == 0 || bits_get1(&xll->bits) == false) {
@@ -389,9 +437,9 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
                     chs->bitalloc_part_a[i]++;
 
                 if (chs->seg_type == false)
-                    chs->nsamples_part_a[i] = chs->adapt_pred_order[i];
+                    chs->nsamples_part_a[i] = chs->adapt_pred_order[band][i];
                 else
-                    chs->nsamples_part_a[i] = chs->highest_pred_order;
+                    chs->nsamples_part_a[i] = chs->highest_pred_order[band];
             } else {
                 chs->bitalloc_part_a[i] = 0;
                 chs->nsamples_part_a[i] = 0;
@@ -412,7 +460,7 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
         int k = (chs->seg_type == false) ? i : 0;
 
         // Slice the segment into parts A and B
-        int *part_a = chs->msb_sample_buffer[i] + seg * xll->nsegsamples;
+        int *part_a = chs->msb_sample_buffer[band][i] + seg * xll->nsegsamples;
         int *part_b = part_a + chs->nsamples_part_a[k];
         int nsamples_part_b = xll->nsegsamples - chs->nsamples_part_a[k];
 
@@ -467,57 +515,67 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
         }
     }
 
+    // Unpack decimator history for frequency band 1
+    if (seg == 0 && band == 1) {
+        int nbits = bits_get(&xll->bits, 5) + 1;
+        for (i = 0; i < chs->nchannels; i++)
+            for (j = 1; j < XLL_DECI_HISTORY; j++)
+                chs->deci_history[i][j] = bits_get_signed(&xll->bits, nbits);
+    }
+
     // Start unpacking LSB portion of the segment
-    if (chs->lsb_section_size) {
-        enforce(chs->lsb_section_size <= band_data_nbytes,
+    if (chs->lsb_section_size[band]) {
+        enforce(chs->lsb_section_size[band] <= band_data_nbytes,
                 "LSB section size too big");
-        enforce(chs->lsb_section_size >= (xll->band_crc_present & 2),
+        enforce(chs->lsb_section_size[band] >= (xll->band_crc_present & 2),
                 "LSB section size too small");
 
         // Skip to the start of LSB portion
         size_t scalable_lsbs_start = band_data_end -
-            chs->lsb_section_size * 8 - (xll->band_crc_present & 2) * 8;
+            chs->lsb_section_size[band] * 8 - (xll->band_crc_present & 2) * 8;
         if ((ret = bits_seek(&xll->bits, scalable_lsbs_start)) < 0)
             return ret;
 
         // Unpack all LSB parts of residuals of this segment
         for (i = 0; i < chs->nchannels; i++)
-            if (chs->nscalablelsbs[i])
+            if (chs->nscalablelsbs[band][i])
                 bits_get_array(&xll->bits,
-                               chs->lsb_sample_buffer[i] +
+                               chs->lsb_sample_buffer[band][i] +
                                seg * xll->nsegsamples,
                                xll->nsegsamples,
-                               chs->nscalablelsbs[i]);
+                               chs->nscalablelsbs[band][i]);
     }
 
     // Skip to the end of band data
     return bits_seek(&xll->bits, band_data_end);
 }
 
-void xll_clear_band_data(struct xll_chset *chs)
+void xll_clear_band_data(struct xll_chset *chs, int band)
 {
     struct xll_decoder *xll = chs->decoder;
 
-    for (int i = 0; i < chs->nchannels; i++) {
-        memset(chs->msb_sample_buffer[i], 0, xll->nframesamples * sizeof(int));
-        if (xll->scalable_lsbs)
-            memset(chs->lsb_sample_buffer[i], 0, xll->nframesamples * sizeof(int));
-    }
+    for (int i = 0; i < chs->nchannels; i++)
+        memset(chs->msb_sample_buffer[band][i], 0, xll->nframesamples * sizeof(int));
+
+    if (chs->lsb_section_size[band])
+        for (int i = 0; i < chs->nchannels; i++)
+            memset(chs->lsb_sample_buffer[band][i], 0, xll->nframesamples * sizeof(int));
 }
 
-void xll_filter_band_data(struct xll_chset *chs)
+void xll_filter_band_data(struct xll_chset *chs, int band)
 {
     struct xll_decoder *xll = chs->decoder;
     int i, j, k;
 
     // Inverse fixed coefficient prediction
     for (i = 0; i < chs->nchannels; i++) {
-        if (chs->fixed_pred_order[i]) {
-            int *buf = chs->msb_sample_buffer[i];
+        int order = chs->fixed_pred_order[band][i];
+        if (order) {
+            int *buf = chs->msb_sample_buffer[band][i];
             int tmp[8] = { 0 };
             for (j = 0; j < xll->nframesamples; j++) {
                 tmp[0] = buf[j];
-                for (k = 0; k < chs->fixed_pred_order[i]; k++) {
+                for (k = 0; k < order; k++) {
                     tmp[k * 2 + 2] = tmp[k * 2 + 0] + tmp[k * 2 + 1];
                     tmp[k * 2 + 1] = tmp[k * 2 + 2];
                 }
@@ -528,12 +586,12 @@ void xll_filter_band_data(struct xll_chset *chs)
 
     // Inverse adaptive prediction
     for (i = 0; i < chs->nchannels; i++) {
-        int order = chs->adapt_pred_order[i];
+        int order = chs->adapt_pred_order[band][i];
         if (order) {
             int coeff[16] = { 0 };
             // Conversion from reflection coefficients to direct form coefficients
             for (j = 0; j < order; j++) {
-                int rc = chs->adapt_refl_coeff[i][j];
+                int rc = chs->adapt_refl_coeff[band][i][j];
                 for (k = 0; k < (j + 1) / 2; k++) {
                     int tmp1 = coeff[    k    ];
                     int tmp2 = coeff[j - k - 1];
@@ -542,7 +600,7 @@ void xll_filter_band_data(struct xll_chset *chs)
                 }
                 coeff[j] = rc;
             }
-            int *buf = chs->msb_sample_buffer[i];
+            int *buf = chs->msb_sample_buffer[band][i];
             for (j = 0; j < xll->nframesamples - order; j++) {
                 int64_t err = INT64_C(0);
                 for (k = 0; k < order; k++)
@@ -555,30 +613,36 @@ void xll_filter_band_data(struct xll_chset *chs)
     }
 
     // Inverse pairwise channel decorrellation
-    if (chs->decor_enabled) {
+    if (chs->decor_enabled[band]) {
         for (i = 0; i < chs->nchannels / 2; i++) {
-            if (chs->decor_coeff[i]) {
-                int *src = chs->msb_sample_buffer[i * 2 + 0];
-                int *dst = chs->msb_sample_buffer[i * 2 + 1];
+            int coeff = chs->decor_coeff[band][i];
+            if (coeff) {
+                int *src = chs->msb_sample_buffer[band][i * 2 + 0];
+                int *dst = chs->msb_sample_buffer[band][i * 2 + 1];
                 for (j = 0; j < xll->nframesamples; j++)
-                    dst[j] += mul3(src[j], chs->decor_coeff[i]);
+                    dst[j] += mul3(src[j], coeff);
             }
         }
 
         // Reorder channel pointers to the original order
         int *tmp[XLL_MAX_CHANNELS];
         for (i = 0; i < chs->nchannels; i++)
-            tmp[i] = chs->msb_sample_buffer[i];
+            tmp[i] = chs->msb_sample_buffer[band][i];
         for (i = 0; i < chs->nchannels; i++)
-            chs->msb_sample_buffer[chs->orig_order[i]] = tmp[i];
+            chs->msb_sample_buffer[band][chs->orig_order[band][i]] = tmp[i];
     }
+
+    // Map output channel pointers for frequency band 0
+    if (band == 0)
+        for (i = 0; i < chs->nchannels; i++)
+            chs->out_sample_buffer[i] = chs->msb_sample_buffer[0][i];
 }
 
-int xll_get_lsb_width(struct xll_chset *chs, int ch)
+int xll_get_lsb_width(struct xll_chset *chs, int band, int ch)
 {
     struct xll_decoder *xll = chs->decoder;
-    int adj = chs->bit_width_adjust[ch];
-    int shift = chs->nscalablelsbs[ch];
+    int adj = chs->bit_width_adjust[band][ch];
+    int shift = chs->nscalablelsbs[band][ch];
 
     if (xll->fixed_lsb_width)
         shift = xll->fixed_lsb_width;
@@ -591,16 +655,17 @@ int xll_get_lsb_width(struct xll_chset *chs, int ch)
     return shift;
 }
 
-void xll_assemble_msbs_lsbs(struct xll_chset *chs)
+void xll_assemble_msbs_lsbs(struct xll_chset *chs, int band)
 {
     struct xll_decoder *xll = chs->decoder;
+
     for (int ch = 0; ch < chs->nchannels; ch++) {
-        int shift = xll_get_lsb_width(chs, ch);
+        int shift = xll_get_lsb_width(chs, band, ch);
         if (shift) {
-            int *msb = chs->msb_sample_buffer[ch];
-            if (chs->nscalablelsbs[ch]) {
-                int *lsb = chs->lsb_sample_buffer[ch];
-                int adj = chs->bit_width_adjust[ch];
+            int *msb = chs->msb_sample_buffer[band][ch];
+            if (chs->nscalablelsbs[band][ch]) {
+                int *lsb = chs->lsb_sample_buffer[band][ch];
+                int adj = chs->bit_width_adjust[band][ch];
                 for (int n = 0; n < xll->nframesamples; n++)
                     msb[n] = (msb[n] << shift) + (lsb[n] << adj);
             } else {
@@ -609,6 +674,70 @@ void xll_assemble_msbs_lsbs(struct xll_chset *chs)
             }
         }
     }
+}
+
+static void filter0(int *dst, const int *src, int nsamples)
+{
+    for (int n = 0; n < nsamples; n++)
+        dst[n] -= src[n];
+}
+
+static void filter1(int *dst, const int *src, int nsamples, int64_t coeff)
+{
+    for (int n = 0; n < nsamples; n++)
+        dst[n] -= (src[n] * coeff + (INT64_C(1) << 31)) >> 32;
+}
+
+static void filter2(int *dst, const int *src, int nsamples, int64_t coeff)
+{
+    for (int n = 0; n < nsamples; n++)
+        dst[n] -= (((src[n] * coeff) >> 32) + 1) >> 1;
+}
+
+int xll_assemble_freq_bands(struct xll_chset *chs)
+{
+    struct xll_decoder *xll = chs->decoder;
+
+    // Reallocate frequency band assembly buffer
+    int ret;
+    if ((ret = dca_realloc(xll->chset, &chs->sample_buffer3,
+                           2 * xll->nframesamples * chs->nchannels, sizeof(int))) < 0)
+        return ret;
+
+    // Assemble frequency bands 0 and 1
+    int *ptr = chs->sample_buffer3;
+    for (int ch = 0; ch < chs->nchannels; ch++) {
+        // Remap output channel pointer to assembly buffer
+        chs->out_sample_buffer[ch] = ptr;
+
+        int *band0 = chs->msb_sample_buffer[0][ch];
+        int *band1 = chs->msb_sample_buffer[1][ch];
+
+        // Copy decimator history
+        for (int i = 1; i < XLL_DECI_HISTORY; i++)
+            band0[i - XLL_DECI_HISTORY] = chs->deci_history[ch][i];
+
+        // Filter
+        filter1(band0, band1, xll->nframesamples, band_coeff_table0[0]);
+        filter1(band1, band0, xll->nframesamples, band_coeff_table0[1]);
+        filter1(band0, band1, xll->nframesamples, band_coeff_table0[2]);
+        filter0(band1, band0, xll->nframesamples);
+
+        for (int i = 0; i < XLL_DECI_HISTORY; i++) {
+            filter2(band0, band1, xll->nframesamples, band_coeff_table1[i]);
+            filter2(band1, band0, xll->nframesamples, band_coeff_table2[i]);
+            filter2(band0, band1, xll->nframesamples, band_coeff_table1[i]);
+            band0--;
+        }
+
+        // Assemble
+        for (int i = 0; i < xll->nframesamples; i++) {
+            *ptr++ = band1[i + 0];
+            *ptr++ = band0[i + 1];
+        }
+    }
+
+    return 0;
 }
 
 int xll_map_ch_to_spkr(struct xll_chset *chs, int ch)
@@ -766,9 +895,12 @@ static int parse_navi_table(struct xll_decoder *xll)
 static int parse_band_data(struct xll_decoder *xll)
 {
     int ret;
-    for_each_chset(xll, chs)
-        if ((ret = chs_alloc_band_data(chs)) < 0)
+    for_each_chset(xll, chs) {
+        if ((ret = chs_alloc_msb_band_data(chs)) < 0)
             return ret;
+        if ((ret = chs_alloc_lsb_band_data(chs)) < 0)
+            return ret;
+    }
 
     size_t *navi_ptr = xll->navi;
     for (int band = 0; band < xll->nfreqbands; band++) {

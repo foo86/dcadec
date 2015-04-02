@@ -21,7 +21,11 @@
 
 #include "bitstream.h"
 
+#define XLL_MAX_CHSETS      16
 #define XLL_MAX_CHANNELS    8
+#define XLL_MAX_BANDS       2
+
+#define XLL_DECI_HISTORY    8
 
 #define for_each_chset(xll, chs) \
     for (struct xll_chset *(chs) = (xll)->chset; \
@@ -55,18 +59,20 @@ struct xll_chset {
     int     nfreqbands;
     int     nabits;
 
-    bool    decor_enabled;
-    int     orig_order[XLL_MAX_CHANNELS];
-    int     decor_coeff[XLL_MAX_CHANNELS / 2];
+    bool    decor_enabled[XLL_MAX_BANDS];
+    int     orig_order[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
+    int     decor_coeff[XLL_MAX_BANDS][XLL_MAX_CHANNELS / 2];
 
-    int     adapt_pred_order[XLL_MAX_CHANNELS];
-    int     highest_pred_order;
-    int     fixed_pred_order[XLL_MAX_CHANNELS];
-    int     adapt_refl_coeff[XLL_MAX_CHANNELS][16];
+    int     adapt_pred_order[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
+    int     highest_pred_order[XLL_MAX_BANDS];
+    int     fixed_pred_order[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
+    int     adapt_refl_coeff[XLL_MAX_BANDS][XLL_MAX_CHANNELS][16];
 
-    size_t  lsb_section_size;
-    int     nscalablelsbs[XLL_MAX_CHANNELS];
-    int     bit_width_adjust[XLL_MAX_CHANNELS];
+    bool    band_dmix_embedded[XLL_MAX_BANDS];
+
+    size_t  lsb_section_size[XLL_MAX_BANDS];
+    int     nscalablelsbs[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
+    int     bit_width_adjust[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
 
     bool    seg_type;
     bool    rice_code_flag[XLL_MAX_CHANNELS];
@@ -74,9 +80,16 @@ struct xll_chset {
     int     bitalloc_part_a[XLL_MAX_CHANNELS];
     int     bitalloc_part_b[XLL_MAX_CHANNELS];
     int     nsamples_part_a[XLL_MAX_CHANNELS];
-    int     *msb_sample_buffer[XLL_MAX_CHANNELS];
-    int     *lsb_sample_buffer[XLL_MAX_CHANNELS];
-    int     *sample_buffer;
+
+    int     deci_history[XLL_MAX_CHANNELS][XLL_DECI_HISTORY];
+
+    int     *msb_sample_buffer[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
+    int     *lsb_sample_buffer[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
+    int     *out_sample_buffer[XLL_MAX_CHANNELS];
+
+    int     *sample_buffer1;
+    int     *sample_buffer2;
+    int     *sample_buffer3;
 };
 
 struct xll_decoder {
@@ -108,10 +121,11 @@ struct xll_decoder {
     int         pbr_delay;
 };
 
-void xll_clear_band_data(struct xll_chset *chs);
-void xll_filter_band_data(struct xll_chset *chs);
-int xll_get_lsb_width(struct xll_chset *chs, int ch);
-void xll_assemble_msbs_lsbs(struct xll_chset *chs);
+void xll_clear_band_data(struct xll_chset *chs, int band);
+void xll_filter_band_data(struct xll_chset *chs, int band);
+int xll_get_lsb_width(struct xll_chset *chs, int band, int ch);
+void xll_assemble_msbs_lsbs(struct xll_chset *chs, int band);
+int xll_assemble_freq_bands(struct xll_chset *chs);
 int xll_map_ch_to_spkr(struct xll_chset *chs, int ch);
 int xll_parse(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset);
 void xll_clear(struct xll_decoder *xll);
