@@ -34,7 +34,7 @@ struct dcadec_context {
     struct exss_parser *exss;
     struct xll_decoder *xll;
 
-    unsigned int ncoreframes;
+    bool core_residual_valid;
 
     int nframesamples;
     int sample_rate;
@@ -120,7 +120,7 @@ static int filter_core_frame(struct dcadec_context *dca)
 {
     struct core_decoder *core = dca->core;
 
-    dca->ncoreframes = 0;
+    dca->core_residual_valid = false;
 
     // Filter core frame
     int ret;
@@ -268,6 +268,46 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
     return 0;
 }
 
+static int filter_residual_core_frame(struct dcadec_context *dca)
+{
+    struct core_decoder *core = dca->core;
+    struct xll_decoder *xll = dca->xll;
+    struct xll_chset *p = &xll->chset[0];
+    int ret, flags = DCADEC_FLAG_CORE_BIT_EXACT | DCADEC_FLAG_KEEP_DMIX_6CH;
+
+    // Double sampling frequency if needed
+    if (p->freq == 96000 && core->sample_rate == 48000)
+        flags |= DCADEC_FLAG_CORE_SYNTH_X96;
+
+    // Filter core frame
+    if ((ret = core_filter(core, flags)) < 0)
+        return ret;
+
+    // Force lossy downmixed output if this is the first core frame since
+    // the last time history was cleared. Clear all band data and replace
+    // non-residual encoded channels with their lossy counterparts.
+    if (dca->core_residual_valid == false && xll->nchsets > 1) {
+        for_each_chset(xll, c) {
+            xll_clear_band_data(c);
+            for (int ch = 0; ch < c->nchannels; ch++) {
+                if (!(c->residual_encode & (1 << ch)))
+                    continue;
+                int spkr = xll_map_ch_to_spkr(c, ch);
+                if (spkr < 0)
+                    continue;
+                int core_ch = map_spkr_to_core_ch(core, spkr);
+                if (core_ch < 0)
+                    continue;
+                c->residual_encode &= ~(1 << ch);
+            }
+            c->dmix_embedded = false;
+        }
+    }
+
+    dca->core_residual_valid = true;
+    return 0;
+}
+
 static int filter_hd_ma_frame(struct dcadec_context *dca)
 {
     struct core_decoder *core = dca->core;
@@ -276,34 +316,9 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     int ret;
 
     // Filter core frame if present
-    if (dca->packet & DCADEC_PACKET_CORE) {
-        int flags = DCADEC_FLAG_CORE_BIT_EXACT | DCADEC_FLAG_KEEP_DMIX_6CH;
-        if (p->freq == 96000 && core->sample_rate == 48000)
-            flags |= DCADEC_FLAG_CORE_SYNTH_X96;
-        if ((ret = core_filter(core, flags)) < 0)
+    if (dca->packet & DCADEC_PACKET_CORE)
+        if ((ret = filter_residual_core_frame(dca)) < 0)
             return ret;
-        // Force lossy downmixed output if this is the first core frame since
-        // the last time history was cleared. Clear all band data and replace
-        // non-residual encoded channels with their lossy counterparts.
-        if (dca->ncoreframes == 0 && xll->nchsets > 1) {
-            for_each_chset(xll, c) {
-                xll_clear_band_data(c);
-                for (int ch = 0; ch < c->nchannels; ch++) {
-                    if (!(c->residual_encode & (1 << ch)))
-                        continue;
-                    int spkr = xll_map_ch_to_spkr(c, ch);
-                    if (spkr < 0)
-                        continue;
-                    int core_ch = map_spkr_to_core_ch(core, spkr);
-                    if (core_ch < 0)
-                        continue;
-                    c->residual_encode &= ~(1 << ch);
-                }
-                c->dmix_embedded = false;
-            }
-        }
-        dca->ncoreframes++;
-    }
 
     int nchannels = 0;
 
@@ -634,7 +649,7 @@ DCADEC_API void dcadec_context_clear(struct dcadec_context *dca)
     if (dca) {
         core_clear(dca->core);
         xll_clear(dca->xll);
-        dca->ncoreframes = 0;
+        dca->core_residual_valid = false;
     }
 }
 
