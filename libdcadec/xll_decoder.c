@@ -412,20 +412,26 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
 
         // Slice the segment into parts A and B
         int *part_a = chs->msb_sample_buffer[i] + seg * xll->nsegsamples;
-        int *part_b = chs->msb_sample_buffer[i] + seg * xll->nsegsamples + chs->nsamples_part_a[k];
+        int *part_b = part_a + chs->nsamples_part_a[k];
         int nsamples_part_b = xll->nsegsamples - chs->nsamples_part_a[k];
 
         if (chs->rice_code_flag[k] == false) {
             // Linear codes
             // Unpack all residuals of part A of segment 0
-            bits_get_signed_linear_array(&xll->bits, part_a, chs->nsamples_part_a[k], chs->bitalloc_part_a[k]);
+            bits_get_signed_linear_array(&xll->bits, part_a,
+                                         chs->nsamples_part_a[k],
+                                         chs->bitalloc_part_a[k]);
 
             // Unpack all residuals of part B of segment 0 and others
-            bits_get_signed_linear_array(&xll->bits, part_b, nsamples_part_b, chs->bitalloc_part_b[k]);
+            bits_get_signed_linear_array(&xll->bits, part_b,
+                                         nsamples_part_b,
+                                         chs->bitalloc_part_b[k]);
         } else {
             // Rice codes
             // Unpack all residuals of part A of segment 0
-            bits_get_signed_rice_array(&xll->bits, part_a, chs->nsamples_part_a[k], chs->bitalloc_part_a[k]);
+            bits_get_signed_rice_array(&xll->bits, part_a,
+                                       chs->nsamples_part_a[k],
+                                       chs->bitalloc_part_a[k]);
 
             if (chs->bitalloc_hybrid_linear[k]) {
                 // Hybrid Rice codes
@@ -445,31 +451,42 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
                 // Unpack all residuals of part B of segment 0 and others
                 for (j = 0; j < nsamples_part_b; j++)
                     if (part_b[j] == -1)
-                        part_b[j] = bits_get_signed_linear(&xll->bits, chs->bitalloc_hybrid_linear[k]);
+                        part_b[j] = bits_get_signed_linear(&xll->bits,
+                                                           chs->bitalloc_hybrid_linear[k]);
                     else
-                        part_b[j] = bits_get_signed_rice(&xll->bits, chs->bitalloc_part_b[k]);
+                        part_b[j] = bits_get_signed_rice(&xll->bits,
+                                                         chs->bitalloc_part_b[k]);
             } else {
                 // Rice codes
                 // Unpack all residuals of part B of segment 0 and others
-                bits_get_signed_rice_array(&xll->bits, part_b, nsamples_part_b, chs->bitalloc_part_b[k]);
+                bits_get_signed_rice_array(&xll->bits, part_b,
+                                           nsamples_part_b,
+                                           chs->bitalloc_part_b[k]);
             }
         }
     }
 
     // Start unpacking LSB portion of the segment
     if (chs->lsb_section_size) {
-        enforce(chs->lsb_section_size <= band_data_nbytes, "LSB section size too big");
-        enforce(chs->lsb_section_size >= (xll->band_crc_present & 2), "LSB section size too small");
+        enforce(chs->lsb_section_size <= band_data_nbytes,
+                "LSB section size too big");
+        enforce(chs->lsb_section_size >= (xll->band_crc_present & 2),
+                "LSB section size too small");
 
         // Skip to the start of LSB portion
-        size_t scalable_lsbs_start = band_data_end - chs->lsb_section_size * 8 - (xll->band_crc_present & 2) * 8;
+        size_t scalable_lsbs_start = band_data_end -
+            chs->lsb_section_size * 8 - (xll->band_crc_present & 2) * 8;
         if ((ret = bits_seek(&xll->bits, scalable_lsbs_start)) < 0)
             return ret;
 
         // Unpack all LSB parts of residuals of this segment
         for (i = 0; i < chs->nchannels; i++)
             if (chs->nscalablelsbs[i])
-                bits_get_array(&xll->bits, chs->lsb_sample_buffer[i] + seg * xll->nsegsamples, xll->nsegsamples, chs->nscalablelsbs[i]);
+                bits_get_array(&xll->bits,
+                               chs->lsb_sample_buffer[i] +
+                               seg * xll->nsegsamples,
+                               xll->nsegsamples,
+                               chs->nscalablelsbs[i]);
     }
 
     // Skip to the end of band data
