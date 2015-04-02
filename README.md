@@ -13,9 +13,8 @@ Supported features:
 
 Features needing more work:
 
-* Support for sampling frequencies above 96 kHz
 * Support for downmixed output
-* Error recovery capabilities
+* Decoding of DTS Express streams
 
 Usage
 -----
