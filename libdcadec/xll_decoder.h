@@ -21,7 +21,7 @@
 
 #include "bitstream.h"
 
-#define XLL_MAX_CHANNELS    16
+#define XLL_MAX_CHANNELS    8
 
 #define for_each_chset(xll, chs) \
     for (struct xll_chset *(chs) = (xll)->chset; \

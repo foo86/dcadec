@@ -112,6 +112,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
 
     // Number of channels in the channel set
     chs->nchannels = bits_get(&xll->bits, 4) + 1;
+    require(chs->nchannels <= XLL_MAX_CHANNELS, "Too many channels");
 
     // Residual type
     chs->residual_encode = bits_get(&xll->bits, chs->nchannels);
