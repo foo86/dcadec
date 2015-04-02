@@ -231,7 +231,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         chs->nabits = 4;
     else
         chs->nabits = 3;
-    if (xll->nchsets > 1 && chs->nabits < 5)
+    if ((xll->nchsets > 1 || chs->nfreqbands > 1) && chs->nabits < 5)
         chs->nabits++;
 
     // Pairwise channel decorrelation for frequency band 0
