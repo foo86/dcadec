@@ -243,15 +243,15 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         // Pairwise channel coefficients
         for (i = 0; i < chs->nchannels / 2; i++) {
             if (bits_get1(&xll->bits))
-                chs->decor_coef[i] = bits_get_signed_linear(&xll->bits, 7);
+                chs->decor_coeff[i] = bits_get_signed_linear(&xll->bits, 7);
             else
-                chs->decor_coef[i] = 0;
+                chs->decor_coeff[i] = 0;
         }
     } else {
         for (i = 0; i < chs->nchannels; i++)
             chs->orig_order[i] = i;
         for (i = 0; i < chs->nchannels / 2; i++)
-            chs->decor_coef[i] = 0;
+            chs->decor_coeff[i] = 0;
     }
 
     // Adaptive predictor order for frequency band 0
@@ -278,9 +278,9 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
             k = bits_get_signed_linear(&xll->bits, 8);
             enforce(k > -128, "Invalid reflection coefficient index");
             if (k < 0)
-                chs->adapt_refl_coef[i][j] = -(int)refl_coef_table[-k];
+                chs->adapt_refl_coeff[i][j] = -(int)refl_coeff_table[-k];
             else
-                chs->adapt_refl_coef[i][j] = (int)refl_coef_table[k];
+                chs->adapt_refl_coeff[i][j] = (int)refl_coeff_table[k];
         }
     }
 
@@ -512,23 +512,23 @@ void xll_filter_band_data(struct xll_chset *chs)
     for (i = 0; i < chs->nchannels; i++) {
         int order = chs->adapt_pred_order[i];
         if (order) {
-            int coefs[16] = { 0 };
+            int coeff[16] = { 0 };
             // Conversion from reflection coefficients to direct form coefficients
             for (j = 0; j < order; j++) {
-                int rc = chs->adapt_refl_coef[i][j];
+                int rc = chs->adapt_refl_coeff[i][j];
                 for (k = 0; k < (j + 1) / 2; k++) {
-                    int tmp1 = coefs[    k    ];
-                    int tmp2 = coefs[j - k - 1];
-                    coefs[    k    ] = tmp1 + mul16(rc, tmp2);
-                    coefs[j - k - 1] = tmp2 + mul16(rc, tmp1);
+                    int tmp1 = coeff[    k    ];
+                    int tmp2 = coeff[j - k - 1];
+                    coeff[    k    ] = tmp1 + mul16(rc, tmp2);
+                    coeff[j - k - 1] = tmp2 + mul16(rc, tmp1);
                 }
-                coefs[j] = rc;
+                coeff[j] = rc;
             }
             int *buf = chs->msb_sample_buffer[i];
             for (j = 0; j < xll->nframesamples - order; j++) {
                 int64_t err = INT64_C(0);
                 for (k = 0; k < order; k++)
-                    err += (int64_t)buf[j + k] * coefs[order - k - 1];
+                    err += (int64_t)buf[j + k] * coeff[order - k - 1];
                 // Round and scale the prediction
                 // Calculate the original sample
                 buf[j + k] -= clip23(norm16(err));
@@ -539,11 +539,11 @@ void xll_filter_band_data(struct xll_chset *chs)
     // Inverse pairwise channel decorrellation
     if (chs->decor_enabled) {
         for (i = 0; i < chs->nchannels / 2; i++) {
-            if (chs->decor_coef[i]) {
+            if (chs->decor_coeff[i]) {
                 int *src = chs->msb_sample_buffer[i * 2 + 0];
                 int *dst = chs->msb_sample_buffer[i * 2 + 1];
                 for (j = 0; j < xll->nframesamples; j++)
-                    dst[j] += mul3(src[j], chs->decor_coef[i]);
+                    dst[j] += mul3(src[j], chs->decor_coeff[i]);
             }
         }
 

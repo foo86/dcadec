@@ -17,7 +17,7 @@
  */
 
 // Section 8.4.3: Look-up table of quantized reflection coefficients
-static const uint16_t refl_coef_table[128] = {
+static const uint16_t refl_coeff_table[128] = {
         0,  3070,  5110,  7140,  9156, 11154, 13132, 15085,
     17010, 18904, 20764, 22588, 24373, 26117, 27818, 29474,
     31085, 32648, 34164, 35631, 37049, 38418, 39738, 41008,

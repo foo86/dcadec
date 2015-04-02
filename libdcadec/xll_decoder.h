@@ -56,12 +56,12 @@ struct xll_chset {
 
     bool    decor_enabled;
     int     orig_order[XLL_MAX_CHANNELS];
-    int     decor_coef[XLL_MAX_CHANNELS / 2];
+    int     decor_coeff[XLL_MAX_CHANNELS / 2];
 
     int     adapt_pred_order[XLL_MAX_CHANNELS];
     int     highest_pred_order;
     int     fixed_pred_order[XLL_MAX_CHANNELS];
-    int     adapt_refl_coef[XLL_MAX_CHANNELS][16];
+    int     adapt_refl_coeff[XLL_MAX_CHANNELS][16];
 
     size_t  lsb_section_size;
     int     nscalablelsbs[XLL_MAX_CHANNELS];
