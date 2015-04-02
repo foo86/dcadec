@@ -22,7 +22,7 @@ Usage
 
 Help screen of the program is reproduced below.
 ```
-Usage: ./dcadec [-bcfhPqsx] <input.dts> [output.wav]
+Usage: ./dcadec [-bcfhlnPqsx] <input.dts> [output.wav]
 dcadec is a free DTS Coherent Acoustics decoder. Supported options:
 
 -b
@@ -40,6 +40,9 @@ dcadec is a free DTS Coherent Acoustics decoder. Supported options:
 
 -l
     Enable lenient decoding mode. Attempt to recover from errors.
+
+-n
+    No-act mode. Parse DTS bitstream without writing WAV file.
 
 -P
     Disable progress indicator.

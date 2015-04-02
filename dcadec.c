@@ -37,7 +37,7 @@
 static void print_help(char *name)
 {
     fprintf(stderr,
-"Usage: %s [-bcfhPqsx] <input.dts> [output.wav]\n"
+"Usage: %s [-bcfhlnPqsx] <input.dts> [output.wav]\n"
 "dcadec is a free DTS Coherent Acoustics decoder. Supported options:\n"
 "\n"
 "-b\n"
@@ -55,6 +55,9 @@ static void print_help(char *name)
 "\n"
 "-l\n"
 "    Enable lenient decoding mode. Attempt to recover from errors.\n"
+"\n"
+"-n\n"
+"    No-act mode. Parse DTS bitstream without writing WAV file.\n"
 "\n"
 "-P\n"
 "    Disable progress indicator.\n"
@@ -142,11 +145,12 @@ static void signal_handler(int sig)
 int main(int argc, char **argv)
 {
     int flags = DCADEC_FLAG_STRICT;
+    bool parse_only = false;
     bool no_progress = false;
     bool quiet = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "bcfhlPqsx")) != -1) {
+    while ((opt = getopt(argc, argv, "bcfhlnPqsx")) != -1) {
         switch (opt) {
         case 'b':
             flags |= DCADEC_FLAG_CORE_BIT_EXACT;
@@ -162,6 +166,9 @@ int main(int argc, char **argv)
             return 0;
         case 'l':
             flags &= ~DCADEC_FLAG_STRICT;
+            break;
+        case 'n':
+            parse_only = true;
             break;
         case 'P':
             no_progress = true;
@@ -228,19 +235,22 @@ int main(int argc, char **argv)
     if (!quiet)
         print_info(context);
 
-    if (optind + 1 >= argc) {
-        dcadec_context_destroy(context);
-        dcadec_stream_close(stream);
-        return 0;
-    }
+    struct dcadec_waveout *waveout = NULL;
+    if (!parse_only) {
+        if (optind + 1 >= argc) {
+            dcadec_context_destroy(context);
+            dcadec_stream_close(stream);
+            return 0;
+        }
 
-    fn = argv[optind + 1];
-    struct dcadec_waveout *waveout = dcadec_waveout_open(strcmp(fn, "-") ? fn : NULL);
-    if (!waveout) {
-        fprintf(stderr, "Couldn't open output file\n");
-        dcadec_context_destroy(context);
-        dcadec_stream_close(stream);
-        return 1;
+        fn = argv[optind + 1];
+        waveout = dcadec_waveout_open(strcmp(fn, "-") ? fn : NULL);
+        if (!waveout) {
+            fprintf(stderr, "Couldn't open output file\n");
+            dcadec_context_destroy(context);
+            dcadec_stream_close(stream);
+            return 1;
+        }
     }
 
     int last_progress = -1;
@@ -252,26 +262,35 @@ int main(int argc, char **argv)
 #endif
 
     if (!quiet) {
-        if (flags & DCADEC_FLAG_CORE_ONLY)
-            fprintf(stderr, "Decoding (core only)...\n");
-        else
-            fprintf(stderr, "Decoding...\n");
+        if (waveout) {
+            if (flags & DCADEC_FLAG_CORE_ONLY)
+                fprintf(stderr, "Decoding (core only)...\n");
+            else
+                fprintf(stderr, "Decoding...\n");
+        } else {
+            if (flags & DCADEC_FLAG_CORE_ONLY)
+                fprintf(stderr, "Parsing (core only)...\n");
+            else
+                fprintf(stderr, "Parsing...\n");
+        }
     }
 
     while (!interrupted) {
-        int **samples, nsamples, channel_mask, sample_rate, bits_per_sample;
-        if ((ret = dcadec_context_filter(context, &samples, &nsamples,
-                                         &channel_mask, &sample_rate,
-                                         &bits_per_sample, NULL)) < 0) {
-            fprintf(stderr, "Error filtering frame: %s\n", dcadec_strerror(ret));
-            break;
-        }
+        if (waveout) {
+            int **samples, nsamples, channel_mask, sample_rate, bits_per_sample;
+            if ((ret = dcadec_context_filter(context, &samples, &nsamples,
+                                             &channel_mask, &sample_rate,
+                                             &bits_per_sample, NULL)) < 0) {
+                fprintf(stderr, "Error filtering frame: %s\n", dcadec_strerror(ret));
+                break;
+            }
 
-        if ((ret = dcadec_waveout_write(waveout, samples, nsamples,
-                                        channel_mask, sample_rate,
-                                        bits_per_sample)) < 0) {
-            fprintf(stderr, "Error writing WAV file: %s\n", dcadec_strerror(ret));
-            break;
+            if ((ret = dcadec_waveout_write(waveout, samples, nsamples,
+                                            channel_mask, sample_rate,
+                                            bits_per_sample)) < 0) {
+                fprintf(stderr, "Error writing WAV file: %s\n", dcadec_strerror(ret));
+                break;
+            }
         }
 
         if ((ret = dcadec_stream_read(stream, &packet, &size)) < 0) {
