@@ -126,7 +126,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
     chs->freq = exss_sample_rates[bits_get(&xll->bits, 4)];
 
     // Sampling frequency modifier
-    bits_skip(&xll->bits, 2);
+    chs->interpolate = bits_get(&xll->bits, 2);
 
     // Which replacement set this channel set is member of
     chs->replace_set_index = bits_get(&xll->bits, 2);

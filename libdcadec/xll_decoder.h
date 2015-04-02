@@ -38,6 +38,7 @@ struct xll_chset {
     int     pcm_bit_res;
     int     storage_bit_res;
     int     freq;
+    int     interpolate;
     int     replace_set_index;
 
     bool    primary_chset;

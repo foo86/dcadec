@@ -246,6 +246,10 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
         if (c->storage_bit_res != p->storage_bit_res)
             return -DCADEC_ENOSUP;
 
+        // Reject sampling frequency modifier
+        if (c->interpolate)
+            return -DCADEC_ENOSUP;
+
         // Validate channel masks
         for (int ch = 0; ch < c->nchannels; ch++)
             if (xll_map_ch_to_spkr(c, ch) < 0)
