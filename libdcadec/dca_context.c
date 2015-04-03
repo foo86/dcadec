@@ -322,6 +322,8 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
             for (int band = 0; band < c->nfreqbands; band++)
                 xll_clear_band_data(c, band);
             memset(c->deci_history, 0, sizeof(c->deci_history));
+            memset(c->nscalablelsbs, 0, sizeof(c->nscalablelsbs));
+            memset(c->bit_width_adjust, 0, sizeof(c->bit_width_adjust));
             for (int ch = 0; ch < c->nchannels; ch++) {
                 if (!(c->residual_encode & (1 << ch)))
                     continue;
@@ -335,6 +337,8 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
             }
             c->dmix_embedded = false;
         }
+        xll->scalable_lsbs = false;
+        xll->fixed_lsb_width = 0;
     }
 
     dca->core_residual_valid = true;
