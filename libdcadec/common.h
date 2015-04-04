@@ -85,6 +85,13 @@
 
 #define dca_countof(x)  (sizeof(x) / sizeof((x)[0]))
 
+static inline uint32_t DCA_RAW32(const void *data)
+{
+    uint32_t res;
+    memcpy(&res, data, sizeof(res));
+    return res;
+}
+
 static inline int dca_realloc(void *parent, void *ptr, size_t nmemb, size_t size)
 {
     void **_ptr = ptr;

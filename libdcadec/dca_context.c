@@ -522,13 +522,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
 
     dca->packet = 0;
 
-    uint32_t sync;
-    sync  = data[0] << 24;
-    sync |= data[1] << 16;
-    sync |= data[2] <<  8;
-    sync |= data[3] <<  0;
-
-    if (sync == SYNC_WORD_CORE) {
+    if (DCA_RAW32(data) == DCA_32BE(SYNC_WORD_CORE)) {
         if (!dca->core)
             if (!(dca->core = ta_znew(dca, struct core_decoder)))
                 return -DCADEC_ENOMEM;
@@ -543,14 +537,10 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
         if (size - 4 > frame_size) {
             data += frame_size;
             size -= frame_size;
-            sync  = data[0] << 24;
-            sync |= data[1] << 16;
-            sync |= data[2] <<  8;
-            sync |= data[3] <<  0;
         }
     }
 
-    if (sync == SYNC_WORD_EXSS) {
+    if (DCA_RAW32(data) == DCA_32BE(SYNC_WORD_EXSS)) {
         if (!dca->exss)
             if (!(dca->exss = ta_znew(dca, struct exss_parser)))
                 return -DCADEC_ENOMEM;
