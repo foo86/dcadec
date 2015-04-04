@@ -106,7 +106,7 @@ static inline int dca_realloc(void *parent, void *ptr, size_t nmemb, size_t size
     return 0;
 }
 
-// WAVEFORMATEX speakers
+// WAVEFORMATEXTENSIBLE speakers
 enum WaveSpeaker {
     WAVESPKR_FL,  WAVESPKR_FR,  WAVESPKR_FC,  WAVESPKR_LFE,
     WAVESPKR_BL,  WAVESPKR_BR,  WAVESPKR_FLC, WAVESPKR_FRC,

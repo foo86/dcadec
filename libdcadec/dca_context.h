@@ -83,7 +83,7 @@
 /** Extract embedded 5.1 downmix (NOT YET IMPLEMENTED) */
 #define DCADEC_FLAG_KEEP_DMIX_6CH       0x40
 
-/** Output native DTS channel layout, not WAVEFORMATEX layout */
+/** Output native DTS channel layout, not WAVEFORMATEXTENSIBLE layout */
 #define DCADEC_FLAG_NATIVE_LAYOUT       0x80
 
 /** Don't conceal errors */
@@ -203,9 +203,9 @@ DCADEC_API void dcadec_context_free_exss_info(struct dcadec_exss_info *info);
  *                  Returned array is tightly packed, there are no gaps for
  *                  missing channels. Use channel_mask to determine total number
  *                  of channels and size of returned array. By default channels
- *                  are ordered according to WAVEFORMATEX specification, but if
- *                  DCADEC_FLAG_NATIVE_LAYOUT flag was set when creating decoder
- *                  context, returned channels are in native DTS order.
+ *                  are ordered according to WAVEFORMATEXTENSIBLE specification,
+ *                  but if DCADEC_FLAG_NATIVE_LAYOUT flag was set when creating
+ *                  decoder context, returned channels are in native DTS order.
  *
  * @param nsamples  Filled with number of PCM samples in each returned plane.
  *
