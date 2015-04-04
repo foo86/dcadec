@@ -19,6 +19,7 @@
 #include "common.h"
 #include "interpolator.h"
 #include "idct.h"
+#include "fixed_math.h"
 #include "fir_float.h"
 
 static const double lfe_iir_scale = 0.001985816114019982;
@@ -32,11 +33,7 @@ static const double lfe_iir[12] = {
 
 static inline int convert(double a)
 {
-    if (a > 0x7fffff)
-        return 0x7fffff;
-    if (a < -0x800000)
-        return -0x800000;
-    return (int)floor(a + 0.5);
+    return clip23(lrint(a));
 }
 
 INTERPOLATE_LFE(lfe_float_fir)
