@@ -682,16 +682,16 @@ static void filter0(int *dst, const int *src, int nsamples)
         dst[n] -= src[n];
 }
 
-static void filter1(int *dst, const int *src, int nsamples, int64_t coeff)
+static void filter1(int *dst, const int *src, int nsamples, int32_t coeff)
 {
     for (int n = 0; n < nsamples; n++)
-        dst[n] -= (src[n] * coeff + (INT64_C(1) << 31)) >> 32;
+        dst[n] -= mul22(src[n], coeff);
 }
 
-static void filter2(int *dst, const int *src, int nsamples, int64_t coeff)
+static void filter2(int *dst, const int *src, int nsamples, int32_t coeff)
 {
     for (int n = 0; n < nsamples; n++)
-        dst[n] -= (((src[n] * coeff) >> 32) + 1) >> 1;
+        dst[n] -= mul23(src[n], coeff);
 }
 
 int xll_assemble_freq_bands(struct xll_chset *chs)
