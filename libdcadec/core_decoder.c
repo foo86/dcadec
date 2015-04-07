@@ -974,7 +974,8 @@ int core_filter(struct core_decoder *core, int flags)
             // (47.6 - 48.0 kHz) components of interpolation image
             int history = core->output_history_lfe;
             int *samples = core->output_samples[SPEAKER_LFE1];
-            for (int n = 0; n < core->npcmsamples; n += 2) {
+            int nsamples = core->npcmsamples;
+            for (int n = 0; n < nsamples; n += 2) {
                 int64_t res1 = INT64_C(2097471) * samples[n] + INT64_C(6291137) * history;
                 int64_t res2 = INT64_C(6291137) * samples[n] + INT64_C(2097471) * history;
                 history = samples[n];
@@ -988,12 +989,14 @@ int core_filter(struct core_decoder *core, int flags)
     }
 
     if (!(flags & DCADEC_FLAG_KEEP_DMIX_6CH)) {
+        int nsamples = core->npcmsamples;
+
         // Undo embedded XCH downmix
         if (core->es_format && core->xch_present && core->audio_mode >= 8) {
             int *samples_ls = core->output_samples[SPEAKER_Ls];
             int *samples_rs = core->output_samples[SPEAKER_Rs];
             int *samples_cs = core->output_samples[SPEAKER_Cs];
-            for (int n = 0; n < core->npcmsamples; n++) {
+            for (int n = 0; n < nsamples; n++) {
                 int cs = mul23(samples_cs[n], 5931520);
                 samples_ls[n] = clip23(samples_ls[n] - cs);
                 samples_rs[n] = clip23(samples_rs[n] - cs);
@@ -1008,7 +1011,7 @@ int core_filter(struct core_decoder *core, int flags)
             for (int spkr = 0; spkr < SPEAKER_Cs; spkr++) {
                 if ((core->ch_mask & (1 << spkr))) {
                     int *samples = core->output_samples[spkr];
-                    for (int n = 0; n < core->npcmsamples; n++)
+                    for (int n = 0; n < nsamples; n++)
                         samples[n] = mul16(samples[n], scale_inv);
                 }
             }
@@ -1027,7 +1030,7 @@ int core_filter(struct core_decoder *core, int flags)
                         int coeff = mul16(conv_dmix_scale(*coeff_ptr++), scale_inv);
                         int *src = core->output_samples[spkr1];
                         int *dst = core->output_samples[spkr3];
-                        for (int n = 0; n < core->npcmsamples; n++)
+                        for (int n = 0; n < nsamples; n++)
                             dst[n] -= mul15(src[n], coeff);
                     }
                 }
@@ -1037,7 +1040,7 @@ int core_filter(struct core_decoder *core, int flags)
             for (int spkr = 0; spkr < SPEAKER_Cs; spkr++) {
                 if (core->ch_mask & (1 << spkr)) {
                     int *samples = core->output_samples[spkr];
-                    for (int n = 0; n < core->npcmsamples; n++)
+                    for (int n = 0; n < nsamples; n++)
                         samples[n] = clip23(samples[n]);
                 }
             }
@@ -1049,10 +1052,11 @@ int core_filter(struct core_decoder *core, int flags)
         int shift = 24 - core->source_pcm_res;
         if (shift > 0) {
             int round = 1 << (shift - 1);
+            int nsamples = core->npcmsamples;
             for (int spkr = 0; spkr < SPEAKER_COUNT; spkr++) {
                 if (core->ch_mask & (1 << spkr)) {
                     int *samples = core->output_samples[spkr];
-                    for (int n = 0; n < core->npcmsamples; n++)
+                    for (int n = 0; n < nsamples; n++)
                         samples[n] = (samples[n] + round) >> shift;
                 }
             }

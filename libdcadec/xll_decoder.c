@@ -565,6 +565,7 @@ void xll_clear_band_data(struct xll_chset *chs, int band)
 void xll_filter_band_data(struct xll_chset *chs, int band)
 {
     struct xll_decoder *xll = chs->decoder;
+    int nsamples = xll->nframesamples;
     int i, j, k;
 
     // Inverse fixed coefficient prediction
@@ -573,7 +574,7 @@ void xll_filter_band_data(struct xll_chset *chs, int band)
         if (order) {
             int *buf = chs->msb_sample_buffer[band][i];
             int tmp[8] = { 0 };
-            for (j = 0; j < xll->nframesamples; j++) {
+            for (j = 0; j < nsamples; j++) {
                 tmp[0] = buf[j];
                 for (k = 0; k < order; k++) {
                     tmp[k * 2 + 2] = tmp[k * 2 + 0] + tmp[k * 2 + 1];
@@ -601,7 +602,7 @@ void xll_filter_band_data(struct xll_chset *chs, int band)
                 coeff[j] = rc;
             }
             int *buf = chs->msb_sample_buffer[band][i];
-            for (j = 0; j < xll->nframesamples - order; j++) {
+            for (j = 0; j < nsamples - order; j++) {
                 int64_t err = INT64_C(0);
                 for (k = 0; k < order; k++)
                     err += (int64_t)buf[j + k] * coeff[order - k - 1];
@@ -619,7 +620,7 @@ void xll_filter_band_data(struct xll_chset *chs, int band)
             if (coeff) {
                 int *src = chs->msb_sample_buffer[band][i * 2 + 0];
                 int *dst = chs->msb_sample_buffer[band][i * 2 + 1];
-                for (j = 0; j < xll->nframesamples; j++)
+                for (j = 0; j < nsamples; j++)
                     dst[j] += mul3(src[j], coeff);
             }
         }
@@ -658,6 +659,7 @@ int xll_get_lsb_width(struct xll_chset *chs, int band, int ch)
 void xll_assemble_msbs_lsbs(struct xll_chset *chs, int band)
 {
     struct xll_decoder *xll = chs->decoder;
+    int nsamples = xll->nframesamples;
 
     for (int ch = 0; ch < chs->nchannels; ch++) {
         int shift = xll_get_lsb_width(chs, band, ch);
@@ -666,10 +668,10 @@ void xll_assemble_msbs_lsbs(struct xll_chset *chs, int band)
             if (chs->nscalablelsbs[band][ch]) {
                 int *lsb = chs->lsb_sample_buffer[band][ch];
                 int adj = chs->bit_width_adjust[band][ch];
-                for (int n = 0; n < xll->nframesamples; n++)
+                for (int n = 0; n < nsamples; n++)
                     msb[n] = (msb[n] << shift) + (lsb[n] << adj);
             } else {
-                for (int n = 0; n < xll->nframesamples; n++)
+                for (int n = 0; n < nsamples; n++)
                     msb[n] <<= shift;
             }
         }
@@ -697,11 +699,12 @@ static void filter2(int *dst, const int *src, int nsamples, int32_t coeff)
 int xll_assemble_freq_bands(struct xll_chset *chs)
 {
     struct xll_decoder *xll = chs->decoder;
+    int nsamples = xll->nframesamples;
 
     // Reallocate frequency band assembly buffer
     int ret;
     if ((ret = dca_realloc(xll->chset, &chs->sample_buffer3,
-                           2 * xll->nframesamples * chs->nchannels, sizeof(int))) < 0)
+                           2 * nsamples * chs->nchannels, sizeof(int))) < 0)
         return ret;
 
     // Assemble frequency bands 0 and 1
@@ -718,20 +721,20 @@ int xll_assemble_freq_bands(struct xll_chset *chs)
             band0[i - XLL_DECI_HISTORY] = chs->deci_history[ch][i];
 
         // Filter
-        filter1(band0, band1, xll->nframesamples, band_coeff_table0[0]);
-        filter1(band1, band0, xll->nframesamples, band_coeff_table0[1]);
-        filter1(band0, band1, xll->nframesamples, band_coeff_table0[2]);
-        filter0(band1, band0, xll->nframesamples);
+        filter1(band0, band1, nsamples, band_coeff_table0[0]);
+        filter1(band1, band0, nsamples, band_coeff_table0[1]);
+        filter1(band0, band1, nsamples, band_coeff_table0[2]);
+        filter0(band1, band0, nsamples);
 
         for (int i = 0; i < XLL_DECI_HISTORY; i++) {
-            filter2(band0, band1, xll->nframesamples, band_coeff_table1[i]);
-            filter2(band1, band0, xll->nframesamples, band_coeff_table2[i]);
-            filter2(band0, band1, xll->nframesamples, band_coeff_table1[i]);
+            filter2(band0, band1, nsamples, band_coeff_table1[i]);
+            filter2(band1, band0, nsamples, band_coeff_table2[i]);
+            filter2(band0, band1, nsamples, band_coeff_table1[i]);
             band0--;
         }
 
         // Assemble
-        for (int i = 0; i < xll->nframesamples; i++) {
+        for (int i = 0; i < nsamples; i++) {
             *ptr++ = band1[i + 0];
             *ptr++ = band0[i + 1];
         }

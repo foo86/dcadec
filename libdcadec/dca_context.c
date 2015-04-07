@@ -177,6 +177,7 @@ static void undo_down_mix(struct xll_chset *c, int **samples0, int **samples1,
                           int **deci_history, int nchannels)
 {
     struct xll_decoder *xll = c->decoder;
+    int nsamples = xll->nframesamples;
 
     // Pre-scale by next channel set in hierarchy
     struct xll_chset *o = find_hier_dmix_chset(c);
@@ -199,7 +200,7 @@ static void undo_down_mix(struct xll_chset *c, int **samples0, int **samples1,
             if (coeff) {
                 int *src = c->msb_sample_buffer[0][j];
                 int *dst = samples0[i];
-                for (int k = 0; k < xll->nframesamples; k++)
+                for (int k = 0; k < nsamples; k++)
                     dst[k] -= mul15(src[k], coeff);
             }
         }
@@ -215,7 +216,7 @@ static void undo_down_mix(struct xll_chset *c, int **samples0, int **samples1,
                     // Undo downmix of channel samples
                     int *src = c->msb_sample_buffer[1][j];
                     int *dst = samples1[i];
-                    for (int k = 0; k < xll->nframesamples; k++)
+                    for (int k = 0; k < nsamples; k++)
                         dst[k] -= mul15(src[k], coeff);
 
                     // Undo downmix of decimator history
@@ -376,6 +377,8 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             if (xll->nframesamples != core->npcmsamples)
                 return -DCADEC_EINVAL;
 
+            int nsamples = xll->nframesamples;
+
             // See if this channel set is downmixed and find the source
             // channel set. If downmixed, undo core pre-scaling before
             // combining with residual (residual is not scaled).
@@ -405,11 +408,11 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
                 if (o) {
                     // Undo embedded core downmix pre-scaling
                     int scale_inv = o->dmix_scale_inv[nchannels + ch];
-                    for (int n = 0; n < xll->nframesamples; n++)
+                    for (int n = 0; n < nsamples; n++)
                         dst[n] += clip23((mul16(src[n], scale_inv) + round) >> shift);
                 } else {
                     // No downmix scaling
-                    for (int n = 0; n < xll->nframesamples; n++)
+                    for (int n = 0; n < nsamples; n++)
                         dst[n] += (src[n] + round) >> shift;
                 }
             }
@@ -501,10 +504,12 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
 
     // Shift samples to account for storage bit width
     int shift = p->storage_bit_res - p->pcm_bit_res;
-    if (shift > 0)
+    if (shift > 0) {
+        int nsamples = xll->nframesamples;
         for (int ch = 0; ch < ret; ch++)
-            for (int n = 0; n < xll->nframesamples; n++)
+            for (int n = 0; n < nsamples; n++)
                 dca->samples[ch][n] <<= shift;
+    }
 
     dca->nframesamples = xll->nframesamples;
     dca->sample_rate = p->freq;
