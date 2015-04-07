@@ -282,17 +282,22 @@ int main(int argc, char **argv)
                                              &channel_mask, &sample_rate,
                                              &bits_per_sample, NULL)) < 0) {
                 fprintf(stderr, "Error filtering frame: %s\n", dcadec_strerror(ret));
-                break;
+                if (flags & DCADEC_FLAG_STRICT)
+                    break;
+                else
+                    goto next_packet;
             }
 
             if ((ret = dcadec_waveout_write(waveout, samples, nsamples,
                                             channel_mask, sample_rate,
                                             bits_per_sample)) < 0) {
                 fprintf(stderr, "Error writing WAV file: %s\n", dcadec_strerror(ret));
-                break;
+                if ((flags & DCADEC_FLAG_STRICT) || ret == -DCADEC_EIO)
+                    break;
             }
         }
 
+next_packet:
         if ((ret = dcadec_stream_read(stream, &packet, &size)) < 0) {
             fprintf(stderr, "Error reading packet: %s\n", dcadec_strerror(ret));
             break;
@@ -311,7 +316,10 @@ int main(int argc, char **argv)
 
         if ((ret = dcadec_context_parse(context, packet, size)) < 0) {
             fprintf(stderr, "Error parsing packet: %s\n", dcadec_strerror(ret));
-            break;
+            if (flags & DCADEC_FLAG_STRICT)
+                break;
+            else
+                goto next_packet;
         }
     }
 
