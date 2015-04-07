@@ -589,7 +589,7 @@ void xll_filter_band_data(struct xll_chset *chs, int band)
     for (i = 0; i < chs->nchannels; i++) {
         int order = chs->adapt_pred_order[band][i];
         if (order) {
-            int coeff[16] = { 0 };
+            int coeff[16];
             // Conversion from reflection coefficients to direct form coefficients
             for (j = 0; j < order; j++) {
                 int rc = chs->adapt_refl_coeff[band][i][j];
