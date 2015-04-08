@@ -250,17 +250,6 @@ static int parse_coding_header(struct core_decoder *core, enum header_type heade
             core->dmix_embedded = false;
         }
 
-        /*
-        printf("nchannels %d\n", core->nchannels);
-        printf("ch_mask %#x\n", core->ch_mask);
-        printf("dmix_coeffs_present %d\n", core->dmix_coeffs_present);
-        if (core->dmix_coeffs_present) {
-            printf("dmix_embedded %d\n", core->dmix_embedded);
-            printf("dmix_scale %d\n", core->dmix_scale);
-            for (ch = xch_base; ch < core->nchannels; ch++)
-                printf("dmix_mask[%d] %#x\n", ch, core->dmix_mask[ch]);
-        }
-        */
         break;
     }
 
@@ -1114,13 +1103,6 @@ static int parse_xxch_frame(struct core_decoder *core)
 
     // Core loudspeaker activity mask
     core->xxch_core_mask = bits_get(&core->bits, core->xxch_mask_nbits);
-
-    /*
-    printf("xxch_crc_present %d\n", core->xxch_crc_present);
-    printf("xxch_mask_nbits %d\n", core->xxch_mask_nbits);
-    printf("xxch_frame_size %d\n", xxch_frame_size);
-    printf("xxch_core_mask %#x\n", core->xxch_core_mask);
-    */
 
     // Reserved
     // Byte align
