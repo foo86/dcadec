@@ -94,7 +94,7 @@ struct core_decoder {
 
     bool    dmix_coeffs_present;
     bool    dmix_embedded;
-    int     dmix_scale;
+    int     dmix_scale_inv;
     int     dmix_mask[MAX_CHANNELS];
     int     dmix_coeff[64];
 

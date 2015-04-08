@@ -234,7 +234,15 @@ static int parse_coding_header(struct core_decoder *core, enum header_type heade
             core->dmix_embedded = bits_get1(&core->bits);
 
             // Downmix scale factor
-            core->dmix_scale = bits_get(&core->bits, 6);
+            int code = bits_get(&core->bits, 6);
+            if (code) {
+                unsigned int index = code * 4 - 44;
+                enforce(index < dca_countof(dmix_table_inv),
+                        "Invalid downmix scale index");
+                core->dmix_scale_inv = dmix_table_inv[index];
+            } else {
+                core->dmix_scale_inv = 0;
+            }
 
             // Downmix channel mapping mask
             for (ch = xch_base; ch < core->nchannels; ch++)
@@ -242,10 +250,22 @@ static int parse_coding_header(struct core_decoder *core, enum header_type heade
 
             // Downmix coefficients
             int *coeff_ptr = core->dmix_coeff;
-            for (ch = xch_base; ch < core->nchannels; ch++)
-                for (n = 0; n < core->xxch_mask_nbits; n++)
-                    if (core->dmix_mask[ch] & (1 << n))
-                        *coeff_ptr++ = bits_get(&core->bits, 7);
+            for (ch = xch_base; ch < core->nchannels; ch++) {
+                for (n = 0; n < core->xxch_mask_nbits; n++) {
+                    if (core->dmix_mask[ch] & (1 << n)) {
+                        int code = bits_get(&core->bits, 7);
+                        int sign = (code >> 6) - 1; code &= 63;
+                        if (code) {
+                            unsigned int index = code * 4 - 4;
+                            enforce(index < dca_countof(dmix_table),
+                                    "Invalid downmix coefficient index");
+                            *coeff_ptr++ = (dmix_table[index] ^ sign) - sign;
+                        } else {
+                            *coeff_ptr++ = 0;
+                        }
+                    }
+                }
+            }
         } else {
             core->dmix_embedded = false;
         }
@@ -830,25 +850,6 @@ static int map_spkr_to_core_spkr(struct core_decoder *core, int spkr)
     return -1;
 }
 
-static int conv_dmix_scale(int code)
-{
-    unsigned int index = (code & 63) * 4 - 4;
-    if (index < dca_countof(dmix_table)) {
-        int sign = (code >> 6) - 1;
-        int coeff = dmix_table[index];
-        return (coeff ^ sign) - sign;
-    }
-    return 0;
-}
-
-static int conv_dmix_scale_inv(int code)
-{
-    unsigned int index = code * 4 - 44;
-    if (index < dca_countof(dmix_table_inv))
-        return dmix_table_inv[index];
-    return 0;
-}
-
 int core_filter(struct core_decoder *core, int flags)
 {
     struct x96_decoder *x96 = NULL;
@@ -994,14 +995,15 @@ int core_filter(struct core_decoder *core, int flags)
 
         // Undo embedded XXCH downmix
         if (core->dmix_embedded) {
-            int scale_inv = conv_dmix_scale_inv(core->dmix_scale);
-
             // Undo embedded core downmix pre-scaling
-            for (int spkr = 0; spkr < SPEAKER_Cs; spkr++) {
-                if ((core->ch_mask & (1 << spkr))) {
-                    int *samples = core->output_samples[spkr];
-                    for (int n = 0; n < nsamples; n++)
-                        samples[n] = mul16(samples[n], scale_inv);
+            int scale_inv = core->dmix_scale_inv;
+            if (scale_inv != (1 << 16)) {
+                for (int spkr = 0; spkr < SPEAKER_Cs; spkr++) {
+                    if ((core->ch_mask & (1 << spkr))) {
+                        int *samples = core->output_samples[spkr];
+                        for (int n = 0; n < nsamples; n++)
+                            samples[n] = mul16(samples[n], scale_inv);
+                    }
                 }
             }
 
@@ -1016,11 +1018,13 @@ int core_filter(struct core_decoder *core, int flags)
                         int spkr3 = map_spkr_to_core_spkr(core, spkr2);
                         if (spkr3 < 0)
                             return -DCADEC_EINVAL;
-                        int coeff = mul16(conv_dmix_scale(*coeff_ptr++), scale_inv);
-                        int *src = core->output_samples[spkr1];
-                        int *dst = core->output_samples[spkr3];
-                        for (int n = 0; n < nsamples; n++)
-                            dst[n] -= mul15(src[n], coeff);
+                        int coeff = mul16(*coeff_ptr++, scale_inv);
+                        if (coeff) {
+                            int *src = core->output_samples[spkr1];
+                            int *dst = core->output_samples[spkr3];
+                            for (int n = 0; n < nsamples; n++)
+                                dst[n] -= mul15(src[n], coeff);
+                        }
                     }
                 }
             }
