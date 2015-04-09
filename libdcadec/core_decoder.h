@@ -122,6 +122,10 @@ struct core_decoder {
 
     int     *lfe_samples;
 
+    bool    prim_dmix_embedded;
+    int     prim_dmix_type;
+    int     prim_dmix_coeff[4 * 6];
+
     bool    xch_present;
 
     bool    xxch_present;

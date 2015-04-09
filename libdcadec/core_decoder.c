@@ -1796,27 +1796,83 @@ static void revert_to_base_chset(struct core_decoder *core)
     core->dmix_coeffs_present = core->dmix_embedded = false;
 }
 
+static int parse_aux_data(struct core_decoder *core)
+{
+    // Auxiliary data byte count (can't be trusted)
+    bits_skip(&core->bits, 6);
+
+    // 4-byte align
+    size_t aux_pos = bits_align4(&core->bits);
+
+    // Auxiliary data sync word
+    uint32_t sync = bits_get(&core->bits, 32);
+    enforce(sync == SYNC_WORD_REV1AUX, "Invalid auxiliary data sync word");
+
+    // Auxiliary decode time stamp flag
+    if (bits_get1(&core->bits)) {
+        bits_skip(&core->bits,  3); // 4-bit align
+        bits_skip(&core->bits,  8); // MSB
+        bits_skip(&core->bits,  4); // Marker
+        bits_skip(&core->bits, 28); // LSB
+        bits_skip(&core->bits,  4); // Marker
+    }
+
+    // Auxiliary dynamic downmix flag
+    core->prim_dmix_embedded = bits_get1(&core->bits);
+
+    if (core->prim_dmix_embedded) {
+        // Auxiliary primary channel downmix type
+        core->prim_dmix_type = bits_get(&core->bits, 3);
+        enforce(core->prim_dmix_type < DMIX_TYPE_COUNT,
+                "Invalid primary channel set downmix type");
+
+        // Size of downmix coefficients matrix
+        int m = dmix_primary_nch[core->prim_dmix_type];
+        int n = audio_mode_nch[core->audio_mode] + !!core->lfe_present;
+
+        // Dynamic downmix code coefficients
+        int *coeff_ptr = core->prim_dmix_coeff;
+        for (int i = 0; i < m * n; i++) {
+            int code = bits_get(&core->bits, 9);
+            int sign = (code >> 8) - 1; code &= 0xff;
+            if (code) {
+                unsigned int index = code - 1;
+                enforce(index < dca_countof(dmix_table),
+                        "Invalid downmix coefficient index");
+                *coeff_ptr++ = (dmix_table[index] ^ sign) - sign;
+            } else {
+                *coeff_ptr++ = 0;
+            }
+        }
+    }
+
+    // Byte align
+    bits_align1(&core->bits);
+
+    // CRC16 of auxiliary data
+    bits_skip(&core->bits, 16);
+
+    // Check CRC
+    return bits_check_crc(&core->bits, aux_pos + 32, core->bits.index);
+}
+
 static int parse_optional_info(struct core_decoder *core, int flags)
 {
     int ret;
-
-    // Only when extensions decoding is requested
-    if (!core->ext_audio_present || (flags & DCADEC_FLAG_CORE_ONLY))
-        return 0;
 
     // Time code stamp
     if (core->ts_present)
         bits_skip(&core->bits, 32);
 
+    // Auxiliary data
     if (core->aux_present) {
-        // Auxiliary data byte count
-        size_t aux_size = bits_get(&core->bits, 6);
-
-        // Auxiliary data sync word aligned on 4-byte boundary
-        bits_align4(&core->bits);
-
-        // Auxiliary data bytes
-        bits_skip(&core->bits, aux_size * 8);
+        if ((ret = parse_aux_data(core)) < 0) {
+            if (flags & DCADEC_FLAG_STRICT)
+                return ret;
+            core->prim_dmix_embedded = false;
+        }
+    } else {
+        core->prim_dmix_embedded = false;
     }
 
     // Optional CRC check bytes
@@ -1826,7 +1882,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
     }
 
     // Core extensions
-    if (core->ext_audio_present) {
+    if (core->ext_audio_present && !(flags & DCADEC_FLAG_CORE_ONLY)) {
         size_t buf_size = (core->bits.total + 31) / 32;
         size_t sync_pos = (core->bits.index + 31) / 32;
         size_t last_pos = core->frame_size / 4;
