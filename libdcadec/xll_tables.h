@@ -40,10 +40,6 @@ static const uint8_t ch_nbits[16] = {
     0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4
 };
 
-static const uint8_t prim_dmix_nch[7] = {
-    1, 2, 2, 3, 3, 4, 4
-};
-
 static const int32_t band_coeff_table0[] = {
     868669, -5931642, -1228483
 };

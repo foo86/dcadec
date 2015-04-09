@@ -222,4 +222,17 @@ enum ExtensionMask {
     EXSS_RSV2   = 0x800
 };
 
+// Table 8-8: Downmix type
+enum DownMixType {
+    DMIX_TYPE_1_0,
+    DMIX_TYPE_LoRo,
+    DMIX_TYPE_LtRt,
+    DMIX_TYPE_3_0,
+    DMIX_TYPE_2_1,
+    DMIX_TYPE_2_2,
+    DMIX_TYPE_3_1,
+
+    DMIX_TYPE_COUNT
+};
+
 #endif

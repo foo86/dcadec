@@ -21,5 +21,6 @@
 
 extern const uint16_t dmix_table[241];
 extern const uint32_t dmix_table_inv[201];
+extern const uint8_t dmix_primary_nch[7];
 
 #endif

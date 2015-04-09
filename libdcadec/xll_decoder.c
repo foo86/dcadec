@@ -33,7 +33,7 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
     int m, n;
 
     if (chs->primary_chset) {
-        m = prim_dmix_nch[chs->dmix_type];
+        m = dmix_primary_nch[chs->dmix_type];
         n = chs->nchannels;
     } else {
         m = xll->nchannels;
@@ -148,11 +148,10 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         chs->dmix_embedded = chs->dmix_coeffs_present && bits_get1(&xll->bits);
 
         // Downmix type
-        // 0 - 1/0, 1 - Lo/Ro, 2 - Lt/Rt, 3 - 3/0,
-        // 4 - 2/1, 5 - 2/2, 6 - 3/1
         if (chs->dmix_coeffs_present && chs->primary_chset) {
             chs->dmix_type = bits_get(&xll->bits, 3);
-            enforce(chs->dmix_type < 7, "Invalid primary channel set downmix type");
+            enforce(chs->dmix_type < DMIX_TYPE_COUNT,
+                    "Invalid primary channel set downmix type");
         }
 
         // Whether the channel set is part of a hierarchy
