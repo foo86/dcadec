@@ -152,14 +152,16 @@ int bits_seek(struct bitstream *bits, size_t n)
     return 0;
 }
 
-void bits_align1(struct bitstream *bits)
+size_t bits_align1(struct bitstream *bits)
 {
     bits->index = (bits->index + 7) & ~7;
+    return bits->index;
 }
 
-void bits_align4(struct bitstream *bits)
+size_t bits_align4(struct bitstream *bits)
 {
     bits->index = (bits->index + 31) & ~31;
+    return bits->index;
 }
 
 static uint16_t crc16(const uint8_t *data, size_t size)

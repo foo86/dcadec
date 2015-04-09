@@ -43,8 +43,8 @@ void bits_skip(struct bitstream *bits, int n);
 void bits_skip1(struct bitstream *bits);
 int bits_seek(struct bitstream *bits, size_t n);
 void bits_seek1(struct bitstream *bits);
-void bits_align1(struct bitstream *bits);
-void bits_align4(struct bitstream *bits);
+size_t bits_align1(struct bitstream *bits);
+size_t bits_align4(struct bitstream *bits);
 int bits_check_crc(struct bitstream *bits, size_t p1, size_t p2);
 
 static inline void bits_get_array(struct bitstream *bits,
