@@ -10,10 +10,10 @@ Supported features:
 * Decoding of High-Resolution streams with up to 7.1 channels and extended bitrate
 * Decoding of 96/24 core streams
 * Lossless decoding of Master Audio streams with up to 7.1 channels
+* Downmixing to stereo and 5.1 using embedded coefficients
 
-Features needing more work:
+Features not implemented:
 
-* Support for downmixed output
 * Decoding of DTS Express streams
 
 Usage
