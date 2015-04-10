@@ -37,8 +37,14 @@
 static void print_help(char *name)
 {
     fprintf(stderr,
-"Usage: %s [-bcfhlnPqsx] <input.dts> [output.wav]\n"
+"Usage: %s [-26bcfhlnPqsx] <input.dts> [output.wav]\n"
 "dcadec is a free DTS Coherent Acoustics decoder. Supported options:\n"
+"\n"
+"-2\n"
+"    Extract embedded 2.0 downmix.\n"
+"\n"
+"-6\n"
+"    Extract embedded 5.1 downmix.\n"
 "\n"
 "-b\n"
 "    Force fixed point DTS core interpolation. Developer option, degrades sound\n"
@@ -150,8 +156,14 @@ int main(int argc, char **argv)
     bool quiet = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "bcfhlnPqsx")) != -1) {
+    while ((opt = getopt(argc, argv, "26bcfhlnPqsx")) != -1) {
         switch (opt) {
+        case '2':
+            flags |= DCADEC_FLAG_KEEP_DMIX_2CH;
+            break;
+        case '6':
+            flags |= DCADEC_FLAG_KEEP_DMIX_6CH;
+            break;
         case 'b':
             flags |= DCADEC_FLAG_CORE_BIT_EXACT;
             break;

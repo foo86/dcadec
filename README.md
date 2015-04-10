@@ -24,6 +24,12 @@ Help screen of the program is reproduced below.
 Usage: ./dcadec [-bcfhlnPqsx] <input.dts> [output.wav]
 dcadec is a free DTS Coherent Acoustics decoder. Supported options:
 
+-2
+    Extract embedded 2.0 downmix.
+
+-6
+    Extract embedded 5.1 downmix.
+
 -b
     Force fixed point DTS core interpolation. Developer option, degrades sound
     quality.
