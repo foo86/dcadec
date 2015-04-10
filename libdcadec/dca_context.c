@@ -160,15 +160,10 @@ static struct xll_chset *find_hier_dmix_chset(struct xll_chset *c)
 {
     struct xll_decoder *xll = c->decoder;
 
-    c++;
-    while (c != &xll->chset[xll->nchsets]) {
-        if (!c->primary_chset
-            && c->dmix_embedded
-            && c->hier_chset
-            && c->ch_mask_enabled)
+    while (++c < &xll->chset[xll->nchsets])
+        if (!c->primary_chset && c->dmix_embedded && c->hier_chset)
             return c;
-        c++;
-    }
+
     return NULL;
 }
 
@@ -231,8 +226,10 @@ static void undo_down_mix(struct xll_chset *c, int **samples0, int **samples1,
 
 static int validate_hd_ma_frame(struct dcadec_context *dca)
 {
+    struct xll_decoder *xll = dca->xll;
+    struct xll_chset *p = &xll->chset[0];
+
     // Validate the first (primary) channel set
-    struct xll_chset *p = &dca->xll->chset[0];
     if (!p->primary_chset)
         return -DCADEC_ENOSUP;
 
@@ -247,7 +244,7 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
 
     // Validate channel sets
     bool residual = false;
-    for_each_chset(dca->xll, c) {
+    for_each_chset(xll, c) {
         // Reject multiple primary channel sets
         if (c->primary_chset && c != p)
             return -DCADEC_ENOSUP;
@@ -282,14 +279,16 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
         residual |= c->residual_encode != (1 << c->nchannels) - 1;
     }
 
+    // Verify that core is compatible if there are residual encoded channel sets
     if (residual) {
+        struct core_decoder *core = dca->core;
         if (!(dca->packet & DCADEC_PACKET_CORE))
             return -DCADEC_EINVAL;
-        if (p->freq != dca->core->sample_rate &&
-            p->freq != dca->core->sample_rate * 2)
+        if (p->freq != core->sample_rate &&
+            p->freq != core->sample_rate * 2)
             return -DCADEC_ENOSUP;
-        if (dca->xll->nframesamples != dca->core->npcmblocks * NUM_PCMBLOCK_SAMPLES &&
-            dca->xll->nframesamples != dca->core->npcmblocks * NUM_PCMBLOCK_SAMPLES * 2)
+        if (xll->nframesamples != core->npcmblocks * NUM_PCMBLOCK_SAMPLES &&
+            xll->nframesamples != core->npcmblocks * NUM_PCMBLOCK_SAMPLES * 2)
             return -DCADEC_EINVAL;
     }
 
@@ -300,14 +299,14 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
 {
     struct core_decoder *core = dca->core;
     struct xll_decoder *xll = dca->xll;
-    struct xll_chset *p = &xll->chset[0];
-    int ret, flags = DCADEC_FLAG_CORE_BIT_EXACT | DCADEC_FLAG_KEEP_DMIX_6CH;
+    int flags = DCADEC_FLAG_CORE_BIT_EXACT | DCADEC_FLAG_KEEP_DMIX_6CH;
 
     // Double sampling frequency if needed
-    if (p->freq == 96000 && core->sample_rate == 48000)
+    if (xll->chset->freq == 96000 && core->sample_rate == 48000)
         flags |= DCADEC_FLAG_CORE_SYNTH_X96;
 
     // Filter core frame
+    int ret;
     if ((ret = core_filter(core, flags)) < 0)
         return ret;
 
