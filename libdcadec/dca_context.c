@@ -36,6 +36,8 @@ struct dcadec_context {
 
     bool core_residual_valid;
 
+    int *dmix_sample_buffer[2];
+
     int nframesamples;
     int sample_rate;
     int bits_per_sample;
@@ -116,6 +118,99 @@ static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dc
     return nchannels;
 }
 
+static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
+                               int nsamples, int *ch_mask, int bits_per_sample,
+                               int *dmix_coeff)
+{
+    // No action if already 2.0. Remove LFE channel if 2.1.
+    if ((*ch_mask & ~SPEAKER_MASK_LFE1) == (SPEAKER_MASK_L | SPEAKER_MASK_R)) {
+        *ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
+        return 0;
+    }
+
+    // Reallocate downmix sample buffer
+    int ret = dca_realloc(dca, &dca->dmix_sample_buffer[0], 2 * nsamples, sizeof(int));
+    if (ret < 0)
+        return ret;
+
+    memset(dca->dmix_sample_buffer[0], 0, 2 * nsamples * sizeof(int));
+
+    dca->dmix_sample_buffer[1] = dca->dmix_sample_buffer[0] + nsamples;
+
+    int nchannels = dca_popcount(*ch_mask);
+
+    // Perform downmix
+    for (int spkr = 0, pos = 0; spkr < SPEAKER_COUNT; spkr++) {
+        if (!(*ch_mask & (1 << spkr)))
+            continue;
+
+        for (int ch = 0; ch < 2; ch++) {
+            int coeff;
+
+            // Use custom matrix if present. Otherwise use default matrix that
+            // covers all supported core audio channel arrangements.
+            if (dmix_coeff) {
+                coeff = dmix_coeff[ch * nchannels + pos];
+            } else {
+                switch (spkr) {
+                case SPEAKER_C:
+                case SPEAKER_Cs:
+                    coeff = (nchannels == 1) ? 23170 : 16423;
+                    break;
+                case SPEAKER_L:
+                    coeff = (ch == 0) ? 23170 : 0;
+                    break;
+                case SPEAKER_R:
+                    coeff = (ch == 1) ? 23170 : 0;
+                    break;
+                case SPEAKER_Ls:
+                    coeff = (ch == 0) ? 16423 : 0;
+                    break;
+                case SPEAKER_Rs:
+                    coeff = (ch == 1) ? 16423 : 0;
+                    break;
+                default:
+                    coeff = 0;
+                    break;
+                }
+            }
+
+            if (coeff) {
+                int *src = samples[spkr];
+                int *dst = dca->dmix_sample_buffer[ch];
+                for (int n = 0; n < nsamples; n++)
+                    dst[n] += mul15(src[n], coeff);
+            }
+        }
+
+        pos++;
+    }
+
+    // Perform clipping
+    for (int ch = 0; ch < 2; ch++) {
+        int *buf = dca->dmix_sample_buffer[ch];
+        switch (bits_per_sample) {
+        case 24:
+            for (int n = 0; n < nsamples; n++)
+                buf[n] = clip23(buf[n]);
+            break;
+        case 16:
+            for (int n = 0; n < nsamples; n++)
+                buf[n] = clip15(buf[n]);
+            break;
+        default:
+            for (int n = 0; n < nsamples; n++)
+                buf[n] = clip__(buf[n], bits_per_sample - 1);
+            break;
+        }
+    }
+
+    samples[SPEAKER_L] = dca->dmix_sample_buffer[0];
+    samples[SPEAKER_R] = dca->dmix_sample_buffer[1];
+    *ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
+    return 0;
+}
+
 static int filter_core_frame(struct dcadec_context *dca)
 {
     struct core_decoder *core = dca->core;
@@ -126,6 +221,16 @@ static int filter_core_frame(struct dcadec_context *dca)
     int ret;
     if ((ret = core_filter(core, dca->flags)) < 0)
         return ret;
+
+    // Downmix core channels to Lo/Ro
+    if (dca->flags & DCADEC_FLAG_KEEP_DMIX_2CH) {
+        int *coeff = NULL;
+        if (core->prim_dmix_embedded && core->prim_dmix_type == DMIX_TYPE_LoRo)
+            coeff = core->prim_dmix_coeff;
+        if ((ret = down_mix_prim_chset(dca, core->output_samples, core->npcmsamples,
+                                       &core->ch_mask, core->bits_per_sample, coeff)) < 0)
+            return ret;
+    }
 
     // Reorder sample buffer pointers
     if (reorder_samples(dca, core->output_samples, core->ch_mask) <= 0)
@@ -219,6 +324,50 @@ static void undo_down_mix(struct xll_chset *c, int **samples0, int **samples1,
                     for (int k = 1; k < XLL_DECI_HISTORY; k++)
                         dst[k] -= mul15(src[k], coeff);
                 }
+            }
+        }
+    }
+}
+
+static void scale_down_mix(struct xll_chset *c, int **samples0, int **samples1,
+                           int **deci_history, int nchannels)
+{
+    struct xll_decoder *xll = c->decoder;
+    int nsamples = xll->nframesamples;
+
+    // Pre-scale by next channel set in hierarchy
+    struct xll_chset *o = find_hier_dmix_chset(c);
+    if (o) {
+        for (int i = 0; i < nchannels; i++) {
+            int scale = o->dmix_scale[i];
+            c->dmix_scale[i] = mul15(c->dmix_scale[i], scale);
+        }
+    }
+
+    // Scale down preceding channels in frequency band 0
+    for (int i = 0; i < nchannels; i++) {
+        int scale = c->dmix_scale[i];
+        if (scale != (1 << 15)) {
+            int *buf = samples0[i];
+            for (int k = 0; k < nsamples; k++)
+                buf[k] = mul15(buf[k], scale);
+        }
+    }
+
+    // Scale down preceding channels in frequency band 1
+    if (c->nfreqbands > 1 && c->band_dmix_embedded[1]) {
+        for (int i = 0; i < nchannels; i++) {
+            int scale = c->dmix_scale[i];
+            if (scale != (1 << 15)) {
+                // Scale down channel samples
+                int *buf = samples1[i];
+                for (int k = 0; k < nsamples; k++)
+                    buf[k] = mul15(buf[k], scale);
+
+                // Scale down decimator history
+                buf = deci_history[i];
+                for (int k = 1; k < XLL_DECI_HISTORY; k++)
+                    buf[k] = mul15(buf[k], scale);
             }
         }
     }
@@ -331,7 +480,10 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
                     continue;
                 c->residual_encode &= ~(1 << ch);
             }
-            c->dmix_embedded = false;
+        }
+        for_each_chset(xll, c) {
+            if (!c->primary_chset)
+                c->dmix_embedded = false;
         }
         xll->scalable_lsbs = false;
         xll->fixed_lsb_width = 0;
@@ -445,7 +597,12 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
                 nchannels++;
             }
             struct xll_chset *o = find_hier_dmix_chset(c);
-            if (o)
+            if (!o)
+                break;
+            // Apply downmix scaling to the last active channel set
+            if (c == &xll->chset[xll->nactivechsets - 1])
+                scale_down_mix(o, samples0, samples1, deci_history, nchannels);
+            else
                 undo_down_mix(o, samples0, samples1, deci_history, nchannels);
         }
     }
@@ -483,6 +640,28 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             spkr_map[spkr] = c->out_sample_buffer[ch];
         }
         ch_mask |= c->ch_mask;
+    }
+
+    // Normalize to regular 5.1 layout if downmixing
+    if (dca->flags & DCADEC_FLAG_KEEP_DMIX_MASK) {
+        if (ch_mask & SPEAKER_MASK_Lss) {
+            spkr_map[SPEAKER_Ls] = spkr_map[SPEAKER_Lss];
+            ch_mask = (ch_mask & ~SPEAKER_MASK_Lss) | SPEAKER_MASK_Ls;
+        }
+        if (ch_mask & SPEAKER_MASK_Rss) {
+            spkr_map[SPEAKER_Rs] = spkr_map[SPEAKER_Rss];
+            ch_mask = (ch_mask & ~SPEAKER_MASK_Rss) | SPEAKER_MASK_Rs;
+        }
+    }
+
+    // Downmix primary channel set to Lo/Ro
+    if (dca->flags & DCADEC_FLAG_KEEP_DMIX_2CH) {
+        int *coeff = NULL;
+        if (p->dmix_embedded && p->dmix_type == DMIX_TYPE_LoRo)
+            coeff = p->dmix_coeff;
+        if ((ret = down_mix_prim_chset(dca, spkr_map, xll->nframesamples,
+                                       &ch_mask, p->pcm_bit_res, coeff)) < 0)
+            return ret;
     }
 
     // Reorder sample buffer pointers
@@ -561,9 +740,11 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
                     goto fail;
 
             if (asset->extension_mask & EXSS_XLL) {
-                if (!dca->xll)
+                if (!dca->xll) {
                     if (!(dca->xll = ta_znew(dca, struct xll_decoder)))
                         return -DCADEC_ENOMEM;
+                    dca->xll->flags = dca->flags;
+                }
 
                 if ((ret = xll_parse(dca->xll, data, size, asset)) < 0)
                     goto fail;

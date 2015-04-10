@@ -978,7 +978,7 @@ int core_filter(struct core_decoder *core, int flags)
         }
     }
 
-    if (!(flags & DCADEC_FLAG_KEEP_DMIX_6CH)) {
+    if (!(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
         int nsamples = core->npcmsamples;
 
         // Undo embedded XCH downmix
@@ -1939,7 +1939,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
             sync_pos++;
         }
 
-        if (xch_pos) {
+        if (xch_pos && !(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
             //printf("found XCH @ %zu\n", xch_pos);
             core->bits.index = xch_pos * 32 + 17;
             if ((ret = parse_xch_frame(core)) < 0) {
@@ -1951,7 +1951,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
             }
         }
 
-        if (xxch_pos) {
+        if (xxch_pos && !(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
             //printf("found XXCH @ %zu\n", xxch_pos);
             core->bits.index = xxch_pos * 32;
             if ((ret = parse_xxch_frame(core)) < 0) {
@@ -2033,7 +2033,8 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
 
     (void)size;
 
-    if ((asset->extension_mask & EXSS_XXCH) && !core->xxch_present) {
+    if ((asset->extension_mask & EXSS_XXCH) && !core->xxch_present
+        && !(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
         //printf("found XXCH @ EXSS\n");
         bits_init(&core->bits, data + asset->xxch_offset, asset->xxch_size);
         if (bits_get(&core->bits, 32) == SYNC_WORD_XXCH) {

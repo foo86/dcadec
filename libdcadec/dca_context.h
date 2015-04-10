@@ -77,10 +77,10 @@
 /* Use FIR filter for floating point DTS core LFE channel interpolation */
 #define DCADEC_FLAG_CORE_LFE_FIR        0x10
 
-/** Extract embedded 2.0 downmix (NOT YET IMPLEMENTED) */
+/** Extract embedded 2.0 downmix */
 #define DCADEC_FLAG_KEEP_DMIX_2CH       0x20
 
-/** Extract embedded 5.1 downmix (NOT YET IMPLEMENTED) */
+/** Extract embedded 5.1 downmix */
 #define DCADEC_FLAG_KEEP_DMIX_6CH       0x40
 
 /** Output native DTS channel layout, not WAVEFORMATEXTENSIBLE layout */

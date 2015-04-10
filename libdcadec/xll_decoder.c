@@ -861,7 +861,13 @@ static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
     }
 
     // Number of active channel sets to decode
-    xll->nactivechsets = xll->nchsets;
+    if (xll->flags & DCADEC_FLAG_KEEP_DMIX_2CH)
+        xll->nactivechsets = 1;
+    else if (xll->flags & DCADEC_FLAG_KEEP_DMIX_6CH)
+        xll->nactivechsets = (xll->chset->nchannels < 5 && xll->nchsets > 1) ? 2 : 1;
+    else
+        xll->nactivechsets = xll->nchsets;
+
     return 0;
 }
 

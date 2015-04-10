@@ -100,6 +100,8 @@ struct xll_chset {
 struct xll_decoder {
     struct bitstream    bits;
 
+    int     flags;
+
     size_t  frame_size;
     int     nchsets;
     int     nframesegs;

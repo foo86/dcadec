@@ -31,6 +31,9 @@
 #include "dca_context.h"
 #include "ta.h"
 
+#define DCADEC_FLAG_KEEP_DMIX_MASK  \
+    (DCADEC_FLAG_KEEP_DMIX_2CH | DCADEC_FLAG_KEEP_DMIX_6CH)
+
 #ifdef NDEBUG
 #define DCA_DEBUG(m)
 #else
