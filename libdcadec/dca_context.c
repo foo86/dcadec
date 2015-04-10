@@ -165,7 +165,6 @@ static struct xll_chset *find_hier_dmix_chset(struct xll_chset *c)
         if (!c->primary_chset
             && c->dmix_embedded
             && c->hier_chset
-            && !c->replace_set_index
             && c->ch_mask_enabled)
             return c;
         c++;
@@ -234,7 +233,7 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
 {
     // Validate the first (primary) channel set
     struct xll_chset *p = &dca->xll->chset[0];
-    if (!p->primary_chset || p->replace_set_index)
+    if (!p->primary_chset)
         return -DCADEC_ENOSUP;
 
     if (!p->ch_mask_enabled && p->nchannels != 2)
@@ -249,9 +248,6 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
     // Validate channel sets
     bool residual = false;
     for_each_chset(dca->xll, c) {
-        if (c->replace_set_index)
-            continue;
-
         // Reject multiple primary channel sets
         if (c->primary_chset && c != p)
             return -DCADEC_ENOSUP;
@@ -361,9 +357,6 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     // Process frequency band 0 for all channel sets
     int nchannels = 0;
     for_each_chset(xll, c) {
-        if (c->replace_set_index)
-            continue;
-
         xll_filter_band_data(c, 0);
 
         // Check for residual encoded channel set
@@ -428,8 +421,6 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     // Process frequency band 1 for all channel sets
     if (xll->nfreqbands > 1) {
         for_each_chset(xll, c) {
-            if (c->replace_set_index)
-                continue;
             xll_filter_band_data(c, 1);
             xll_assemble_msbs_lsbs(c, 1);
         }
@@ -445,8 +436,6 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
 
         // Undo embedded hierarchial downmix
         for_each_chset(xll, c) {
-            if (c->replace_set_index)
-                continue;
             for (int ch = 0; ch < c->nchannels; ch++) {
                 samples0[nchannels] = c->msb_sample_buffer[0][ch];
                 samples1[nchannels] = c->msb_sample_buffer[1][ch];
@@ -462,8 +451,6 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     // Assemble frequency bands 0 and 1 for all channel sets
     if (xll->nfreqbands > 1) {
         for_each_chset(xll, c) {
-            if (c->replace_set_index)
-                continue;
             if ((ret = xll_assemble_freq_bands(c)) < 0)
                 return ret;
         }
@@ -486,8 +473,6 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
 
     // Build the output speaker map
     for_each_chset(xll, c) {
-        if (c->replace_set_index)
-            continue;
         for (int ch = 0; ch < c->nchannels; ch++) {
             int spkr = xll_map_ch_to_spkr(c, ch);
             if (spkr < 0)

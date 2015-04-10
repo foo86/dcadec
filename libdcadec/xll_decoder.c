@@ -132,6 +132,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
 
     // Which replacement set this channel set is member of
     chs->replace_set_index = bits_get(&xll->bits, 2);
+    require(chs->replace_set_index == 0, "Replacement sets are not supported");
 
     // Default replacement set flag
     if (chs->replace_set_index)
@@ -849,8 +850,6 @@ static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
     for_each_chset(xll, chs) {
         if ((ret = chs_parse_header(chs, asset)) < 0)
             return ret;
-        if (chs->replace_set_index)
-            continue;
         if (chs->nfreqbands > xll->nfreqbands)
             xll->nfreqbands = chs->nfreqbands;
         xll->nchannels += chs->nchannels;
