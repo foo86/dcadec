@@ -244,7 +244,7 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
 
     // Validate channel sets
     bool residual = false;
-    for_each_chset(xll, c) {
+    for_each_active_chset(xll, c) {
         // Reject multiple primary channel sets
         if (c->primary_chset && c != p)
             return -DCADEC_ENOSUP;
@@ -314,7 +314,7 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
     // the last time history was cleared. Clear all band data and replace
     // non-residual encoded channels with their lossy counterparts.
     if (dca->core_residual_valid == false && xll->nchsets > 1) {
-        for_each_chset(xll, c) {
+        for_each_active_chset(xll, c) {
             for (int band = 0; band < c->nfreqbands; band++)
                 xll_clear_band_data(c, band);
             memset(c->deci_history, 0, sizeof(c->deci_history));
@@ -406,8 +406,8 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         if ((ret = filter_residual_core_frame(dca)) < 0)
             return ret;
 
-    // Process frequency band 0 for all channel sets
-    for_each_chset(xll, c) {
+    // Process frequency band 0 for active channel sets
+    for_each_active_chset(xll, c) {
         xll_filter_band_data(c, 0);
 
         // Check for residual encoded channel set
@@ -420,9 +420,9 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             xll_assemble_msbs_lsbs(c, 0);
     }
 
-    // Process frequency band 1 for all channel sets
+    // Process frequency band 1 for active channel sets
     if (xll->nfreqbands > 1) {
-        for_each_chset(xll, c) {
+        for_each_active_chset(xll, c) {
             xll_filter_band_data(c, 1);
             xll_assemble_msbs_lsbs(c, 1);
         }
@@ -437,7 +437,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         int nchannels = 0;
 
         // Undo embedded hierarchial downmix
-        for_each_chset(xll, c) {
+        for_each_active_chset(xll, c) {
             for (int ch = 0; ch < c->nchannels; ch++) {
                 samples0[nchannels] = c->msb_sample_buffer[0][ch];
                 samples1[nchannels] = c->msb_sample_buffer[1][ch];
@@ -450,12 +450,11 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         }
     }
 
-    // Assemble frequency bands 0 and 1 for all channel sets
+    // Assemble frequency bands 0 and 1 for active channel sets
     if (xll->nfreqbands > 1) {
-        for_each_chset(xll, c) {
+        for_each_active_chset(xll, c)
             if ((ret = xll_assemble_freq_bands(c)) < 0)
                 return ret;
-        }
         // Double sampling frequency
         xll->nframesamples *= 2;
         p->freq *= 2;
@@ -474,7 +473,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     }
 
     // Build the output speaker map
-    for_each_chset(xll, c) {
+    for_each_active_chset(xll, c) {
         for (int ch = 0; ch < c->nchannels; ch++) {
             int spkr = xll_map_ch_to_spkr(c, ch);
             if (spkr < 0)

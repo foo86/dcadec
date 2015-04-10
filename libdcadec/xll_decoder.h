@@ -31,6 +31,10 @@
     for (struct xll_chset *(chs) = (xll)->chset; \
          (chs) != &(xll)->chset[(xll)->nchsets]; (chs)++)
 
+#define for_each_active_chset(xll, chs) \
+    for (struct xll_chset *(chs) = (xll)->chset; \
+         (chs) != &(xll)->chset[(xll)->nactivechsets]; (chs)++)
+
 struct xll_decoder;
 struct exss_asset;
 
@@ -114,6 +118,7 @@ struct xll_decoder {
 
     int     nfreqbands;
     int     nchannels;
+    int     nactivechsets;
 
     int     hd_stream_id;
 

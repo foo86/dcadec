@@ -396,6 +396,10 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
     // Calculate bit index where band data ends
     size_t band_data_end = xll->bits.index + band_data_nbytes * 8;
 
+    // Skip decoding inactive channel sets
+    if (chs >= &xll->chset[xll->nactivechsets])
+        return bits_seek(&xll->bits, band_data_end);
+
     // Start unpacking MSB portion of the segment
     if (seg == 0 || bits_get1(&xll->bits) == false) {
         // Unpack segment type
@@ -856,6 +860,8 @@ static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
         xll->nchannels += chs->nchannels;
     }
 
+    // Number of active channel sets to decode
+    xll->nactivechsets = xll->nchsets;
     return 0;
 }
 
@@ -897,7 +903,7 @@ static int parse_navi_table(struct xll_decoder *xll)
 static int parse_band_data(struct xll_decoder *xll)
 {
     int ret;
-    for_each_chset(xll, chs) {
+    for_each_active_chset(xll, chs) {
         if ((ret = chs_alloc_msb_band_data(chs)) < 0)
             return ret;
         if ((ret = chs_alloc_lsb_band_data(chs)) < 0)
