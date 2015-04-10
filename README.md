@@ -24,44 +24,32 @@ Help screen of the program is reproduced below.
 Usage: ./dcadec [-bcfhlnPqsx] <input.dts> [output.wav]
 dcadec is a free DTS Coherent Acoustics decoder. Supported options:
 
--2
-    Extract embedded 2.0 downmix.
+-2  Extract embedded 2.0 downmix.
 
--6
-    Extract embedded 5.1 downmix.
+-6  Extract embedded 5.1 downmix.
 
--b
-    Force fixed point DTS core interpolation. Developer option, degrades sound
+-b  Force fixed point DTS core interpolation. Developer option, degrades sound
     quality.
 
--c
-    Force decoding of DTS core only without extensions.
+-c  Force decoding of DTS core only without extensions.
 
--f
-    Use FIR filter for floating point DTS core LFE channel interpolation.
+-f  Use FIR filter for floating point DTS core LFE channel interpolation.
 
--h
-    Show this help message.
+-h  Show this help message.
 
--l
-    Enable lenient decoding mode. Attempt to recover from errors.
+-l  Enable lenient decoding mode. Attempt to recover from errors.
 
--n
-    No-act mode. Parse DTS bitstream without writing WAV file.
+-n  No-act mode. Parse DTS bitstream without writing WAV file.
 
--P
-    Disable progress indicator.
+-P  Disable progress indicator.
 
--q
-    Be quiet. Disables informational messages and progress indicator. Warnings
+-q  Be quiet. Disables informational messages and progress indicator. Warnings
     and errors are still printed.
 
--s
-    Force bit width reduction of DTS core from 24 bit to source PCM resolution.
+-s  Force bit width reduction of DTS core from 24 bit to source PCM resolution.
     Developer option, degrades sound quality.
 
--x
-    Force use of X96 synthesis filter for DTS core interpolation. Developer
+-x  Force use of X96 synthesis filter for DTS core interpolation. Developer
     option, degrades sound quality.
 
 When run without output file name argument, prints information about DTS file
