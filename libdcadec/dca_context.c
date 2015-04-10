@@ -355,7 +355,6 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             return ret;
 
     // Process frequency band 0 for all channel sets
-    int nchannels = 0;
     for_each_chset(xll, c) {
         xll_filter_band_data(c, 0);
 
@@ -400,7 +399,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
                 int *src = core->output_samples[core_ch];
                 if (o) {
                     // Undo embedded core downmix pre-scaling
-                    int scale_inv = o->dmix_scale_inv[nchannels + ch];
+                    int scale_inv = o->dmix_scale_inv[c->dmix_m + ch];
                     for (int n = 0; n < nsamples; n++)
                         dst[n] += clip23((mul16(src[n], scale_inv) + round) >> shift);
                 } else {
@@ -414,8 +413,6 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         // Assemble MSB and LSB parts after combining with core
         if (xll->scalable_lsbs)
             xll_assemble_msbs_lsbs(c, 0);
-
-        nchannels += c->nchannels;
     }
 
     // Process frequency band 1 for all channel sets

@@ -50,6 +50,7 @@ struct xll_chset {
     bool    dmix_embedded;
     int     dmix_type;
     bool    hier_chset;
+    int     dmix_m;
     int     *dmix_coeff;
     int     *dmix_scale;
     int     *dmix_scale_inv;
