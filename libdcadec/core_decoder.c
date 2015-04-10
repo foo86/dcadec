@@ -1875,12 +1875,6 @@ static int parse_optional_info(struct core_decoder *core, int flags)
         core->prim_dmix_embedded = false;
     }
 
-    // Optional CRC check bytes
-    if (core->crc_present && core->drc_present) {
-        bits_align1(&core->bits);
-        bits_skip(&core->bits, 16);
-    }
-
     // Core extensions
     if (core->ext_audio_present && !(flags & DCADEC_FLAG_CORE_ONLY)) {
         size_t buf_size = (core->bits.total + 31) / 32;
