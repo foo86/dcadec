@@ -342,9 +342,62 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
     return 0;
 }
 
-static int filter_hd_ma_frame(struct dcadec_context *dca)
+static int combine_residual_core_frame(struct dcadec_context *dca,
+                                       struct xll_chset *c)
 {
     struct core_decoder *core = dca->core;
+    struct xll_decoder *xll = dca->xll;
+    int nsamples = xll->nframesamples;
+
+    if (c->freq != core->output_rate)
+        return -DCADEC_ENOSUP;
+
+    if (nsamples != core->npcmsamples)
+        return -DCADEC_EINVAL;
+
+    // See if this channel set is downmixed and find the source
+    // channel set. If downmixed, undo core pre-scaling before
+    // combining with residual (residual is not scaled).
+    struct xll_chset *o = find_hier_dmix_chset(c);
+
+    // Reduce core bit width and combine with residual
+    for (int ch = 0; ch < c->nchannels; ch++) {
+        if (c->residual_encode & (1 << ch))
+            continue;
+
+        int spkr = xll_map_ch_to_spkr(c, ch);
+        if (spkr < 0)
+            return -DCADEC_EINVAL;
+
+        int core_ch = map_spkr_to_core_ch(core, spkr);
+        if (core_ch < 0)
+            return -DCADEC_EINVAL;
+
+        int shift = 24 - c->pcm_bit_res;
+        // Account for LSB width
+        if (xll->scalable_lsbs)
+            shift += xll_get_lsb_width(c, 0, ch);
+        int round = shift > 0 ? 1 << (shift - 1) : 0;
+
+        int *dst = c->msb_sample_buffer[0][ch];
+        int *src = core->output_samples[core_ch];
+        if (o) {
+            // Undo embedded core downmix pre-scaling
+            int scale_inv = o->dmix_scale_inv[c->dmix_m + ch];
+            for (int n = 0; n < nsamples; n++)
+                dst[n] += clip23((mul16(src[n], scale_inv) + round) >> shift);
+        } else {
+            // No downmix scaling
+            for (int n = 0; n < nsamples; n++)
+                dst[n] += (src[n] + round) >> shift;
+        }
+    }
+
+    return 0;
+}
+
+static int filter_hd_ma_frame(struct dcadec_context *dca)
+{
     struct xll_decoder *xll = dca->xll;
     struct xll_chset *p = &xll->chset[0];
     int ret;
@@ -359,56 +412,9 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         xll_filter_band_data(c, 0);
 
         // Check for residual encoded channel set
-        if (c->residual_encode != (1 << c->nchannels) - 1) {
-            if (!(dca->packet & DCADEC_PACKET_CORE))
-                return -DCADEC_EINVAL;
-
-            if (c->freq != core->output_rate)
-                return -DCADEC_ENOSUP;
-
-            if (xll->nframesamples != core->npcmsamples)
-                return -DCADEC_EINVAL;
-
-            int nsamples = xll->nframesamples;
-
-            // See if this channel set is downmixed and find the source
-            // channel set. If downmixed, undo core pre-scaling before
-            // combining with residual (residual is not scaled).
-            struct xll_chset *o = find_hier_dmix_chset(c);
-
-            // Reduce core bit width and combine with residual
-            for (int ch = 0; ch < c->nchannels; ch++) {
-                if (c->residual_encode & (1 << ch))
-                    continue;
-
-                int spkr = xll_map_ch_to_spkr(c, ch);
-                if (spkr < 0)
-                    return -DCADEC_EINVAL;
-
-                int core_ch = map_spkr_to_core_ch(core, spkr);
-                if (core_ch < 0)
-                    return -DCADEC_EINVAL;
-
-                int shift = 24 - c->pcm_bit_res;
-                // Account for LSB width
-                if (xll->scalable_lsbs)
-                    shift += xll_get_lsb_width(c, 0, ch);
-                int round = shift > 0 ? 1 << (shift - 1) : 0;
-
-                int *dst = c->msb_sample_buffer[0][ch];
-                int *src = core->output_samples[core_ch];
-                if (o) {
-                    // Undo embedded core downmix pre-scaling
-                    int scale_inv = o->dmix_scale_inv[c->dmix_m + ch];
-                    for (int n = 0; n < nsamples; n++)
-                        dst[n] += clip23((mul16(src[n], scale_inv) + round) >> shift);
-                } else {
-                    // No downmix scaling
-                    for (int n = 0; n < nsamples; n++)
-                        dst[n] += (src[n] + round) >> shift;
-                }
-            }
-        }
+        if (c->residual_encode != (1 << c->nchannels) - 1)
+            if ((ret = combine_residual_core_frame(dca, c)) < 0)
+                return ret;
 
         // Assemble MSB and LSB parts after combining with core
         if (xll->scalable_lsbs)
