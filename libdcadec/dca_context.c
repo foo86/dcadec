@@ -477,8 +477,9 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             int spkr = xll_map_ch_to_spkr(c, ch);
             if (spkr < 0)
                 return -DCADEC_EINVAL;
-            if (!spkr_map[spkr])
-                spkr_map[spkr] = c->out_sample_buffer[ch];
+            if (spkr_map[spkr])
+                return -DCADEC_EINVAL;
+            spkr_map[spkr] = c->out_sample_buffer[ch];
         }
         ch_mask |= c->ch_mask;
     }
