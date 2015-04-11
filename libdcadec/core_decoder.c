@@ -1865,7 +1865,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
         bits_skip(&core->bits, 32);
 
     // Auxiliary data
-    if (core->aux_present) {
+    if (core->aux_present && (flags & DCADEC_FLAG_KEEP_DMIX_2CH)) {
         if ((ret = parse_aux_data(core)) < 0) {
             if (flags & DCADEC_FLAG_STRICT)
                 return ret;
