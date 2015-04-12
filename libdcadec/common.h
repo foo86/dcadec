@@ -86,6 +86,16 @@
 #error Unsupported byte order
 #endif
 
+#define DCA_MAX(a, b) \
+    ({ typeof(a) _a = (a); \
+       typeof(b) _b = (b); \
+       _a > _b ? _a : _b; })
+
+#define DCA_MIN(a, b) \
+    ({ typeof(a) _a = (a); \
+       typeof(b) _b = (b); \
+       _a < _b ? _a : _b; })
+
 #define dca_countof(x)  (sizeof(x) / sizeof((x)[0]))
 
 static inline uint32_t DCA_RAW32(const void *data)

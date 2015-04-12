@@ -799,14 +799,9 @@ static int parse_frame_data(struct core_decoder *core, enum header_type header, 
 
     for (int ch = xch_base; ch < core->nchannels; ch++) {
         // Number of active subbands for this channel
-        int nsubbands;
-        if (core->joint_intensity_index[ch]) {
-            nsubbands = core->nsubbands[core->joint_intensity_index[ch] - 1];
-            if (nsubbands < core->nsubbands[ch])
-                nsubbands = core->nsubbands[ch];
-        } else {
-            nsubbands = core->nsubbands[ch];
-        }
+        int nsubbands = core->nsubbands[ch];
+        if (core->joint_intensity_index[ch])
+            nsubbands = DCA_MAX(nsubbands, core->nsubbands[core->joint_intensity_index[ch] - 1]);
 
         // Update history for ADPCM
         for (int band = 0; band < nsubbands; band++) {
@@ -1670,14 +1665,9 @@ static int parse_x96_frame_data(struct x96_decoder *x96, bool exss, int xch_base
 
     for (int ch = xch_base; ch < x96->nchannels; ch++) {
         // Number of active subbands for this channel
-        int nsubbands;
-        if (x96->joint_intensity_index[ch]) {
-            nsubbands = x96->nsubbands[x96->joint_intensity_index[ch] - 1];
-            if (nsubbands < x96->nsubbands[ch])
-                nsubbands = x96->nsubbands[ch];
-        } else {
-            nsubbands = x96->nsubbands[ch];
-        }
+        int nsubbands = x96->nsubbands[ch];
+        if (x96->joint_intensity_index[ch])
+            nsubbands = DCA_MAX(nsubbands, x96->nsubbands[x96->joint_intensity_index[ch] - 1]);
 
         // Update history for ADPCM
         // Clear inactive subbands
@@ -1880,9 +1870,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
     if (core->ext_audio_present && !(flags & DCADEC_FLAG_CORE_ONLY)) {
         size_t buf_size = (core->bits.total + 31) / 32;
         size_t sync_pos = (core->bits.index + 31) / 32;
-        size_t last_pos = core->frame_size / 4;
-        if (last_pos > buf_size)
-            last_pos = buf_size;
+        size_t last_pos = DCA_MIN(core->frame_size / 4, buf_size);
 
         // Search for extension sync words aligned on 4-byte boundary
         size_t xch_pos = 0, xxch_pos = 0, x96_pos = 0, xbr_pos = 0;

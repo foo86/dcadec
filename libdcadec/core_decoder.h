@@ -70,7 +70,7 @@ struct core_decoder {
     int     deficit_samples;
     bool    crc_present;
     int     npcmblocks;
-    int     frame_size;
+    size_t  frame_size;
     int     audio_mode;
     int     sample_rate;
     int     bit_rate;
