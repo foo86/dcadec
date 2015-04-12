@@ -192,8 +192,9 @@ DCADEC_API void dcadec_context_free_exss_info(struct dcadec_exss_info *info);
 
 /**
  * Filter the parsed packet and return per-channel PCM data. All parameters
- * except decoder context are optional and can be NULL. This function should
- * be called exactly once after successfull call to dcadec_context_parse().
+ * except decoder context are optional and can be NULL. This function should be
+ * called at least once after each successfull call to dcadec_context_parse().
+ * Multiple calls per packet are allowed and return the same data.
  *
  * @param dca       Pointer to decoder context.
  *
@@ -232,7 +233,9 @@ DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
                                      int *profile);
 
 /**
- * Clear all inter-frame history of the decoder.
+ * Clear all inter-frame history of the decoder. Call this before parsing
+ * packets out of sequence, e.g. after seeking to the arbitrary position within
+ * the DTS stream.
  *
  * @param dca   Pointer to decoder context.
  */
