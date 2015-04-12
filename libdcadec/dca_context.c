@@ -822,6 +822,9 @@ DCADEC_API struct dcadec_exss_info *dcadec_context_get_exss_info(struct dcadec_c
                     info->profile = DCADEC_PROFILE_DS_96_24;
                 else
                     info->profile = DCADEC_PROFILE_DS;
+                info->embedded_stereo = (core->prim_dmix_embedded &&
+                                         core->prim_dmix_type == DMIX_TYPE_LoRo);
+                info->embedded_6ch = (core->xch_present || core->xxch_present);
             }
         }
     }
