@@ -575,27 +575,11 @@ void xll_filter_band_data(struct xll_chset *chs, int band)
     int nsamples = xll->nframesamples;
     int i, j, k;
 
-    // Inverse fixed coefficient prediction
+    // Inverse adaptive or fixed prediction
     for (i = 0; i < chs->nchannels; i++) {
-        int order = chs->fixed_pred_order[band][i];
-        if (order) {
-            int *buf = chs->msb_sample_buffer[band][i];
-            int tmp[8] = { 0 };
-            for (j = 0; j < nsamples; j++) {
-                tmp[0] = buf[j];
-                for (k = 0; k < order; k++) {
-                    tmp[k * 2 + 2] = tmp[k * 2 + 0] + tmp[k * 2 + 1];
-                    tmp[k * 2 + 1] = tmp[k * 2 + 2];
-                }
-                buf[j] = tmp[k * 2];
-            }
-        }
-    }
-
-    // Inverse adaptive prediction
-    for (i = 0; i < chs->nchannels; i++) {
+        int *buf = chs->msb_sample_buffer[band][i];
         int order = chs->adapt_pred_order[band][i];
-        if (order) {
+        if (order > 0) {
             int coeff[16];
             // Conversion from reflection coefficients to direct form coefficients
             for (j = 0; j < order; j++) {
@@ -608,7 +592,6 @@ void xll_filter_band_data(struct xll_chset *chs, int band)
                 }
                 coeff[j] = rc;
             }
-            int *buf = chs->msb_sample_buffer[band][i];
             for (j = 0; j < nsamples - order; j++) {
                 int64_t err = INT64_C(0);
                 for (k = 0; k < order; k++)
@@ -617,6 +600,12 @@ void xll_filter_band_data(struct xll_chset *chs, int band)
                 // Calculate the original sample
                 buf[j + k] -= clip23(norm16(err));
             }
+        } else {
+            // Inverse fixed coefficient prediction
+            order = chs->fixed_pred_order[band][i];
+            for (j = 0; j < order; j++)
+                for (k = 1; k < nsamples; k++)
+                    buf[k] += buf[k - 1];
         }
     }
 
