@@ -1290,12 +1290,13 @@ static int parse_xbr_frame(struct core_decoder *core, int flags)
 
         if (xbr_base_ch + xbr_nchannels[i] <= MAX_CHANNELS) {
             int sub_pos = 0;
-            for (int sf = 0; sf < core->nsubframes; sf++)
+            for (int sf = 0; sf < core->nsubframes; sf++) {
                 if ((ret = parse_xbr_subframe(core, xbr_base_ch,
                                               xbr_base_ch + xbr_nchannels[i],
                                               xbr_nsubbands, xbr_transition_mode,
                                               sf, &sub_pos)) < 0)
                     return ret;
+            }
         }
 
         xbr_base_ch += xbr_nchannels[i];

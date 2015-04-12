@@ -502,13 +502,14 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
                 }
 
                 // Unpack all residuals of part B of segment 0 and others
-                for (j = 0; j < nsamples_part_b; j++)
+                for (j = 0; j < nsamples_part_b; j++) {
                     if (part_b[j] == -1)
                         part_b[j] = bits_get_signed_linear(&xll->bits,
                                                            chs->bitalloc_hybrid_linear[k]);
                     else
                         part_b[j] = bits_get_signed_rice(&xll->bits,
                                                          chs->bitalloc_part_b[k]);
+                }
             } else {
                 // Rice codes
                 // Unpack all residuals of part B of segment 0 and others
@@ -541,13 +542,15 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
             return ret;
 
         // Unpack all LSB parts of residuals of this segment
-        for (i = 0; i < chs->nchannels; i++)
-            if (chs->nscalablelsbs[band][i])
+        for (i = 0; i < chs->nchannels; i++) {
+            if (chs->nscalablelsbs[band][i]) {
                 bits_get_array(&xll->bits,
                                chs->lsb_sample_buffer[band][i] +
                                seg * xll->nsegsamples,
                                xll->nsegsamples,
                                chs->nscalablelsbs[band][i]);
+            }
+        }
     }
 
     // Skip to the end of band data
