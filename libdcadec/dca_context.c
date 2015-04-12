@@ -26,6 +26,8 @@
 #define DCADEC_PACKET_EXSS  0x02
 #define DCADEC_PACKET_XLL   0x04
 
+#define DCADEC_PACKET_FILTERED  0x100
+
 struct dcadec_context {
     int flags;
     int packet;
@@ -842,23 +844,26 @@ DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
     if (!dca)
         return -DCADEC_EINVAL;
 
-    if (dca->packet & DCADEC_PACKET_XLL) {
-        if ((ret = validate_hd_ma_frame(dca)) < 0) {
-            if (dca->flags & DCADEC_FLAG_STRICT)
-                return ret;
-            if (!(dca->packet & DCADEC_PACKET_CORE))
-                return ret;
+    if (!(dca->packet & DCADEC_PACKET_FILTERED)) {
+        if (dca->packet & DCADEC_PACKET_XLL) {
+            if ((ret = validate_hd_ma_frame(dca)) < 0) {
+                if (dca->flags & DCADEC_FLAG_STRICT)
+                    return ret;
+                if (!(dca->packet & DCADEC_PACKET_CORE))
+                    return ret;
+                if ((ret = filter_core_frame(dca)) < 0)
+                    return ret;
+            } else {
+                if ((ret = filter_hd_ma_frame(dca)) < 0)
+                    return ret;
+            }
+        } else if (dca->packet & DCADEC_PACKET_CORE) {
             if ((ret = filter_core_frame(dca)) < 0)
                 return ret;
         } else {
-            if ((ret = filter_hd_ma_frame(dca)) < 0)
-                return ret;
+            return -DCADEC_EINVAL;
         }
-    } else if (dca->packet & DCADEC_PACKET_CORE) {
-        if ((ret = filter_core_frame(dca)) < 0)
-            return ret;
-    } else {
-        return -DCADEC_EINVAL;
+        dca->packet |= DCADEC_PACKET_FILTERED;
     }
 
     if (samples)
