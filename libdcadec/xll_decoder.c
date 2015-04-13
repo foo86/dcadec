@@ -180,7 +180,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         chs->primary_chset = true;
         chs->dmix_coeffs_present = false;
         chs->dmix_embedded = false;
-        chs->hier_chset = false;
+        chs->hier_chset = true;
         chs->ch_mask_enabled = false;
         chs->ch_mask = 0;
 
@@ -849,7 +849,8 @@ static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
             return ret;
         if (chs->nfreqbands > xll->nfreqbands)
             xll->nfreqbands = chs->nfreqbands;
-        xll->nchannels += chs->nchannels;
+        if (chs->hier_chset)
+            xll->nchannels += chs->nchannels;
     }
 
     // Number of active channel sets to decode

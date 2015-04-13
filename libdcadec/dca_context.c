@@ -261,44 +261,58 @@ static int map_spkr_to_core_ch(struct core_decoder *core, int spkr)
     return -1;
 }
 
-static struct xll_chset *find_hier_dmix_chset(struct xll_chset *c)
+static struct xll_chset *find_first_hier_dmix_chset(struct xll_decoder *xll)
 {
-    struct xll_decoder *xll = c->decoder;
-
-    while (++c < &xll->chset[xll->nchsets])
+    for_each_chset(xll, c)
         if (!c->primary_chset && c->dmix_embedded && c->hier_chset)
             return c;
 
     return NULL;
 }
 
-static void undo_down_mix(struct xll_chset *c, int **samples0, int **samples1,
-                          int **deci_history, int nchannels)
+static struct xll_chset *find_next_hier_dmix_chset(struct xll_chset *c)
+{
+    struct xll_decoder *xll = c->decoder;
+
+    if (c->hier_chset)
+        while (++c < &xll->chset[xll->nchsets])
+            if (!c->primary_chset && c->dmix_embedded && c->hier_chset)
+                return c;
+
+    return NULL;
+}
+
+struct downmix {
+    int *samples[2][XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
+    int *deci_history[XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
+};
+
+static void undo_down_mix(struct xll_chset *c, struct downmix *dmix)
 {
     struct xll_decoder *xll = c->decoder;
     int nsamples = xll->nframesamples;
 
     // Pre-scale by next channel set in hierarchy
-    struct xll_chset *o = find_hier_dmix_chset(c);
+    struct xll_chset *o = find_next_hier_dmix_chset(c);
     if (o) {
         int *coeff_ptr = c->dmix_coeff;
-        for (int i = 0; i < nchannels; i++) {
+        for (int i = 0; i < c->dmix_m; i++) {
             int scale_inv = o->dmix_scale_inv[i];
             for (int j = 0; j < c->nchannels; j++) {
                 int coeff = mul16(*coeff_ptr, scale_inv);
-                *coeff_ptr++ = mul15(coeff, o->dmix_scale[nchannels + j]);
+                *coeff_ptr++ = mul15(coeff, o->dmix_scale[c->dmix_m + j]);
             }
         }
     }
 
     // Undo downmix of preceding channels in frequency band 0
     int *coeff_ptr = c->dmix_coeff;
-    for (int i = 0; i < nchannels; i++) {
+    for (int i = 0; i < c->dmix_m; i++) {
         for (int j = 0; j < c->nchannels; j++) {
             int coeff = *coeff_ptr++;
             if (coeff) {
                 int *src = c->msb_sample_buffer[0][j];
-                int *dst = samples0[i];
+                int *dst = dmix->samples[0][i];
                 for (int k = 0; k < nsamples; k++)
                     dst[k] -= mul15(src[k], coeff);
             }
@@ -308,19 +322,19 @@ static void undo_down_mix(struct xll_chset *c, int **samples0, int **samples1,
     // Undo downmix of preceding channels in frequency band 1
     if (c->nfreqbands > 1 && c->band_dmix_embedded[1]) {
         int *coeff_ptr = c->dmix_coeff;
-        for (int i = 0; i < nchannels; i++) {
+        for (int i = 0; i < c->dmix_m; i++) {
             for (int j = 0; j < c->nchannels; j++) {
                 int coeff = *coeff_ptr++;
                 if (coeff) {
                     // Undo downmix of channel samples
                     int *src = c->msb_sample_buffer[1][j];
-                    int *dst = samples1[i];
+                    int *dst = dmix->samples[1][i];
                     for (int k = 0; k < nsamples; k++)
                         dst[k] -= mul15(src[k], coeff);
 
                     // Undo downmix of decimator history
                     src = c->deci_history[j];
-                    dst = deci_history[i];
+                    dst = dmix->deci_history[i];
                     for (int k = 1; k < XLL_DECI_HISTORY; k++)
                         dst[k] -= mul15(src[k], coeff);
                 }
@@ -329,26 +343,25 @@ static void undo_down_mix(struct xll_chset *c, int **samples0, int **samples1,
     }
 }
 
-static void scale_down_mix(struct xll_chset *c, int **samples0, int **samples1,
-                           int **deci_history, int nchannels)
+static void scale_down_mix(struct xll_chset *c, struct downmix *dmix)
 {
     struct xll_decoder *xll = c->decoder;
     int nsamples = xll->nframesamples;
 
     // Pre-scale by next channel set in hierarchy
-    struct xll_chset *o = find_hier_dmix_chset(c);
+    struct xll_chset *o = find_next_hier_dmix_chset(c);
     if (o) {
-        for (int i = 0; i < nchannels; i++) {
+        for (int i = 0; i < c->dmix_m; i++) {
             int scale = o->dmix_scale[i];
             c->dmix_scale[i] = mul15(c->dmix_scale[i], scale);
         }
     }
 
     // Scale down preceding channels in frequency band 0
-    for (int i = 0; i < nchannels; i++) {
+    for (int i = 0; i < c->dmix_m; i++) {
         int scale = c->dmix_scale[i];
         if (scale != (1 << 15)) {
-            int *buf = samples0[i];
+            int *buf = dmix->samples[0][i];
             for (int k = 0; k < nsamples; k++)
                 buf[k] = mul15(buf[k], scale);
         }
@@ -356,16 +369,16 @@ static void scale_down_mix(struct xll_chset *c, int **samples0, int **samples1,
 
     // Scale down preceding channels in frequency band 1
     if (c->nfreqbands > 1 && c->band_dmix_embedded[1]) {
-        for (int i = 0; i < nchannels; i++) {
+        for (int i = 0; i < c->dmix_m; i++) {
             int scale = c->dmix_scale[i];
             if (scale != (1 << 15)) {
                 // Scale down channel samples
-                int *buf = samples1[i];
+                int *buf = dmix->samples[1][i];
                 for (int k = 0; k < nsamples; k++)
                     buf[k] = mul15(buf[k], scale);
 
                 // Scale down decimator history
-                buf = deci_history[i];
+                buf = dmix->deci_history[i];
                 for (int k = 1; k < XLL_DECI_HISTORY; k++)
                     buf[k] = mul15(buf[k], scale);
             }
@@ -506,10 +519,10 @@ static int combine_residual_core_frame(struct dcadec_context *dca,
     if (nsamples != core->npcmsamples)
         return -DCADEC_EINVAL;
 
-    // See if this channel set is downmixed and find the source
-    // channel set. If downmixed, undo core pre-scaling before
-    // combining with residual (residual is not scaled).
-    struct xll_chset *o = find_hier_dmix_chset(c);
+    // See if this channel set is downmixed and find the next channel set in
+    // hierarchy. If downmixed, undo core pre-scaling before combining with
+    // residual (residual is not scaled).
+    struct xll_chset *o = find_next_hier_dmix_chset(c);
 
     // Reduce core bit width and combine with residual
     for (int ch = 0; ch < c->nchannels; ch++) {
@@ -580,30 +593,33 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         }
     }
 
-    // Undo downmix
+    // Undo hierarchial downmix and apply scaling
     if (xll->nchsets > 1) {
-        // Channel vectors for downmix reversal
-        int *samples0[XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
-        int *samples1[XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
-        int *deci_history[XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
+        struct downmix dmix;
         int nchannels = 0;
 
-        // Undo embedded hierarchial downmix
+        // Build channel vectors for all active channel sets
         for_each_active_chset(xll, c) {
-            for (int ch = 0; ch < c->nchannels; ch++) {
-                samples0[nchannels] = c->msb_sample_buffer[0][ch];
-                samples1[nchannels] = c->msb_sample_buffer[1][ch];
-                deci_history[nchannels] = c->deci_history[ch];
-                nchannels++;
+            if (c->hier_chset) {
+                for (int ch = 0; ch < c->nchannels; ch++) {
+                    dmix.samples[0][nchannels] = c->msb_sample_buffer[0][ch];
+                    dmix.samples[1][nchannels] = c->msb_sample_buffer[1][ch];
+                    dmix.deci_history[nchannels] = c->deci_history[ch];
+                    nchannels++;
+                }
             }
-            struct xll_chset *o = find_hier_dmix_chset(c);
-            if (!o)
+        }
+
+        // Walk through downmix embedded channel sets
+        for (struct xll_chset *o = find_first_hier_dmix_chset(xll);
+             o != NULL; o = find_next_hier_dmix_chset(o)) {
+            if (o->dmix_m > nchannels)
+                o->dmix_m = nchannels;
+            if (o->dmix_m == nchannels) {
+                scale_down_mix(o, &dmix);
                 break;
-            // Apply downmix scaling to the last active channel set
-            if (c == &xll->chset[xll->nactivechsets - 1])
-                scale_down_mix(o, samples0, samples1, deci_history, nchannels);
-            else
-                undo_down_mix(o, samples0, samples1, deci_history, nchannels);
+            }
+            undo_down_mix(o, &dmix);
         }
     }
 
