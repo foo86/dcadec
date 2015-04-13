@@ -38,7 +38,7 @@ struct dcadec_context {
 
     bool core_residual_valid;
 
-    int *dmix_sample_buffer[2];
+    int *dmix_sample_buffer;
 
     int nframesamples;
     int sample_rate;
@@ -131,13 +131,11 @@ static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
     }
 
     // Reallocate downmix sample buffer
-    int ret = dca_realloc(dca, &dca->dmix_sample_buffer[0], 2 * nsamples, sizeof(int));
+    int ret = dca_realloc(dca, &dca->dmix_sample_buffer, 2 * nsamples, sizeof(int));
     if (ret < 0)
         return ret;
 
-    memset(dca->dmix_sample_buffer[0], 0, 2 * nsamples * sizeof(int));
-
-    dca->dmix_sample_buffer[1] = dca->dmix_sample_buffer[0] + nsamples;
+    memset(dca->dmix_sample_buffer, 0, 2 * nsamples * sizeof(int));
 
     int nchannels = dca_popcount(*ch_mask);
 
@@ -179,7 +177,7 @@ static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
 
             if (coeff) {
                 int *src = samples[spkr];
-                int *dst = dca->dmix_sample_buffer[ch];
+                int *dst = dca->dmix_sample_buffer + ch * nsamples;
                 for (int n = 0; n < nsamples; n++)
                     dst[n] += mul15(src[n], coeff);
             }
@@ -190,7 +188,7 @@ static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
 
     // Perform clipping
     for (int ch = 0; ch < 2; ch++) {
-        int *buf = dca->dmix_sample_buffer[ch];
+        int *buf = dca->dmix_sample_buffer + ch * nsamples;
         switch (bits_per_sample) {
         case 24:
             for (int n = 0; n < nsamples; n++)
@@ -207,8 +205,8 @@ static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
         }
     }
 
-    samples[SPEAKER_L] = dca->dmix_sample_buffer[0];
-    samples[SPEAKER_R] = dca->dmix_sample_buffer[1];
+    samples[SPEAKER_L] = dca->dmix_sample_buffer;
+    samples[SPEAKER_R] = dca->dmix_sample_buffer + nsamples;
     *ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
     return 0;
 }
