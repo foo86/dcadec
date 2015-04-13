@@ -343,6 +343,27 @@ static void undo_down_mix(struct xll_chset *c, struct downmix *dmix)
     }
 }
 
+static void scale_down(int *buf, int nsamples, int bits_per_sample, int scale)
+{
+    if (scale == (1 << 15))
+        return;
+
+    switch (bits_per_sample) {
+    case 24:
+        for (int n = 0; n < nsamples; n++)
+            buf[n] = clip23(mul15(buf[n], scale));
+        break;
+    case 16:
+        for (int n = 0; n < nsamples; n++)
+            buf[n] = clip15(mul15(buf[n], scale));
+        break;
+    default:
+        for (int n = 0; n < nsamples; n++)
+            buf[n] = clip__(mul15(buf[n], scale), bits_per_sample - 1);
+        break;
+    }
+}
+
 static void scale_down_mix(struct xll_chset *c, struct downmix *dmix)
 {
     struct xll_decoder *xll = c->decoder;
@@ -359,29 +380,19 @@ static void scale_down_mix(struct xll_chset *c, struct downmix *dmix)
 
     // Scale down preceding channels in frequency band 0
     for (int i = 0; i < c->dmix_m; i++) {
-        int scale = c->dmix_scale[i];
-        if (scale != (1 << 15)) {
-            int *buf = dmix->samples[0][i];
-            for (int k = 0; k < nsamples; k++)
-                buf[k] = mul15(buf[k], scale);
-        }
+        scale_down(dmix->samples[0][i], nsamples,
+                   c->pcm_bit_res, c->dmix_scale[i]);
     }
 
     // Scale down preceding channels in frequency band 1
     if (c->nfreqbands > 1 && c->band_dmix_embedded[1]) {
         for (int i = 0; i < c->dmix_m; i++) {
-            int scale = c->dmix_scale[i];
-            if (scale != (1 << 15)) {
-                // Scale down channel samples
-                int *buf = dmix->samples[1][i];
-                for (int k = 0; k < nsamples; k++)
-                    buf[k] = mul15(buf[k], scale);
-
-                // Scale down decimator history
-                buf = dmix->deci_history[i];
-                for (int k = 1; k < XLL_DECI_HISTORY; k++)
-                    buf[k] = mul15(buf[k], scale);
-            }
+            // Scale down channel samples
+            scale_down(dmix->samples[1][i], nsamples,
+                       c->pcm_bit_res, c->dmix_scale[i]);
+            // Scale down decimator history
+            scale_down(dmix->deci_history[i] + 1, XLL_DECI_HISTORY - 1,
+                       c->pcm_bit_res, c->dmix_scale[i]);
         }
     }
 }
