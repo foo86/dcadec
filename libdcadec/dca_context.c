@@ -725,7 +725,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
 
     dca->packet = 0;
 
-    if (DCA_RAW32(data) == DCA_32BE(SYNC_WORD_CORE)) {
+    if (DCA_MEM32NE(data) == DCA_32BE(SYNC_WORD_CORE)) {
         if (!dca->core)
             if (!(dca->core = ta_znew(dca, struct core_decoder)))
                 return -DCADEC_ENOMEM;
@@ -743,7 +743,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
         }
     }
 
-    if (DCA_RAW32(data) == DCA_32BE(SYNC_WORD_EXSS)) {
+    if (DCA_MEM32NE(data) == DCA_32BE(SYNC_WORD_EXSS)) {
         if (!dca->exss)
             if (!(dca->exss = ta_znew(dca, struct exss_parser)))
                 return -DCADEC_ENOMEM;
