@@ -37,7 +37,7 @@
 static void print_help(char *name)
 {
     fprintf(stderr,
-"Usage: %s [-26bcfhlnPqsx] <input.dts> [output.wav]\n"
+"Usage: %s [-26bcfhlnPqSsx] <input.dts> [output.wav]\n"
 "dcadec is a free DTS Coherent Acoustics decoder. Supported options:\n"
 "\n"
 "-2  Extract embedded 2.0 downmix.\n"
@@ -61,6 +61,8 @@ static void print_help(char *name)
 "\n"
 "-q  Be quiet. Disables informational messages and progress indicator. Warnings\n"
 "    and errors are still printed.\n"
+"\n"
+"-S  Don't strip padding samples for streams within DTS-HD container.\n"
 "\n"
 "-s  Force bit width reduction of DTS core from 24 bit to source PCM resolution.\n"
 "    Developer option, degrades sound quality.\n"
@@ -142,9 +144,10 @@ int main(int argc, char **argv)
     bool parse_only = false;
     bool no_progress = false;
     bool quiet = false;
+    bool no_strip = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "26bcfhlnPqsx")) != -1) {
+    while ((opt = getopt(argc, argv, "26bcfhlnPqSsx")) != -1) {
         switch (opt) {
         case '2':
             flags |= DCADEC_FLAG_KEEP_DMIX_2CH;
@@ -175,6 +178,9 @@ int main(int argc, char **argv)
             break;
         case 'q':
             quiet = true;
+            break;
+        case 'S':
+            no_strip = true;
             break;
         case 's':
             flags |= DCADEC_FLAG_CORE_SOURCE_PCM_RES;
@@ -251,6 +257,7 @@ int main(int argc, char **argv)
             dcadec_stream_close(stream);
             return 1;
         }
+
     }
 
     int last_progress = -1;
@@ -260,6 +267,20 @@ int main(int argc, char **argv)
 #else
     signal(SIGINT, &signal_handler);
 #endif
+
+    uint32_t ndelayframes = 0;
+    uint64_t npcmsamples = UINT64_MAX;
+
+    if (!parse_only && !no_strip) {
+        struct dcadec_stream_info *info = dcadec_stream_get_info(stream);
+        if (info) {
+            if (info->nframesamples)
+                ndelayframes = info->ndelaysamples / info->nframesamples;
+            if (info->npcmsamples)
+                npcmsamples = info->npcmsamples;
+            dcadec_stream_free_info(info);
+        }
+    }
 
     if (!quiet) {
         if (waveout) {
@@ -288,6 +309,14 @@ int main(int argc, char **argv)
                     goto next_packet;
             }
 
+            if (ndelayframes) {
+                ndelayframes--;
+                goto next_packet;
+            }
+
+            if ((uint64_t)nsamples > npcmsamples)
+                nsamples = npcmsamples;
+
             if ((ret = dcadec_waveout_write(waveout, samples, nsamples,
                                             channel_mask, sample_rate,
                                             bits_per_sample)) < 0) {
@@ -295,6 +324,8 @@ int main(int argc, char **argv)
                 if ((flags & DCADEC_FLAG_STRICT) || ret == -DCADEC_EIO)
                     break;
             }
+
+            npcmsamples -= nsamples;
         }
 
 next_packet:
