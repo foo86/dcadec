@@ -31,12 +31,24 @@
 #define HEADER_SIZE     16
 #define SYNC_SIZE       4
 
+#define AUPR_HDR    UINT64_C(0x415550522D484452)
+#define DTSHDHDR    UINT64_C(0x4454534844484452)
+#define STRMDATA    UINT64_C(0x5354524D44415441)
+
 struct dcadec_stream {
     FILE    *fp;
 
     off_t   stream_size;
     off_t   stream_start;
     off_t   stream_end;
+
+    bool        aupr_present;
+    uint32_t    aupr_sample_rate;
+    uint32_t    aupr_nframes;
+    uint32_t    aupr_nframesamples;
+    uint64_t    aupr_npcmsamples;
+    uint32_t    aupr_ch_mask;
+    uint32_t    aupr_ndelaysamples;
 
     uint8_t     *buffer;
     size_t      packet_size;
@@ -55,14 +67,16 @@ static int parse_hd_hdr(struct dcadec_stream *stream)
     if (fread(header, sizeof(header), 1, stream->fp) != 1)
         return fseeko(stream->fp, 0, SEEK_SET);
 
-    if (memcmp(header, "DTSHDHDR", 8))
+    if (header[0] != DCA_64BE(DTSHDHDR))
         return fseeko(stream->fp, 0, SEEK_SET);
 
     while (true) {
-        off_t size = DCA_64BE(header[1]);
-        if (size < 0)
+        uint64_t size = DCA_64BE(header[1]);
+        if (size > INT64_MAX)
             return -1;
-        if (!memcmp(header, "STRMDATA", 8)) {
+
+        switch (header[0]) {
+        case DCA_64BE(STRMDATA): {
             off_t pos = ftello(stream->fp);
             if (pos < 0)
                 return -1;
@@ -71,8 +85,45 @@ static int parse_hd_hdr(struct dcadec_stream *stream)
             stream->stream_end = pos + size;
             return 1;
         }
-        if (fseeko(stream->fp, size, SEEK_CUR) < 0)
-            return -1;
+
+        case DCA_64BE(AUPR_HDR): {
+            uint8_t data[21];
+
+            if (size < sizeof(data))
+                return -1;
+            if (fread(data, sizeof(data), 1, stream->fp) != 1)
+                return -1;
+            if (fseeko(stream->fp, size - sizeof(data), SEEK_CUR) < 0)
+                return -1;
+
+            stream->aupr_present = true;
+
+            // Sample rate in Hz
+            stream->aupr_sample_rate = DCA_MEM24BE(&data[3]);
+
+            // Number of frames
+            stream->aupr_nframes = DCA_MEM32BE(&data[6]);
+
+            // Number of PCM samples per frame
+            stream->aupr_nframesamples = DCA_MEM16BE(&data[10]);
+
+            // Number of PCM samples encoded
+            stream->aupr_npcmsamples = DCA_MEM40BE(&data[12]);
+
+            // EXSS channel mask
+            stream->aupr_ch_mask = DCA_MEM16BE(&data[17]);
+
+            // Codec delay in samples
+            stream->aupr_ndelaysamples = DCA_MEM16BE(&data[19]);
+            break;
+        }
+
+        default:
+            if (fseeko(stream->fp, size, SEEK_CUR) < 0)
+                return -1;
+            break;
+        }
+
         if (fread(header, sizeof(header), 1, stream->fp) != 1)
             return -1;
     }
@@ -332,4 +383,27 @@ DCADEC_API int dcadec_stream_progress(struct dcadec_stream *stream)
         return (int)((pos - stream->stream_start) * 100 / stream->stream_size);
     }
     return -1;
+}
+
+DCADEC_API struct dcadec_stream_info *dcadec_stream_get_info(struct dcadec_stream *stream)
+{
+    if (!stream || !stream->aupr_present)
+        return NULL;
+    struct dcadec_stream_info *info = ta_znew(NULL, struct dcadec_stream_info);
+    if (!info)
+        return NULL;
+
+    info->stream_size = stream->stream_size;
+    info->sample_rate = stream->aupr_sample_rate;
+    info->nframes = stream->aupr_nframes;
+    info->nframesamples = stream->aupr_nframesamples;
+    info->npcmsamples = stream->aupr_npcmsamples;
+    info->ch_mask = stream->aupr_ch_mask;
+    info->ndelaysamples = stream->aupr_ndelaysamples;
+    return info;
+}
+
+DCADEC_API void dcadec_stream_free_info(struct dcadec_stream_info *info)
+{
+    ta_free(info);
 }

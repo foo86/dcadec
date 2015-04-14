@@ -23,9 +23,21 @@
 
 struct dcadec_stream;
 
+struct dcadec_stream_info {
+    uint64_t    stream_size;
+    uint32_t    sample_rate;
+    uint32_t    nframes;
+    uint32_t    nframesamples;
+    uint64_t    npcmsamples;
+    uint32_t    ch_mask;
+    uint32_t    ndelaysamples;
+};
+
 DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name);
 DCADEC_API void dcadec_stream_close(struct dcadec_stream *stream);
 DCADEC_API int dcadec_stream_read(struct dcadec_stream *stream, uint8_t **data, size_t *size);
 DCADEC_API int dcadec_stream_progress(struct dcadec_stream *stream);
+DCADEC_API struct dcadec_stream_info *dcadec_stream_get_info(struct dcadec_stream *stream);
+DCADEC_API void dcadec_stream_free_info(struct dcadec_stream_info *info);
 
 #endif
