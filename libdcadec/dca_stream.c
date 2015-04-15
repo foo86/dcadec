@@ -246,7 +246,7 @@ static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
     // the sync word just read and return.
     if ((sync != SYNC_WORD_EXSS && sync != SYNC_WORD_EXSS_LE) && !sync_p) {
         stream->backup_sync = sync;
-        return -2;
+        return -DCADEC_ENOSYNC;
     }
 
     // Clear backed up sync word
@@ -255,7 +255,7 @@ static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
     // Reallocate packet buffer
     uint8_t *buf;
     if (!(buf = prepare_packet_buffer(stream, HEADER_SIZE)))
-        return -1;
+        return -DCADEC_ENOMEM;
 
     // Read the frame header
     if (fread(buf + SYNC_SIZE, HEADER_SIZE - SYNC_SIZE, 1, stream->fp) != 1)
@@ -286,21 +286,21 @@ static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
         bool normal_frame = bits_get1(&bits);
         int deficit_samples = bits_get(&bits, 5) + 1;
         if (normal_frame && deficit_samples != 32)
-            return -2;
+            return -DCADEC_ENOSYNC;
         bits_skip1(&bits);
         int npcmblocks = bits_get(&bits, 7) + 1;
         if (npcmblocks < 6)
-            return -2;
+            return -DCADEC_ENOSYNC;
         frame_size = bits_get(&bits, 14) + 1;
         if (frame_size < 96)
-            return -2;
+            return -DCADEC_ENOSYNC;
     } else {
         bits_skip(&bits, 10);
         bool wide_hdr = bits_get1(&bits);
         bits_skip(&bits, 8 + 4 * wide_hdr);
         frame_size = bits_get(&bits, 16 + 4 * wide_hdr) + 1;
         if (frame_size < HEADER_SIZE)
-             return -2;
+             return -DCADEC_ENOSYNC;
     }
 
     // Align frame size to 4-byte boundary
@@ -308,7 +308,7 @@ static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
 
     // Reallocate packet buffer
     if (!(buf = prepare_packet_buffer(stream, aligned_size)))
-        return -1;
+        return -DCADEC_ENOMEM;
 
     // Read the rest of the frame
     if (fread(buf + HEADER_SIZE, frame_size - HEADER_SIZE, 1, stream->fp) != 1)
@@ -346,16 +346,16 @@ DCADEC_API int dcadec_stream_read(struct dcadec_stream *stream, uint8_t **data, 
             break;
         if (ret == 0)
             return ferror(stream->fp) ? -DCADEC_EIO : 0;
-        if (ret == -1)
-            return -DCADEC_ENOMEM;
+        if (ret < 0 && ret != -DCADEC_ENOSYNC)
+            return ret;
     }
 
     // Check for EXSS that may follow core frame and try to concatenate both
     // frames into single packet
     if (sync == SYNC_WORD_CORE) {
         ret = read_frame(stream, NULL);
-        if (ret == -1)
-            return -DCADEC_ENOMEM;
+        if (ret < 0 && ret != -DCADEC_ENOSYNC)
+            return ret;
         // If the previous frame was core + EXSS, skip the incomplete (core
         // only) frame at end of file
         if (ret == 0 && stream->core_plus_exss)
