@@ -98,6 +98,9 @@
        typeof(b) _b = (b); \
        _a < _b ? _a : _b; })
 
+#define DCA_ALIGN(value, align) \
+    (((value) + (align) - 1) & ~((align) - 1))
+
 #define DCA_MEM16BE(data) \
     (((uint32_t)(data)[0] <<  8) | (data)[1])
 

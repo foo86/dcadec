@@ -736,7 +736,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
         dca->packet |= DCADEC_PACKET_CORE;
 
         // EXXS data must be aligned on 4-byte boundary by the caller
-        size_t frame_size = (dca->core->frame_size + 3) & ~3;
+        size_t frame_size = DCA_ALIGN(dca->core->frame_size, 4);
         if (size - 4 > frame_size) {
             data += frame_size;
             size -= frame_size;

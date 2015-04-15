@@ -196,7 +196,7 @@ DCADEC_API void dcadec_stream_close(struct dcadec_stream *stream)
 static uint8_t *prepare_packet_buffer(struct dcadec_stream *stream, size_t size)
 {
     size += stream->packet_size + DCADEC_BUFFER_PADDING;
-    size = (size + BUFFER_ALIGN - 1) & ~(BUFFER_ALIGN - 1);
+    size = DCA_ALIGN(size, BUFFER_ALIGN);
 
     uint8_t *buf = ta_realloc_size(stream, stream->buffer, size);
     if (buf) {
@@ -304,7 +304,7 @@ static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
     }
 
     // Align frame size to 4-byte boundary
-    size_t aligned_size = (frame_size + 3) & ~3;
+    size_t aligned_size = DCA_ALIGN(frame_size, 4);
 
     // Reallocate packet buffer
     if (!(buf = prepare_packet_buffer(stream, aligned_size)))

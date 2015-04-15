@@ -154,13 +154,13 @@ int bits_seek(struct bitstream *bits, size_t n)
 
 size_t bits_align1(struct bitstream *bits)
 {
-    bits->index = (bits->index + 7) & ~7;
+    bits->index = DCA_ALIGN(bits->index, 8);
     return bits->index;
 }
 
 size_t bits_align4(struct bitstream *bits)
 {
-    bits->index = (bits->index + 31) & ~31;
+    bits->index = DCA_ALIGN(bits->index, 32);
     return bits->index;
 }
 
