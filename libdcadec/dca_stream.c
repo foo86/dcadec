@@ -193,17 +193,18 @@ DCADEC_API void dcadec_stream_close(struct dcadec_stream *stream)
     }
 }
 
-static int realloc_buffer(struct dcadec_stream *stream, size_t size)
+static uint8_t *prepare_packet_buffer(struct dcadec_stream *stream, size_t size)
 {
-    size = (size + DCADEC_BUFFER_PADDING + BUFFER_ALIGN - 1) & ~(BUFFER_ALIGN - 1);
-    if (ta_get_size(stream->buffer) < size) {
-        void *buf = ta_realloc_size(stream, stream->buffer, size);
-        if (!buf)
-            return -1;
+    size += stream->packet_size + DCADEC_BUFFER_PADDING;
+    size = (size + BUFFER_ALIGN - 1) & ~(BUFFER_ALIGN - 1);
+
+    uint8_t *buf = ta_realloc_size(stream, stream->buffer, size);
+    if (buf) {
         stream->buffer = buf;
-        return 1;
+        return buf + stream->packet_size;
     }
-    return 0;
+
+    return NULL;
 }
 
 static void swap16(uint32_t *data, size_t size)
@@ -251,12 +252,12 @@ static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
     // Clear backed up sync word
     stream->backup_sync = 0;
 
-    // Reallocate frame buffer
-    if (realloc_buffer(stream, stream->packet_size + HEADER_SIZE) < 0)
+    // Reallocate packet buffer
+    uint8_t *buf;
+    if (!(buf = prepare_packet_buffer(stream, HEADER_SIZE)))
         return -1;
 
     // Read the frame header
-    uint8_t *buf = stream->buffer + stream->packet_size;
     if (fread(buf + SYNC_SIZE, HEADER_SIZE - SYNC_SIZE, 1, stream->fp) != 1)
         return 0;
 
@@ -305,12 +306,11 @@ static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
     // Align frame size to 4-byte boundary
     size_t aligned_size = (frame_size + 3) & ~3;
 
-    // Reallocate frame buffer
-    if (realloc_buffer(stream, stream->packet_size + aligned_size) < 0)
+    // Reallocate packet buffer
+    if (!(buf = prepare_packet_buffer(stream, aligned_size)))
         return -1;
 
     // Read the rest of the frame
-    buf = stream->buffer + stream->packet_size;
     if (fread(buf + HEADER_SIZE, frame_size - HEADER_SIZE, 1, stream->fp) != 1)
         return 0;
 
