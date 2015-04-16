@@ -219,7 +219,7 @@ int main(int argc, char **argv)
     }
 
     if (ret == 0) {
-        fprintf(stderr, "This doesn't look like a 16-bit DTS bit stream\n");
+        fprintf(stderr, "This doesn't look like a valid DTS bit stream\n");
         dcadec_stream_close(stream);
         return 1;
     }

@@ -18,6 +18,7 @@
 
 #include "common.h"
 #include "bitstream.h"
+#include "dca_frame.h"
 #include "dca_stream.h"
 
 #ifdef _WIN32
@@ -28,12 +29,18 @@
 #endif
 
 #define BUFFER_ALIGN    4096
-#define HEADER_SIZE     16
-#define SYNC_SIZE       4
 
 #define AUPR_HDR    UINT64_C(0x415550522D484452)
 #define DTSHDHDR    UINT64_C(0x4454534844484452)
 #define STRMDATA    UINT64_C(0x5354524D44415441)
+
+#if (defined _WIN32)
+#define DCA_FGETC   _fgetc_nolock
+#elif (defined _BSD_SOURCE)
+#define DCA_FGETC   fgetc_unlocked
+#else
+#define DCA_FGETC   fgetc
+#endif
 
 struct dcadec_stream {
     FILE    *fp;
@@ -195,6 +202,7 @@ DCADEC_API void dcadec_stream_close(struct dcadec_stream *stream)
 
 static uint8_t *prepare_packet_buffer(struct dcadec_stream *stream, size_t size)
 {
+    size = DCA_ALIGN(size, DCADEC_FRAME_BUFFER_ALIGN);
     size += stream->packet_size + DCADEC_BUFFER_PADDING;
     size = DCA_ALIGN(size, BUFFER_ALIGN);
 
@@ -207,24 +215,12 @@ static uint8_t *prepare_packet_buffer(struct dcadec_stream *stream, size_t size)
     return NULL;
 }
 
-static void swap16(uint32_t *data, size_t size)
-{
-    while (size--) {
-        uint32_t v = *data;
-        *data++ = ((v & 0x00ff00ff) << 8) | ((v & 0xff00ff00) >> 8);
-    }
-}
-
-#if (defined _WIN32)
-#define DCA_FGETC   _fgetc_nolock
-#elif (defined _BSD_SOURCE)
-#define DCA_FGETC   fgetc_unlocked
-#else
-#define DCA_FGETC   fgetc
-#endif
-
 static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
 {
+    uint8_t header[DCADEC_FRAME_HEADER_SIZE], *buf;
+    size_t frame_size;
+    int ret;
+
     // Stop at position indicated by STRMDATA if known
     if (stream->stream_end > 0 && ftello(stream->fp) >= stream->stream_end)
         return 0;
@@ -235,7 +231,9 @@ static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
     while (sync != SYNC_WORD_CORE
         && sync != SYNC_WORD_EXSS
         && sync != SYNC_WORD_CORE_LE
-        && sync != SYNC_WORD_EXSS_LE) {
+        && sync != SYNC_WORD_EXSS_LE
+        && sync != SYNC_WORD_CORE_LE14
+        && sync != SYNC_WORD_CORE_BE14) {
         int c = DCA_FGETC(stream->fp);
         if (c == EOF)
             return 0;
@@ -252,81 +250,37 @@ static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
     // Clear backed up sync word
     stream->backup_sync = 0;
 
-    // Reallocate packet buffer
-    uint8_t *buf;
-    if (!(buf = prepare_packet_buffer(stream, HEADER_SIZE)))
-        return -DCADEC_ENOMEM;
+    // Restore sync word
+    header[0] = (sync >> 24) & 0xff;
+    header[1] = (sync >> 16) & 0xff;
+    header[2] = (sync >>  8) & 0xff;
+    header[3] = (sync >>  0) & 0xff;
 
     // Read the frame header
-    if (fread(buf + SYNC_SIZE, HEADER_SIZE - SYNC_SIZE, 1, stream->fp) != 1)
+    if (fread(header + 4, sizeof(header) - 4, 1, stream->fp) != 1)
         return 0;
 
-    bool swap = false;
-    switch (sync) {
-    case SYNC_WORD_CORE_LE:
-        sync = SYNC_WORD_CORE;
-        swap = true;
-        break;
-    case SYNC_WORD_EXSS_LE:
-        sync = SYNC_WORD_EXSS;
-        swap = true;
-        break;
-    }
-
-    if (swap)
-        swap16((uint32_t *)buf, HEADER_SIZE / 4);
-
-    struct bitstream bits;
-
-    bits_init(&bits, buf + SYNC_SIZE, HEADER_SIZE - SYNC_SIZE);
-
-    size_t frame_size;
-
-    if (sync == SYNC_WORD_CORE) {
-        bool normal_frame = bits_get1(&bits);
-        int deficit_samples = bits_get(&bits, 5) + 1;
-        if (normal_frame && deficit_samples != 32)
-            return -DCADEC_ENOSYNC;
-        bits_skip1(&bits);
-        int npcmblocks = bits_get(&bits, 7) + 1;
-        if (npcmblocks < 6)
-            return -DCADEC_ENOSYNC;
-        frame_size = bits_get(&bits, 14) + 1;
-        if (frame_size < 96)
-            return -DCADEC_ENOSYNC;
-    } else {
-        bits_skip(&bits, 10);
-        bool wide_hdr = bits_get1(&bits);
-        bits_skip(&bits, 8 + 4 * wide_hdr);
-        frame_size = bits_get(&bits, 16 + 4 * wide_hdr) + 1;
-        if (frame_size < HEADER_SIZE)
-             return -DCADEC_ENOSYNC;
-    }
-
-    // Align frame size to 4-byte boundary
-    size_t aligned_size = DCA_ALIGN(frame_size, 4);
+    // Parse and validate the frame header
+    if ((ret = dcadec_frame_parse_header(header, &frame_size)) < 0)
+        return ret;
 
     // Reallocate packet buffer
-    if (!(buf = prepare_packet_buffer(stream, aligned_size)))
+    if (!(buf = prepare_packet_buffer(stream, frame_size)))
         return -DCADEC_ENOMEM;
 
+    // Restore frame header
+    memcpy(buf, header, sizeof(header));
+
     // Read the rest of the frame
-    if (fread(buf + HEADER_SIZE, frame_size - HEADER_SIZE, 1, stream->fp) != 1)
+    if (fread(buf + sizeof(header), frame_size - sizeof(header), 1, stream->fp) != 1)
         return 0;
 
-    if (swap)
-        swap16((uint32_t *)(buf + HEADER_SIZE), (aligned_size - HEADER_SIZE) / 4);
+    // Convert the frame in place
+    if ((ret = dcadec_frame_convert_bitstream(buf, &frame_size, buf, frame_size)) < 0)
+        return ret;
 
-    stream->packet_size += aligned_size;
-
-    // Shut up memcheck
-    memset(buf + frame_size, 0, aligned_size - frame_size + DCADEC_BUFFER_PADDING);
-
-    // Restore sync word
-    buf[0] = (sync >> 24) & 0xff;
-    buf[1] = (sync >> 16) & 0xff;
-    buf[2] = (sync >>  8) & 0xff;
-    buf[3] = (sync >>  0) & 0xff;
+    // Align frame size to 4-byte boundary
+    stream->packet_size += DCA_ALIGN(frame_size, 4);
 
     if (sync_p)
         *sync_p = sync;

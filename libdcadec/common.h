@@ -195,6 +195,8 @@ enum Speaker {
 enum SyncWord {
     SYNC_WORD_CORE      = 0x7ffe8001,
     SYNC_WORD_CORE_LE   = 0xfe7f0180,
+    SYNC_WORD_CORE_LE14 = 0xff1f00e8,
+    SYNC_WORD_CORE_BE14 = 0x1fffe800,
     SYNC_WORD_REV1AUX   = 0x9a1105a0,
     SYNC_WORD_REV2AUX   = 0x7004c070,
     SYNC_WORD_XCH       = 0x5a5a5a5a,

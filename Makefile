@@ -52,8 +52,10 @@ INC_LIB = \
 libdcadec/dca_context.h
 
 ifndef CONFIG_SMALL
+SRC_LIB += libdcadec/dca_frame.c
 SRC_LIB += libdcadec/dca_stream.c
 SRC_LIB += libdcadec/dca_waveout.c
+INC_LIB += libdcadec/dca_frame.h
 INC_LIB += libdcadec/dca_stream.h
 INC_LIB += libdcadec/dca_waveout.h
 endif
