@@ -85,4 +85,21 @@ DCADEC_API int dcadec_frame_convert_bitstream(uint8_t *dst, size_t *dst_size,
  */
 DCADEC_API int dcadec_frame_parse_header(const uint8_t *data, size_t *size);
 
+/**
+ * Given the raw frame size returned by dcadec_frame_parse_header(), calculate
+ * minimum required buffer size for performing bitstream format conversion and
+ * (possibly) parsing the frame.
+ *
+ * It is recommended to use this function instead of calculating buffer size
+ * manually based on DCADEC_FRAME_BUFFER_ALIGN and DCADEC_BUFFER_PADDING
+ * constants since alignment requirements may change in the future.
+ *
+ * @param size      Raw frame size, in bytes.
+ *
+ * @return          Buffer size, in bytes, padded to the minimum value that
+ *                  satisfies both dcadec_frame_convert_bitstream() alignment
+ *                  requirement and dcadec_context_parse() padding requirement.
+ */
+DCADEC_API size_t dcadec_frame_buffer_size(size_t size);
+
 #endif

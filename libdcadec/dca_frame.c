@@ -142,3 +142,11 @@ DCADEC_API int dcadec_frame_parse_header(const uint8_t *data, size_t *size)
         return -DCADEC_ENOSYNC;
     }
 }
+
+DCADEC_API size_t dcadec_frame_buffer_size(size_t size)
+{
+    size_t padding = -size & (DCADEC_FRAME_BUFFER_ALIGN - 1);
+    if (padding < DCADEC_BUFFER_PADDING)
+        padding = DCADEC_BUFFER_PADDING;
+    return size + padding;
+}
