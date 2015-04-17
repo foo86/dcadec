@@ -58,7 +58,11 @@
     } while (false)
 
 #ifdef __GNUC__
+#if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8)
 #define dca_bswap16(x)  __builtin_bswap16(x)
+#else
+static inline uint16_t dca_bswap16(uint16_t x) { return (x << 8) | (x >> 8); }
+#endif
 #define dca_bswap32(x)  __builtin_bswap32(x)
 #define dca_bswap64(x)  __builtin_bswap64(x)
 #define dca_clz32(x)    __builtin_clz(x)
