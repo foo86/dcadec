@@ -309,7 +309,7 @@ DCADEC_API int dcadec_stream_read(struct dcadec_stream *stream, uint8_t **data, 
 
     // Check for EXSS that may follow core frame and try to concatenate both
     // frames into single packet
-    if (sync == SYNC_WORD_CORE) {
+    if (sync == SYNC_WORD_CORE || sync == SYNC_WORD_CORE_LE) {
         ret = read_frame(stream, NULL);
         if (ret < 0 && ret != -DCADEC_ENOSYNC)
             return ret;
