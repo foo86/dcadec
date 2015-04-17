@@ -28,12 +28,9 @@ static void sum_a(const int * restrict input, int * restrict output, int len)
 
 static void sum_b(const int * restrict input, int * restrict output, int len)
 {
-    for (int i = 0; i < len; i++) {
-        if (i > 0)
-            output[i] = input[2 * i] + input[2 * i - 1];
-        else
-            output[i] = input[2 * i];
-    }
+    output[0] = input[0];
+    for (int i = 1; i < len; i++)
+        output[i] = input[2 * i] + input[2 * i - 1];
 }
 
 static void sum_c(const int * restrict input, int * restrict output, int len)
@@ -44,12 +41,9 @@ static void sum_c(const int * restrict input, int * restrict output, int len)
 
 static void sum_d(const int * restrict input, int * restrict output, int len)
 {
-    for (int i = 0; i < len; i++) {
-        if (i > 0)
-            output[i] = input[2 * i - 1] + input[2 * i + 1];
-        else
-            output[i] = input[2 * i + 1];
-    }
+    output[0] = input[1];
+    for (int i = 1; i < len; i++)
+        output[i] = input[2 * i - 1] + input[2 * i + 1];
 }
 
 static void dct_a(const int * restrict input, int * restrict output)
