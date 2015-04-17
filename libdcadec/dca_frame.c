@@ -46,11 +46,17 @@ DCADEC_API int dcadec_frame_convert_bitstream(uint8_t *dst, size_t *dst_size,
     uint16_t *_dst = (uint16_t *)dst;
     size_t count;
 
-    switch (DCA_MEM32NE(src)) {
+    if ((uintptr_t)_dst & 3)
+        return -DCADEC_EINVAL;
+
+    if ((uintptr_t)_src & 1)
+        _src = memcpy(_dst, _src, src_size);
+
+    switch (DCA_MEM32NE(_src)) {
     case DCA_32BE(SYNC_WORD_CORE):
     case DCA_32BE(SYNC_WORD_EXSS):
-        if (src != dst)
-            memcpy(dst, src, src_size);
+        if (_src != _dst)
+            memcpy(_dst, _src, src_size);
         *dst_size = src_size;
         return DCADEC_BITSTREAM_BE16;
 
