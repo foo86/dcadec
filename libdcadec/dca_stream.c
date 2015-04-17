@@ -180,7 +180,7 @@ DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name)
             goto fail2;
     }
 
-    if (!(stream->buffer = ta_alloc_size(stream, BUFFER_ALIGN)))
+    if (!(stream->buffer = ta_zalloc_size(stream, BUFFER_ALIGN)))
         goto fail2;
 
     return stream;
@@ -202,15 +202,20 @@ DCADEC_API void dcadec_stream_close(struct dcadec_stream *stream)
 
 static uint8_t *prepare_packet_buffer(struct dcadec_stream *stream, size_t size)
 {
-    size = DCA_ALIGN(stream->packet_size + size, BUFFER_ALIGN);
+    size_t old_size = ta_get_size(stream->buffer);
+    size_t new_size = DCA_ALIGN(stream->packet_size + size, BUFFER_ALIGN);
 
-    uint8_t *buf = ta_realloc_size(stream, stream->buffer, size);
-    if (buf) {
-        stream->buffer = buf;
-        return buf + stream->packet_size;
+    if (old_size < new_size) {
+        uint8_t *buf = ta_realloc_size(stream, stream->buffer, new_size);
+        if (buf) {
+            memset(buf + old_size, 0, new_size - old_size);
+            stream->buffer = buf;
+        } else {
+            return NULL;
+        }
     }
 
-    return NULL;
+    return stream->buffer + stream->packet_size;
 }
 
 static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
