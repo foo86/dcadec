@@ -48,20 +48,25 @@
 /**
  * Convert the raw input frame into native 16-bit big-endian format understood
  * by dcadec_context_parse(). Can operate in-place when destination buffer
- * is the same as source buffer.
+ * is the same as source buffer. In all other cases destination and source
+ * buffers must not overlap.
  *
  * @param dst       Pointer to destination buffer. Destination buffer size
  *                  must be no less than source buffer size, including
- *                  alignment.
+ *                  padding to the next multiple of DCADEC_FRAME_BUFFER_ALIGN.
+ *                  Destination buffer must be aligned on 4-byte boundary in
+ *                  memory.
  *
  * @param dst_size  Filled with resulting frame size after conversion, in bytes.
  *
  * @param src       Pointer to source buffer that must start with a valid sync
  *                  word. Source buffer size must be no less than src_size bytes
- *                  plus alignment to DCADEC_FRAME_BUFFER_ALIGN boundary.
+ *                  plus padding to the next multiple of
+ *                  DCADEC_FRAME_BUFFER_ALIGN. Source buffer can have any
+ *                  alignment in memory.
  *
  * @param src_size  Size of raw frame data prior to conversion, in bytes. Size
- *                  should not include aligment.
+ *                  should not include padding.
  *
  * @return          Detected bitstream format on success, negative error code
  *                  on failure.
@@ -92,7 +97,8 @@ DCADEC_API int dcadec_frame_parse_header(const uint8_t *data, size_t *size);
  *
  * It is recommended to use this function instead of calculating buffer size
  * manually based on DCADEC_FRAME_BUFFER_ALIGN and DCADEC_BUFFER_PADDING
- * constants since alignment requirements may change in the future.
+ * constants since padding requirements may change in the future and older
+ * headers might not reflect this.
  *
  * @param size      Raw frame size, in bytes.
  *
