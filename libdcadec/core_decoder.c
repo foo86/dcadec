@@ -1044,8 +1044,13 @@ int core_filter(struct core_decoder *core, int flags)
             for (int spkr = 0; spkr < SPEAKER_COUNT; spkr++) {
                 if (core->ch_mask & (1 << spkr)) {
                     int *samples = core->output_samples[spkr];
-                    for (int n = 0; n < nsamples; n++)
-                        samples[n] = (samples[n] + round) >> shift;
+                    if (core->source_pcm_res == 16) {
+                        for (int n = 0; n < nsamples; n++)
+                            samples[n] = clip15((samples[n] + round) >> shift);
+                    } else {
+                        for (int n = 0; n < nsamples; n++)
+                            samples[n] = clip19((samples[n] + round) >> shift);
+                    }
                 }
             }
         }
