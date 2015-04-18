@@ -486,3 +486,25 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
     // CRC16 of extension substream header
     return bits_seek(&exss->bits, header_size * 8);
 }
+
+struct dcadec_exss_info *exss_get_info(struct exss_parser *exss)
+{
+    struct dcadec_exss_info *info = ta_znew(NULL, struct dcadec_exss_info);
+    if (!info)
+        return NULL;
+    struct exss_asset *asset = &exss->assets[0];
+    info->nchannels = asset->nchannels_total;
+    info->sample_rate = asset->max_sample_rate;
+    info->bits_per_sample = asset->pcm_bit_res;
+    if (asset->extension_mask & EXSS_XLL)
+        info->profile = DCADEC_PROFILE_HD_MA;
+    else if (asset->extension_mask & (EXSS_XBR | EXSS_XXCH | EXSS_X96))
+        info->profile = DCADEC_PROFILE_HD_HRA;
+    else if (asset->extension_mask & EXSS_LBR)
+        info->profile = DCADEC_PROFILE_EXPRESS;
+    else
+        info->profile = DCADEC_PROFILE_UNKNOWN;
+    info->embedded_stereo = asset->embedded_stereo;
+    info->embedded_6ch = asset->embedded_6ch;
+    return info;
+}

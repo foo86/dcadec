@@ -808,11 +808,9 @@ fail:
 
 DCADEC_API struct dcadec_core_info *dcadec_context_get_core_info(struct dcadec_context *dca)
 {
-    if (!dca)
-        return NULL;
-    if (!(dca->packet & DCADEC_PACKET_CORE))
-        return NULL;
-    return core_get_info(dca->core);
+    if (dca && (dca->packet & DCADEC_PACKET_CORE))
+        return core_get_info(dca->core);
+    return NULL;
 }
 
 DCADEC_API void dcadec_context_free_core_info(struct dcadec_core_info *info)
@@ -822,54 +820,13 @@ DCADEC_API void dcadec_context_free_core_info(struct dcadec_core_info *info)
 
 DCADEC_API struct dcadec_exss_info *dcadec_context_get_exss_info(struct dcadec_context *dca)
 {
-    struct dcadec_exss_info *info = NULL;
-
-    if (!dca)
-        return NULL;
-
-    if (dca->packet & DCADEC_PACKET_EXSS) {
-        info = ta_znew(NULL, struct dcadec_exss_info);
-        if (info) {
-            struct exss_asset *asset = &dca->exss->assets[0];
-            info->nchannels = asset->nchannels_total;
-            info->sample_rate = asset->max_sample_rate;
-            info->bits_per_sample = asset->pcm_bit_res;
-            if (asset->extension_mask & EXSS_XLL)
-                info->profile = DCADEC_PROFILE_HD_MA;
-            else if (asset->extension_mask & (EXSS_XBR | EXSS_XXCH | EXSS_X96))
-                info->profile = DCADEC_PROFILE_HD_HRA;
-            else if (asset->extension_mask & EXSS_LBR)
-                info->profile = DCADEC_PROFILE_EXPRESS;
-            else
-                info->profile = DCADEC_PROFILE_UNKNOWN;
-            info->embedded_stereo = asset->embedded_stereo;
-            info->embedded_6ch = asset->embedded_6ch;
-        }
-    } else if (dca->packet & DCADEC_PACKET_CORE) {
-        struct core_decoder *core = dca->core;
-        if (core->xch_present || core->xxch_present ||
-            core->xbr_present || core->x96_present) {
-            info = ta_znew(NULL, struct dcadec_exss_info);
-            if (info) {
-                info->nchannels = core->nchannels + !!core->lfe_present;
-                info->sample_rate = core->sample_rate << core->x96_present;
-                info->bits_per_sample = core->source_pcm_res;
-                if (core->xbr_present || core->xxch_present)
-                    info->profile = DCADEC_PROFILE_HD_HRA;
-                else if (core->es_format && core->xch_present)
-                    info->profile = DCADEC_PROFILE_DS_ES;
-                else if (core->x96_present)
-                    info->profile = DCADEC_PROFILE_DS_96_24;
-                else
-                    info->profile = DCADEC_PROFILE_DS;
-                info->embedded_stereo = (core->prim_dmix_embedded &&
-                                         core->prim_dmix_type == DMIX_TYPE_LoRo);
-                info->embedded_6ch = (core->xch_present || core->xxch_present);
-            }
-        }
+    if (dca) {
+        if (dca->packet & DCADEC_PACKET_EXSS)
+            return exss_get_info(dca->exss);
+        if (dca->packet & DCADEC_PACKET_CORE)
+            return core_get_info_exss(dca->core);
     }
-
-    return info;
+    return NULL;
 }
 
 DCADEC_API void dcadec_context_free_exss_info(struct dcadec_exss_info *info)

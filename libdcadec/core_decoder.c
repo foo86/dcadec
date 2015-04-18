@@ -2112,3 +2112,30 @@ struct dcadec_core_info *core_get_info(struct core_decoder *core)
     info->x96_present = core->x96_present;
     return info;
 }
+
+struct dcadec_exss_info *core_get_info_exss(struct core_decoder *core)
+{
+    if (!core->xch_present && !core->xxch_present &&
+        !core->xbr_present && !core->x96_present)
+        return NULL;
+
+    struct dcadec_exss_info *info = ta_znew(NULL, struct dcadec_exss_info);
+    if (!info)
+        return NULL;
+
+    info->nchannels = core->nchannels + !!core->lfe_present;
+    info->sample_rate = core->sample_rate << core->x96_present;
+    info->bits_per_sample = core->source_pcm_res;
+    if (core->xbr_present || core->xxch_present)
+        info->profile = DCADEC_PROFILE_HD_HRA;
+    else if (core->es_format && core->xch_present)
+        info->profile = DCADEC_PROFILE_DS_ES;
+    else if (core->x96_present)
+        info->profile = DCADEC_PROFILE_DS_96_24;
+    else
+        info->profile = DCADEC_PROFILE_DS;
+    info->embedded_stereo = (core->prim_dmix_embedded &&
+                             core->prim_dmix_type == DMIX_TYPE_LoRo);
+    info->embedded_6ch = (core->xch_present || core->xxch_present);
+    return info;
+}
