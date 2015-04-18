@@ -473,6 +473,31 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
     return 0;
 }
 
+static void force_lossy_output(struct core_decoder *core, struct xll_chset *c)
+{
+    // Clear all band data
+    for (int band = 0; band < c->nfreqbands; band++)
+        xll_clear_band_data(c, band);
+
+    // Clear decimator history and scalable LSBs
+    memset(c->deci_history, 0, sizeof(c->deci_history));
+    memset(c->nscalablelsbs, 0, sizeof(c->nscalablelsbs));
+    memset(c->bit_width_adjust, 0, sizeof(c->bit_width_adjust));
+
+    // Replace non-residual encoded channels with lossy counterparts
+    for (int ch = 0; ch < c->nchannels; ch++) {
+        if (!(c->residual_encode & (1 << ch)))
+            continue;
+        int spkr = xll_map_ch_to_spkr(c, ch);
+        if (spkr < 0)
+            continue;
+        int core_ch = map_spkr_to_core_ch(core, spkr);
+        if (core_ch < 0)
+            continue;
+        c->residual_encode &= ~(1 << ch);
+    }
+}
+
 static int filter_residual_core_frame(struct dcadec_context *dca)
 {
     struct core_decoder *core = dca->core;
@@ -489,28 +514,11 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
         return ret;
 
     // Force lossy downmixed output if this is the first core frame since
-    // the last time history was cleared. Clear all band data and replace
-    // non-residual encoded channels with their lossy counterparts.
+    // the last time history was cleared
     if (dca->core_residual_valid == false && xll->nchsets > 1) {
-        for_each_active_chset(xll, c) {
-            for (int band = 0; band < c->nfreqbands; band++)
-                xll_clear_band_data(c, band);
-            memset(c->deci_history, 0, sizeof(c->deci_history));
-            memset(c->nscalablelsbs, 0, sizeof(c->nscalablelsbs));
-            memset(c->bit_width_adjust, 0, sizeof(c->bit_width_adjust));
-            for (int ch = 0; ch < c->nchannels; ch++) {
-                if (!(c->residual_encode & (1 << ch)))
-                    continue;
-                int spkr = xll_map_ch_to_spkr(c, ch);
-                if (spkr < 0)
-                    continue;
-                int core_ch = map_spkr_to_core_ch(core, spkr);
-                if (core_ch < 0)
-                    continue;
-                c->residual_encode &= ~(1 << ch);
-            }
-        }
         for_each_chset(xll, c) {
+            if (c < &xll->chset[xll->nactivechsets])
+                force_lossy_output(core, c);
             if (!c->primary_chset)
                 c->dmix_embedded = false;
         }
