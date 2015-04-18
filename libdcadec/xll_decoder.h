@@ -27,6 +27,9 @@
 
 #define XLL_DECI_HISTORY    8
 
+#define XLL_BAND_0  0
+#define XLL_BAND_1  1
+
 #define for_each_chset(xll, chs) \
     for (struct xll_chset *(chs) = (xll)->chset; \
          (chs) != &(xll)->chset[(xll)->nchsets]; (chs)++)

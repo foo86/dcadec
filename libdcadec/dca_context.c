@@ -288,7 +288,7 @@ static struct xll_chset *find_next_hier_dmix_chset(struct xll_chset *c)
 }
 
 struct downmix {
-    int *samples[2][XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
+    int *samples[XLL_MAX_BANDS][XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
     int *deci_history[XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
 };
 
@@ -316,8 +316,8 @@ static void undo_down_mix(struct xll_chset *c, struct downmix *dmix)
         for (int j = 0; j < c->nchannels; j++) {
             int coeff = *coeff_ptr++;
             if (coeff) {
-                int *src = c->msb_sample_buffer[0][j];
-                int *dst = dmix->samples[0][i];
+                int *src = c->msb_sample_buffer[XLL_BAND_0][j];
+                int *dst = dmix->samples[XLL_BAND_0][i];
                 for (int k = 0; k < nsamples; k++)
                     dst[k] -= mul15(src[k], coeff);
             }
@@ -325,15 +325,15 @@ static void undo_down_mix(struct xll_chset *c, struct downmix *dmix)
     }
 
     // Undo downmix of preceding channels in frequency band 1
-    if (c->nfreqbands > 1 && c->band_dmix_embedded[1]) {
+    if (c->nfreqbands > 1 && c->band_dmix_embedded[XLL_BAND_1]) {
         int *coeff_ptr = c->dmix_coeff;
         for (int i = 0; i < c->dmix_m; i++) {
             for (int j = 0; j < c->nchannels; j++) {
                 int coeff = *coeff_ptr++;
                 if (coeff) {
                     // Undo downmix of channel samples
-                    int *src = c->msb_sample_buffer[1][j];
-                    int *dst = dmix->samples[1][i];
+                    int *src = c->msb_sample_buffer[XLL_BAND_1][j];
+                    int *dst = dmix->samples[XLL_BAND_1][i];
                     for (int k = 0; k < nsamples; k++)
                         dst[k] -= mul15(src[k], coeff);
 
@@ -385,15 +385,15 @@ static void scale_down_mix(struct xll_chset *c, struct downmix *dmix)
 
     // Scale down preceding channels in frequency band 0
     for (int i = 0; i < c->dmix_m; i++) {
-        scale_down(dmix->samples[0][i], nsamples,
+        scale_down(dmix->samples[XLL_BAND_0][i], nsamples,
                    c->pcm_bit_res, c->dmix_scale[i]);
     }
 
     // Scale down preceding channels in frequency band 1
-    if (c->nfreqbands > 1 && c->band_dmix_embedded[1]) {
+    if (c->nfreqbands > 1 && c->band_dmix_embedded[XLL_BAND_1]) {
         for (int i = 0; i < c->dmix_m; i++) {
             // Scale down channel samples
-            scale_down(dmix->samples[1][i], nsamples,
+            scale_down(dmix->samples[XLL_BAND_1][i], nsamples,
                        c->pcm_bit_res, c->dmix_scale[i]);
             // Scale down decimator history
             scale_down(dmix->deci_history[i] + 1, XLL_DECI_HISTORY - 1,
@@ -564,10 +564,10 @@ static int combine_residual_core_frame(struct dcadec_context *dca,
         int shift = 24 - c->pcm_bit_res;
         // Account for LSB width
         if (xll->scalable_lsbs)
-            shift += xll_get_lsb_width(c, 0, ch);
+            shift += xll_get_lsb_width(c, XLL_BAND_0, ch);
         int round = shift > 0 ? 1 << (shift - 1) : 0;
 
-        int *dst = c->msb_sample_buffer[0][ch];
+        int *dst = c->msb_sample_buffer[XLL_BAND_0][ch];
         int *src = core->output_samples[core_ch];
         if (o) {
             // Undo embedded core downmix pre-scaling
@@ -597,7 +597,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
 
     // Process frequency band 0 for active channel sets
     for_each_active_chset(xll, c) {
-        xll_filter_band_data(c, 0);
+        xll_filter_band_data(c, XLL_BAND_0);
 
         // Check for residual encoded channel set
         if (c->residual_encode != (1 << c->nchannels) - 1)
@@ -606,14 +606,14 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
 
         // Assemble MSB and LSB parts after combining with core
         if (xll->scalable_lsbs)
-            xll_assemble_msbs_lsbs(c, 0);
+            xll_assemble_msbs_lsbs(c, XLL_BAND_0);
     }
 
     // Process frequency band 1 for active channel sets
     if (xll->nfreqbands > 1) {
         for_each_active_chset(xll, c) {
-            xll_filter_band_data(c, 1);
-            xll_assemble_msbs_lsbs(c, 1);
+            xll_filter_band_data(c, XLL_BAND_1);
+            xll_assemble_msbs_lsbs(c, XLL_BAND_1);
         }
     }
 
@@ -626,8 +626,10 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         for_each_active_chset(xll, c) {
             if (c->hier_chset) {
                 for (int ch = 0; ch < c->nchannels; ch++) {
-                    dmix.samples[0][nchannels] = c->msb_sample_buffer[0][ch];
-                    dmix.samples[1][nchannels] = c->msb_sample_buffer[1][ch];
+                    dmix.samples[XLL_BAND_0][nchannels] =
+                        c->msb_sample_buffer[XLL_BAND_0][ch];
+                    dmix.samples[XLL_BAND_1][nchannels] =
+                        c->msb_sample_buffer[XLL_BAND_1][ch];
                     dmix.deci_history[nchannels] = c->deci_history[ch];
                     nchannels++;
                 }

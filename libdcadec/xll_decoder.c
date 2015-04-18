@@ -630,9 +630,9 @@ void xll_filter_band_data(struct xll_chset *chs, int band)
     }
 
     // Map output channel pointers for frequency band 0
-    if (band == 0)
+    if (band == XLL_BAND_0)
         for (i = 0; i < chs->nchannels; i++)
-            chs->out_sample_buffer[i] = chs->msb_sample_buffer[0][i];
+            chs->out_sample_buffer[i] = chs->msb_sample_buffer[band][i];
 }
 
 int xll_get_lsb_width(struct xll_chset *chs, int band, int ch)
@@ -709,8 +709,8 @@ int xll_assemble_freq_bands(struct xll_chset *chs)
         // Remap output channel pointer to assembly buffer
         chs->out_sample_buffer[ch] = ptr;
 
-        int *band0 = chs->msb_sample_buffer[0][ch];
-        int *band1 = chs->msb_sample_buffer[1][ch];
+        int *band0 = chs->msb_sample_buffer[XLL_BAND_0][ch];
+        int *band1 = chs->msb_sample_buffer[XLL_BAND_1][ch];
 
         // Copy decimator history
         for (int i = 1; i < XLL_DECI_HISTORY; i++)
