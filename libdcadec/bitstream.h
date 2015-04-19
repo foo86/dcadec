@@ -46,48 +46,10 @@ void bits_seek1(struct bitstream *bits);
 size_t bits_align1(struct bitstream *bits);
 size_t bits_align4(struct bitstream *bits);
 int bits_check_crc(struct bitstream *bits, size_t p1, size_t p2);
-
-static inline void bits_get_array(struct bitstream *bits,
-                                  int *array, int size, int n)
-{
-    for (int i = 0; i < size; i++)
-        array[i] = bits_get(bits, n);
-}
-
-static inline void bits_get_signed_array(struct bitstream *bits,
-                                         int *array, int size, int n)
-{
-    for (int i = 0; i < size; i++)
-        array[i] = bits_get_signed(bits, n);
-}
-
-static inline void bits_get_signed_linear_array(struct bitstream *bits,
-                                                int *array, int size, int n)
-{
-    if (n == 0) {
-        memset(array, 0, sizeof(*array) * size);
-    } else for (int i = 0; i < size; i++) {
-        int v = bits_get(bits, n);
-        array[i] = (v >> 1) ^ -(v & 1);
-    }
-}
-
-static inline void bits_get_signed_rice_array(struct bitstream *bits,
-                                              int *array, int size, int k)
-{
-    for (int i = 0; i < size; i++)
-        array[i] = bits_get_signed_rice(bits, k);
-}
-
-static inline int bits_get_signed_vlc_array(struct bitstream *bits,
-                                            int *array, int size,
-                                            const struct huffman *h)
-{
-    for (int i = 0; i < size; i++) {
-        if ((array[i] = bits_get_signed_vlc(bits, h)) == BITS_INVALID_VLC_SI)
-            return -DCADEC_EBADDATA;
-    }
-    return 0;
-}
+void bits_get_array(struct bitstream *bits, int *array, int size, int n);
+void bits_get_signed_array(struct bitstream *bits, int *array, int size, int n);
+void bits_get_signed_linear_array(struct bitstream *bits, int *array, int size, int n);
+void bits_get_signed_rice_array(struct bitstream *bits, int *array, int size, int k);
+int bits_get_signed_vlc_array(struct bitstream *bits, int *array, int size, const struct huffman *h);
 
 #endif
