@@ -154,5 +154,7 @@ DCADEC_API size_t dcadec_frame_buffer_size(size_t size)
     size_t padding = -size & (DCADEC_FRAME_BUFFER_ALIGN - 1);
     if (padding < DCADEC_BUFFER_PADDING)
         padding = DCADEC_BUFFER_PADDING;
+    if (padding > SIZE_MAX - size)
+        padding = SIZE_MAX - size;
     return size + padding;
 }
