@@ -87,16 +87,4 @@ static inline int ta_alloc_fast(void *ta_parent, void *ptr,
 #define ta_realloc(ta_parent, ptr, type, count) \
     (type *)ta_realloc_size(ta_parent, ptr, ta_calc_array_size(sizeof(type), count))
 
-#define ta_new_ptrtype(ta_parent, ptr) \
-    (__typeof__(ptr))ta_alloc_size(ta_parent, sizeof(*ptr))
-
-#define ta_znew_ptrtype(ta_parent, ptr) \
-    (__typeof__(ptr))ta_zalloc_size(ta_parent, sizeof(*ptr))
-
-#define ta_new_array_ptrtype(ta_parent, ptr, count) \
-    (__typeof__(ptr))ta_new_array_size(ta_parent, sizeof(*(ptr)), count)
-
-#define ta_znew_array_ptrtype(ta_parent, ptr, count) \
-    (__typeof__(ptr))ta_znew_array_size(ta_parent, sizeof(*(ptr)), count)
-
 #endif
