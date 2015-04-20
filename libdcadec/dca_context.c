@@ -136,9 +136,8 @@ static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
     }
 
     // Reallocate downmix sample buffer
-    int ret = dca_realloc(dca, &dca->dmix_sample_buffer, 2 * nsamples, sizeof(int));
-    if (ret < 0)
-        return ret;
+    if (ta_alloc_fast(dca, &dca->dmix_sample_buffer, 2 * nsamples, sizeof(int)) < 0)
+        return -DCADEC_ENOMEM;
 
     memset(dca->dmix_sample_buffer, 0, 2 * nsamples * sizeof(int));
 

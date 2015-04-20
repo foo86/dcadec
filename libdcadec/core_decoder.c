@@ -766,8 +766,8 @@ static int alloc_sample_buffer(struct core_decoder *core)
 
     // Reallocate subband sample buffer
     int ret;
-    if ((ret = dca_realloc(core, &core->subband_buffer, nframesamples + nlfesamples, sizeof(int))) < 0)
-        return ret;
+    if ((ret = ta_zalloc_fast(core, &core->subband_buffer, nframesamples + nlfesamples, sizeof(int))) < 0)
+        return -DCADEC_ENOMEM;
     if (ret > 0) {
         for (int ch = 0; ch < MAX_CHANNELS; ch++)
             for (int band = 0; band < MAX_SUBBANDS; band++)
@@ -872,9 +872,8 @@ int core_filter(struct core_decoder *core, int flags)
         core->ch_mask |= SPEAKER_MASK_LFE1;
 
     // Reallocate PCM output buffer
-    int ret;
-    if ((ret = dca_realloc(core, &core->output_buffer, core->npcmsamples * dca_popcount(core->ch_mask), sizeof(int))) < 0)
-        return ret;
+    if (ta_zalloc_fast(core, &core->output_buffer, core->npcmsamples * dca_popcount(core->ch_mask), sizeof(int)) < 0)
+        return -DCADEC_ENOMEM;
 
     int *ptr = core->output_buffer;
     for (int spkr = 0; spkr < SPEAKER_COUNT; spkr++) {
@@ -1479,8 +1478,8 @@ static int alloc_x96_sample_buffer(struct x96_decoder *x96)
 
     // Reallocate subband sample buffer
     int ret;
-    if ((ret = dca_realloc(core, &x96->subband_buffer, nframesamples, sizeof(int))) < 0)
-        return ret;
+    if ((ret = ta_zalloc_fast(core, &x96->subband_buffer, nframesamples, sizeof(int))) < 0)
+        return -DCADEC_ENOMEM;
     if (ret > 0) {
         for (int ch = 0; ch < MAX_CHANNELS; ch++)
             for (int band = 0; band < MAX_SUBBANDS_X96; band++)

@@ -41,9 +41,8 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
     }
 
     // Reallocate downmix coefficients matrix
-    int ret;
-    if ((ret = dca_realloc(xll->chset, &chs->dmix_coeff, m * n, sizeof(int))) < 0)
-        return ret;
+    if (ta_zalloc_fast(xll->chset, &chs->dmix_coeff, m * n, sizeof(int)) < 0)
+        return -DCADEC_ENOMEM;
 
     if (chs->primary_chset) {
         chs->dmix_scale = NULL;
@@ -337,11 +336,10 @@ static int chs_alloc_msb_band_data(struct xll_chset *chs)
     struct xll_decoder *xll = chs->decoder;
 
     // Reallocate MSB sample buffer
-    int ret = dca_realloc(xll->chset, &chs->sample_buffer1,
-                          (xll->nframesamples + XLL_DECI_HISTORY) *
-                          chs->nchannels * chs->nfreqbands, sizeof(int));
-    if (ret < 0)
-        return ret;
+    if (ta_zalloc_fast(xll->chset, &chs->sample_buffer1,
+                       (xll->nframesamples + XLL_DECI_HISTORY) *
+                       chs->nchannels * chs->nfreqbands, sizeof(int)) < 0)
+        return -DCADEC_ENOMEM;
 
     int *ptr = chs->sample_buffer1 + XLL_DECI_HISTORY;
     for (int band = 0; band < chs->nfreqbands; band++) {
@@ -367,10 +365,10 @@ static int chs_alloc_lsb_band_data(struct xll_chset *chs)
         return 0;
 
     // Reallocate LSB sample buffer
-    int ret = dca_realloc(xll->chset, &chs->sample_buffer2,
-                          xll->nframesamples * chs->nchannels * nfreqbands, sizeof(int));
-    if (ret < 0)
-        return ret;
+    if (ta_zalloc_fast(xll->chset, &chs->sample_buffer2,
+                       xll->nframesamples * chs->nchannels * nfreqbands,
+                       sizeof(int)) < 0)
+        return -DCADEC_ENOMEM;
 
     int *ptr = chs->sample_buffer2;
     for (int band = 0; band < chs->nfreqbands; band++) {
@@ -698,10 +696,9 @@ int xll_assemble_freq_bands(struct xll_chset *chs)
     int nsamples = xll->nframesamples;
 
     // Reallocate frequency band assembly buffer
-    int ret;
-    if ((ret = dca_realloc(xll->chset, &chs->sample_buffer3,
-                           2 * nsamples * chs->nchannels, sizeof(int))) < 0)
-        return ret;
+    if (ta_alloc_fast(xll->chset, &chs->sample_buffer3,
+                      2 * nsamples * chs->nchannels, sizeof(int)) < 0)
+        return -DCADEC_ENOMEM;
 
     // Assemble frequency bands 0 and 1
     int *ptr = chs->sample_buffer3;
@@ -832,18 +829,17 @@ static int parse_common_header(struct xll_decoder *xll)
 
 static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
 {
-    // Reallocate channel sets
     int ret;
-    if ((ret = dca_realloc(xll, &xll->chset, xll->nchsets, sizeof(struct xll_chset))) < 0)
-        return ret;
-    if (ret > 0)
-        for_each_chset(xll, chs)
-            chs->decoder = xll;
+
+    // Reallocate channel sets
+    if (ta_zalloc_fast(xll, &xll->chset, xll->nchsets, sizeof(struct xll_chset)) < 0)
+        return -DCADEC_ENOMEM;
 
     // Parse channel set headers
     xll->nfreqbands = 0;
     xll->nchannels = 0;
     for_each_chset(xll, chs) {
+        chs->decoder = xll;
         chs->dmix_m = xll->nchannels;
         if ((ret = chs_parse_header(chs, asset)) < 0)
             return ret;
@@ -867,9 +863,10 @@ static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
 static int parse_navi_table(struct xll_decoder *xll)
 {
     // Reallocate NAVI table
-    int ret;
-    if ((ret = dca_realloc(xll, &xll->navi, xll->nfreqbands * xll->nframesegs * xll->nchsets, sizeof(size_t))) < 0)
-        return ret;
+    if (ta_alloc_fast(xll, &xll->navi,
+                      xll->nfreqbands * xll->nframesegs * xll->nchsets,
+                      sizeof(size_t)) < 0)
+        return -DCADEC_ENOMEM;
 
     // Parse NAVI
     size_t navi_pos = xll->bits.index;
@@ -878,13 +875,14 @@ static int parse_navi_table(struct xll_decoder *xll)
     for (int band = 0; band < xll->nfreqbands; band++) {
         for (int seg = 0; seg < xll->nframesegs; seg++) {
             for_each_chset(xll, chs) {
+                size_t size = 0;
                 if (chs->nfreqbands > band) {
-                    *navi_ptr = (size_t)bits_get(&xll->bits, xll->seg_size_nbits) + 1;
-                    if (*navi_ptr < 1 || *navi_ptr > xll->frame_size)
+                    size = (size_t)bits_get(&xll->bits, xll->seg_size_nbits) + 1;
+                    if (size < 1 || size > xll->frame_size)
                         return -DCADEC_EBADDATA;
-                    navi_size += *navi_ptr;
                 }
-                navi_ptr++;
+                *navi_ptr++ = size;
+                navi_size += size;
             }
         }
     }

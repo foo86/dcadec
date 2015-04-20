@@ -35,6 +35,40 @@ static inline size_t ta_calc_array_size(size_t element_size, size_t count)
     return element_size * count;
 }
 
+static inline int ta_zalloc_fast(void *ta_parent, void *ptr,
+                                 size_t count, size_t element_size)
+{
+    void **_ptr = ptr;
+    size_t old_size = ta_get_size(*_ptr);
+    size_t new_size = ta_calc_array_size(element_size, count);
+
+    if (old_size < new_size) {
+        ta_free(*_ptr);
+        if (!(*_ptr = ta_zalloc_size(ta_parent, new_size)))
+            return -1;
+        return 1;
+    }
+
+    return 0;
+}
+
+static inline int ta_alloc_fast(void *ta_parent, void *ptr,
+                                size_t count, size_t element_size)
+{
+    void **_ptr = ptr;
+    size_t old_size = ta_get_size(*_ptr);
+    size_t new_size = ta_calc_array_size(element_size, count);
+
+    if (old_size < new_size) {
+        ta_free(*_ptr);
+        if (!(*_ptr = ta_alloc_size(ta_parent, new_size)))
+            return -1;
+        return 1;
+    }
+
+    return 0;
+}
+
 #define ta_new(ta_parent, type)  (type *)ta_alloc_size(ta_parent, sizeof(type))
 #define ta_znew(ta_parent, type) (type *)ta_zalloc_size(ta_parent, sizeof(type))
 

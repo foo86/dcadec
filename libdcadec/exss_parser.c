@@ -458,11 +458,8 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
         return -DCADEC_ENOSUP;
 
     // Reallocate assets
-    if ((ret = dca_realloc(exss, &exss->assets, exss->nassets, sizeof(struct exss_asset))) < 0)
-        return ret;
-    if (ret > 0)
-        for (i = 0; i < exss->nassets; i++)
-            exss->assets[i].parser = exss;
+    if (ta_zalloc_fast(exss, &exss->assets, exss->nassets, sizeof(struct exss_asset)) < 0)
+        return -DCADEC_ENOMEM;
 
     // Size of encoded asset data in bytes
     size_t offset = header_size;
@@ -474,9 +471,11 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
     }
 
     // Audio asset descriptor
-    for (i = 0; i < exss->nassets; i++)
+    for (i = 0; i < exss->nassets; i++) {
+        exss->assets[i].parser = exss;
         if ((ret = parse_descriptor(&exss->assets[i])) < 0)
             return ret;
+    }
 
     // Backward compatible core present
     // Backward compatible core substream index

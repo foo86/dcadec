@@ -120,20 +120,6 @@ static inline uint16_t dca_bswap16(uint16_t x) { return (x << 8) | (x >> 8); }
 #define DCA_MEM32NE(data) \
     ({ uint32_t _res; memcpy(&_res, data, sizeof(_res)); _res; })
 
-static inline int dca_realloc(void *parent, void *ptr, size_t nmemb, size_t size)
-{
-    void **_ptr = ptr;
-    size_t old_size = ta_get_size(*_ptr);
-    size_t new_size = ta_calc_array_size(size, nmemb);
-    if (old_size < new_size) {
-        ta_free(*_ptr);
-        if (!(*_ptr = ta_zalloc_size(parent, new_size)))
-            return -DCADEC_ENOMEM;
-        return 1;
-    }
-    return 0;
-}
-
 // WAVEFORMATEXTENSIBLE speakers
 enum WaveSpeaker {
     WAVESPKR_FL,  WAVESPKR_FR,  WAVESPKR_FC,  WAVESPKR_LFE,

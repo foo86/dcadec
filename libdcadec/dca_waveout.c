@@ -159,8 +159,8 @@ DCADEC_API int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
             return -DCADEC_EOUTCHG;
     }
 
-    if ((ret = dca_realloc(wave, &wave->buffer, nsamples, wave->block_align)) < 0)
-        return ret;
+    if (ta_alloc_fast(wave, &wave->buffer, nsamples, wave->block_align) < 0)
+        return -DCADEC_ENOMEM;
 
     int limit = 1 << (wave->bits_per_sample - 1);
     int mask = ~((1 << wave->bits_per_sample) - 1);
