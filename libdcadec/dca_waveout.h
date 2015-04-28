@@ -23,10 +23,47 @@
 
 struct dcadec_waveout;
 
+/**
+ * Write the block of PCM samples to WAV file. The first call to this function
+ * writes the WAV header. Subsequent calls must have audio parameters identical
+ * to the first call, excluding nsamples parameter which can change between
+ * calls.
+ *
+ * @param wave    Writer handle.
+ *
+ * @param samples   Array of pointers to planes containing PCM data for active
+ *                  channels. Channels must be ordered according to
+ *                  WAVEFORMATEXTENSIBLE specification.
+ *
+ * @param nsamples  Number of PCM samples in each plane.
+ *
+ * @param channel_mask  Bit mask indicating active channels. Number of bits set
+ *                      to 1 indicates the total number of planes to write.
+ *
+ * @param sample_rate       Audio sample rate in Hz.
+ *
+ * @param bits_per_sample   Audio PCM resolution in bits.
+ *
+ * @return      0 on success, negative error code on failure.
+ */
 DCADEC_API int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
                                     int nsamples, int channel_mask,
                                     int sample_rate, int bits_per_sample);
+/**
+ * Open WAV writer to file or standard output.
+ *
+ * @param name  Name of the file to be opened. Pass NULL to open standard
+ *              output.
+ *
+ * @return      Writer handle on success, NULL on failure.
+ */
 DCADEC_API struct dcadec_waveout *dcadec_waveout_open(const char *name);
+
+/**
+ * Close WAV writer. This function updates the WAV header if possible.
+ *
+ * @param wave    Writer handle.
+ */
 DCADEC_API void dcadec_waveout_close(struct dcadec_waveout *wave);
 
 #endif
