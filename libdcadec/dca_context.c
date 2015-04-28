@@ -926,3 +926,8 @@ DCADEC_API const char *dcadec_strerror(int errnum)
     else
         return "Unspecified error";
 }
+
+DCADEC_API unsigned int dcadec_version(void)
+{
+    return DCADEC_VERSION;
+}
