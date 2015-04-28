@@ -67,74 +67,6 @@ static void parse_lbr_parameters(struct exss_asset *asset)
         bits_skip(&exss->bits, 2);
 }
 
-static int set_extension_offsets(struct exss_asset *asset)
-{
-    size_t offs = asset->asset_offset;
-    size_t size = asset->asset_size;
-
-    if (asset->extension_mask & EXSS_CORE) {
-        asset->core_offset = offs;
-        if (offs & 3)
-            return -DCADEC_EBADREAD;
-        if (asset->core_size > size)
-            return -DCADEC_EBADREAD;
-        offs += asset->core_size;
-        size -= asset->core_size;
-    }
-
-    if (asset->extension_mask & EXSS_XBR) {
-        asset->xbr_offset = offs;
-        if (offs & 3)
-            return -DCADEC_EBADREAD;
-        if (asset->xbr_size > size)
-            return -DCADEC_EBADREAD;
-        offs += asset->xbr_size;
-        size -= asset->xbr_size;
-    }
-
-    if (asset->extension_mask & EXSS_XXCH) {
-        asset->xxch_offset = offs;
-        if (offs & 3)
-            return -DCADEC_EBADREAD;
-        if (asset->xxch_size > size)
-            return -DCADEC_EBADREAD;
-        offs += asset->xxch_size;
-        size -= asset->xxch_size;
-    }
-
-    if (asset->extension_mask & EXSS_X96) {
-        asset->x96_offset = offs;
-        if (offs & 3)
-            return -DCADEC_EBADREAD;
-        if (asset->x96_size > size)
-            return -DCADEC_EBADREAD;
-        offs += asset->x96_size;
-        size -= asset->x96_size;
-    }
-
-    if (asset->extension_mask & EXSS_LBR) {
-        asset->lbr_offset = offs;
-        if (offs & 3)
-            return -DCADEC_EBADREAD;
-        if (asset->lbr_size > size)
-            return -DCADEC_EBADREAD;
-        offs += asset->lbr_size;
-        size -= asset->lbr_size;
-    }
-
-    if (asset->extension_mask & EXSS_XLL) {
-        asset->xll_offset = offs;
-        if (offs & 3)
-            return -DCADEC_EBADREAD;
-        if (asset->xll_size > size)
-            return -DCADEC_EBADREAD;
-        offs += asset->xll_size;
-        size -= asset->xll_size;
-    }
-
-    return 0;
-}
-
 static int parse_descriptor(struct exss_asset *asset)
 {
     struct exss_parser *exss = asset->parser;
@@ -353,13 +285,70 @@ static int parse_descriptor(struct exss_asset *asset)
         // DTS-HD stream ID
         asset->hd_stream_id = bits_get(&exss->bits, 3);
 
-    int ret;
-    if ((ret = set_extension_offsets(asset)) < 0)
-        return ret;
-
+    // One to one mixing flag
+    // Per channel main audio scaling flag
+    // Main audio scaling codes
+    // Decode asset in secondary decoder flag
+    // Revision 2 DRC metadata
     // Reserved
     // Zero pad
     return bits_seek(&exss->bits, descr_pos + descr_size * 8);
+}
+
+static int set_exss_offsets(struct exss_asset *asset)
+{
+    size_t offs = asset->asset_offset;
+    size_t size = asset->asset_size;
+
+    if (asset->extension_mask & EXSS_CORE) {
+        asset->core_offset = offs;
+        if (offs & 3 || asset->core_size > size)
+            return -DCADEC_EBADREAD;
+        offs += asset->core_size;
+        size -= asset->core_size;
+    }
+
+    if (asset->extension_mask & EXSS_XBR) {
+        asset->xbr_offset = offs;
+        if (offs & 3 || asset->xbr_size > size)
+            return -DCADEC_EBADREAD;
+        offs += asset->xbr_size;
+        size -= asset->xbr_size;
+    }
+
+    if (asset->extension_mask & EXSS_XXCH) {
+        asset->xxch_offset = offs;
+        if (offs & 3 || asset->xxch_size > size)
+            return -DCADEC_EBADREAD;
+        offs += asset->xxch_size;
+        size -= asset->xxch_size;
+    }
+
+    if (asset->extension_mask & EXSS_X96) {
+        asset->x96_offset = offs;
+        if (offs & 3 || asset->x96_size > size)
+            return -DCADEC_EBADREAD;
+        offs += asset->x96_size;
+        size -= asset->x96_size;
+    }
+
+    if (asset->extension_mask & EXSS_LBR) {
+        asset->lbr_offset = offs;
+        if (offs & 3 || asset->lbr_size > size)
+            return -DCADEC_EBADREAD;
+        offs += asset->lbr_size;
+        size -= asset->lbr_size;
+    }
+
+    if (asset->extension_mask & EXSS_XLL) {
+        asset->xll_offset = offs;
+        if (offs & 3 || asset->xll_size > size)
+            return -DCADEC_EBADREAD;
+        offs += asset->xll_size;
+        size -= asset->xll_size;
+    }
+
+    return 0;
 }
 
 int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
@@ -377,17 +366,13 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
     // Extension substream index
     exss->exss_index = bits_get(&exss->bits, 2);
 
-    int header_size_nbits = 8;
-    exss->exss_size_nbits = 16;
-
     // Flag indicating short or long header size
-    if (bits_get1(&exss->bits)) {
-        header_size_nbits = 12;
-        exss->exss_size_nbits = 20;
-    }
+    bool wide_hdr = bits_get1(&exss->bits);
 
     // Extension substream header length
-    size_t header_size = bits_get(&exss->bits, header_size_nbits) + 1;
+    size_t header_size = bits_get(&exss->bits, 8 + 4 * wide_hdr) + 1;
+
+    exss->exss_size_nbits = 16 + 4 * wide_hdr;
 
     // Number of bytes of extension substream
     exss->exss_size = bits_get(&exss->bits, exss->exss_size_nbits) + 1;
@@ -474,6 +459,8 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
     for (i = 0; i < exss->nassets; i++) {
         exss->assets[i].parser = exss;
         if ((ret = parse_descriptor(&exss->assets[i])) < 0)
+            return ret;
+        if ((ret = set_exss_offsets(&exss->assets[i])) < 0)
             return ret;
     }
 
