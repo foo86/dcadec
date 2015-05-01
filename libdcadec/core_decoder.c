@@ -410,7 +410,7 @@ static int parse_subframe_header(struct core_decoder *core, int sf,
     // Transition mode
     for (ch = xch_base; ch < core->nchannels; ch++) {
         // Clear transition mode for all subbands
-        for (band = 0; band < core->nsubbands[ch]; band++)
+        for (band = 0; band < MAX_SUBBANDS; band++)
             core->transition_mode[sf][ch][band] = 0;
 
         // Transient possible only if more than one subsubframe
