@@ -1034,21 +1034,22 @@ int core_filter(struct core_decoder *core, int flags)
     }
 
     // Reduce core bit width
-    if (flags & DCADEC_FLAG_CORE_SOURCE_PCM_RES) {
-        int shift = 24 - core->source_pcm_res;
-        if (shift > 0) {
-            int round = 1 << (shift - 1);
-            int nsamples = core->npcmsamples;
-            for (int spkr = 0; spkr < SPEAKER_COUNT; spkr++) {
-                if (core->ch_mask & (1 << spkr)) {
-                    int *samples = core->output_samples[spkr];
-                    if (core->source_pcm_res == 16) {
-                        for (int n = 0; n < nsamples; n++)
-                            samples[n] = clip15((samples[n] + round) >> shift);
-                    } else {
-                        for (int n = 0; n < nsamples; n++)
-                            samples[n] = clip19((samples[n] + round) >> shift);
-                    }
+    if ((flags & DCADEC_FLAG_CORE_SOURCE_PCM_RES) && core->source_pcm_res != 24) {
+        int nsamples = core->npcmsamples;
+        for (int spkr = 0; spkr < SPEAKER_COUNT; spkr++) {
+            if (core->ch_mask & (1 << spkr)) {
+                int *samples = core->output_samples[spkr];
+                switch (core->source_pcm_res) {
+                case 16:
+                    for (int n = 0; n < nsamples; n++)
+                        samples[n] = clip15((samples[n] + (1 << 7)) >> 8);
+                    break;
+                case 20:
+                    for (int n = 0; n < nsamples; n++)
+                        samples[n] = clip19((samples[n] + (1 << 3)) >> 4);
+                    break;
+                default:
+                    return -DCADEC_EINVAL;
                 }
             }
         }
