@@ -1932,7 +1932,6 @@ static int parse_optional_info(struct core_decoder *core, int flags)
         }
 
         if (xch_pos && !(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
-            //printf("found XCH @ %zu\n", xch_pos);
             core->bits.index = xch_pos * 32 + 17;
             if ((ret = parse_xch_frame(core)) < 0) {
                 if (flags & DCADEC_FLAG_STRICT)
@@ -1944,7 +1943,6 @@ static int parse_optional_info(struct core_decoder *core, int flags)
         }
 
         if (xxch_pos && !(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
-            //printf("found XXCH @ %zu\n", xxch_pos);
             core->bits.index = xxch_pos * 32;
             if ((ret = parse_xxch_frame(core)) < 0) {
                 if (flags & DCADEC_FLAG_STRICT)
@@ -1956,7 +1954,6 @@ static int parse_optional_info(struct core_decoder *core, int flags)
         }
 
         if (x96_pos) {
-            //printf("found X96 @ %zu\n", x96_pos);
             core->bits.index = x96_pos * 32 + 12;
             if (!core->x96_decoder) {
                 if (!(core->x96_decoder = ta_znew(core, struct x96_decoder)))
@@ -1973,7 +1970,6 @@ static int parse_optional_info(struct core_decoder *core, int flags)
         }
 
         if (xbr_pos) {
-            //printf("found XBR @ %zu\n", xbr_pos);
             core->bits.index = xbr_pos * 32;
             if ((ret = parse_xbr_frame(core, flags)) < 0) {
                 if (flags & DCADEC_FLAG_STRICT)
@@ -2027,7 +2023,6 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
 
     if ((asset->extension_mask & EXSS_XXCH) && !core->xxch_present
         && !(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
-        //printf("found XXCH @ EXSS\n");
         bits_init(&core->bits, data + asset->xxch_offset, asset->xxch_size);
         if (bits_get(&core->bits, 32) == SYNC_WORD_XXCH) {
             if ((ret = parse_xxch_frame(core)) < 0) {
@@ -2043,7 +2038,6 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
     }
 
     if ((asset->extension_mask & EXSS_X96) && !core->x96_present) {
-        //printf("found X96 @ EXSS\n");
         bits_init(&core->bits, data + asset->x96_offset, asset->x96_size);
         if (bits_get(&core->bits, 32) == SYNC_WORD_X96) {
             if (!core->x96_decoder) {
@@ -2064,7 +2058,6 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
     }
 
     if ((asset->extension_mask & EXSS_XBR) && !core->xbr_present) {
-        //printf("found XBR @ EXSS\n");
         bits_init(&core->bits, data + asset->xbr_offset, asset->xbr_size);
         if (bits_get(&core->bits, 32) == SYNC_WORD_XBR) {
             if ((ret = parse_xbr_frame(core, flags)) < 0) {
