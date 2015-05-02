@@ -29,14 +29,14 @@
 #include "core_huffman.h"
 #include "core_vectors.h"
 
-enum sample_type {
+enum SampleType {
     NO_BITS_ALLOCATED,
     HUFFMAN_CODE,
     BLOCK_CODE,
     NO_FURTHER_ENCODING
 };
 
-enum header_type {
+enum HeaderType {
     HEADER_CORE,
     HEADER_XCH,
     HEADER_XXCH
@@ -179,7 +179,7 @@ static int parse_frame_header(struct core_decoder *core)
 }
 
 // 5.3.2 - Primary audio coding header
-static int parse_coding_header(struct core_decoder *core, enum header_type header, int xch_base)
+static int parse_coding_header(struct core_decoder *core, enum HeaderType header, int xch_base)
 {
     int ch, n, ret;
 
@@ -369,7 +369,7 @@ static int parse_joint_scale(struct core_decoder *core, int sel)
 
 // 5.4.1 - Primary audio coding side information
 static int parse_subframe_header(struct core_decoder *core, int sf,
-                                 enum header_type header, int xch_base)
+                                 enum HeaderType header, int xch_base)
 {
     int ch, band, ret;
 
@@ -544,11 +544,10 @@ static inline int extract_audio(struct core_decoder *core, int *audio,
     const struct huffman *huff = NULL;
 
     // Assume no further encoding by default
-    enum sample_type type = NO_FURTHER_ENCODING;
-
-    assert(abits >= 0 && abits < 27);
+    enum SampleType type = NO_FURTHER_ENCODING;
 
     // Select the quantizer
+    assert(abits >= 0 && abits < 27);
     if (abits == 0) {
         // No bits allocated
         type = NO_BITS_ALLOCATED;
@@ -629,7 +628,7 @@ static int parse_subband_samples(struct core_decoder *core, int sf, int ssf,
 }
 
 // 5.5 - Primary audio data arrays
-static int parse_subframe_audio(struct core_decoder *core, int sf, enum header_type header,
+static int parse_subframe_audio(struct core_decoder *core, int sf, enum HeaderType header,
                                 int xch_base, int *sub_pos, int *lfe_pos)
 {
     int ssf, ch, band;
@@ -782,7 +781,7 @@ static int alloc_sample_buffer(struct core_decoder *core)
     return 0;
 }
 
-static int parse_frame_data(struct core_decoder *core, enum header_type header, int xch_base)
+static int parse_frame_data(struct core_decoder *core, enum HeaderType header, int xch_base)
 {
     int ret;
     if ((ret = parse_coding_header(core, header, xch_base)) < 0)
