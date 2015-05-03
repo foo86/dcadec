@@ -1783,6 +1783,18 @@ static int parse_x96_frame_exss(struct x96_decoder *x96, int flags)
     return 0;
 }
 
+static int alloc_x96_decoder(struct core_decoder *core)
+{
+    if (!core->x96_decoder) {
+        if (!(core->x96_decoder = ta_znew(core, struct x96_decoder)))
+            return -DCADEC_ENOMEM;
+        core->x96_decoder->core = core;
+        core->x96_decoder->rand = 1;
+    }
+
+    return 0;
+}
+
 // Revert to base core channel set in case (X)XCH parsing fails
 static void revert_to_base_chset(struct core_decoder *core)
 {
@@ -1956,12 +1968,8 @@ static int parse_optional_info(struct core_decoder *core, int flags)
 
         if (x96_pos) {
             core->bits.index = x96_pos * 32 + 12;
-            if (!core->x96_decoder) {
-                if (!(core->x96_decoder = ta_znew(core, struct x96_decoder)))
-                    return -DCADEC_ENOMEM;
-                core->x96_decoder->core = core;
-                core->x96_decoder->rand = 1;
-            }
+            if ((ret = alloc_x96_decoder(core)) < 0)
+                return ret;
             if ((ret = parse_x96_frame(core->x96_decoder)) < 0) {
                 if (flags & DCADEC_FLAG_STRICT)
                     return ret;
@@ -2041,12 +2049,8 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
     if ((asset->extension_mask & EXSS_X96) && !core->x96_present) {
         bits_init(&core->bits, data + asset->x96_offset, asset->x96_size);
         if (bits_get(&core->bits, 32) == SYNC_WORD_X96) {
-            if (!core->x96_decoder) {
-                if (!(core->x96_decoder = ta_znew(core, struct x96_decoder)))
-                    return -DCADEC_ENOMEM;
-                core->x96_decoder->core = core;
-                core->x96_decoder->rand = 1;
-            }
+            if ((ret = alloc_x96_decoder(core)) < 0)
+                return ret;
             if ((ret = parse_x96_frame_exss(core->x96_decoder, flags)) < 0) {
                 if (flags & DCADEC_FLAG_STRICT)
                     return ret;
