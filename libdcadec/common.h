@@ -57,14 +57,10 @@
         }                           \
     } while (false)
 
+#define AT_LEAST_GCC(major, minor)  \
+    (defined __GNUC__) && ((__GNUC__ > (major)) || (__GNUC__ == (major) && __GNUC_MINOR__ >= (minor)))
+
 #ifdef __GNUC__
-#if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8)
-#define dca_bswap16(x)  __builtin_bswap16(x)
-#else
-static inline uint16_t dca_bswap16(uint16_t x) { return (x << 8) | (x >> 8); }
-#endif
-#define dca_bswap32(x)  __builtin_bswap32(x)
-#define dca_bswap64(x)  __builtin_bswap64(x)
 #define dca_clz32(x)    __builtin_clz(x)
 #define dca_clz64(x)    __builtin_clzll(x)
 #else
@@ -85,6 +81,33 @@ static inline int dca_popcount(uint32_t x)
 #endif
 
 #define dca_countof(x)  (sizeof(x) / sizeof((x)[0]))
+
+#if AT_LEAST_GCC(4, 8)
+#define dca_bswap16(x)  __builtin_bswap16(x)
+#else
+static inline uint16_t dca_bswap16(uint16_t x)
+{
+    return (x << 8) | (x >> 8);
+}
+#endif
+
+#if AT_LEAST_GCC(4, 3)
+#define dca_bswap32(x)  __builtin_bswap32(x)
+#define dca_bswap64(x)  __builtin_bswap64(x)
+#else
+static inline uint32_t dca_bswap32(uint32_t x)
+{
+    x = ((x & 0x00ff00ff) << 8) | ((x & 0xff00ff00) >> 8);
+    return (x << 16) | (x >> 16);
+}
+
+static inline uint64_t dca_bswap64(uint64_t x)
+{
+    x = ((x & 0x00ff00ff00ff00ff) <<  8) | ((x & 0xff00ff00ff00ff00) >>  8);
+    x = ((x & 0x0000ffff0000ffff) << 16) | ((x & 0xffff0000ffff0000) >> 16);
+    return (x << 32) | (x >> 32);
+}
+#endif
 
 #define DCA_BSWAP16_C(x)    ((((x) & 0x00ff)   <<  8) | (((x) & 0xff00)  >>  8))
 #define DCA_BSWAP32_C(x)    ((DCA_BSWAP16_C(x) << 16) | (DCA_BSWAP16_C(x >> 16)))
