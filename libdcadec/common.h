@@ -28,35 +28,6 @@
 #include <errno.h>
 #include <assert.h>
 
-#include "dca_context.h"
-#include "ta.h"
-
-#define DCADEC_FLAG_KEEP_DMIX_MASK  \
-    (DCADEC_FLAG_KEEP_DMIX_2CH | DCADEC_FLAG_KEEP_DMIX_6CH)
-
-#ifdef NDEBUG
-#define DCA_DEBUG(m)
-#else
-#define DCA_DEBUG(m) \
-    fprintf(stderr, "%s+%d: %s\n", __FILE__, __LINE__, m)
-#endif
-
-#define enforce(x, m) \
-    do {                                \
-        if (!(x)) {                     \
-            DCA_DEBUG(m);               \
-            return -DCADEC_EBADDATA;    \
-        }                               \
-    } while (false)
-
-#define require(x, m) \
-    do {                            \
-        if (!(x)) {                 \
-            DCA_DEBUG(m);           \
-            return -DCADEC_ENOSUP;  \
-        }                           \
-    } while (false)
-
 #define AT_LEAST_GCC(major, minor)  \
     (defined __GNUC__) && ((__GNUC__ > (major)) || (__GNUC__ == (major) && __GNUC_MINOR__ >= (minor)))
 
@@ -194,6 +165,35 @@ static inline uint32_t DCA_MEM32NE(const void *data)
     memcpy(&res, data, sizeof(res));
     return res;
 }
+
+#ifdef NDEBUG
+#define DCA_DEBUG(m)
+#else
+#define DCA_DEBUG(m) \
+    fprintf(stderr, "%s+%d: %s\n", __FILE__, __LINE__, m)
+#endif
+
+#define enforce(x, m) \
+    do {                                \
+        if (!(x)) {                     \
+            DCA_DEBUG(m);               \
+            return -DCADEC_EBADDATA;    \
+        }                               \
+    } while (false)
+
+#define require(x, m) \
+    do {                            \
+        if (!(x)) {                 \
+            DCA_DEBUG(m);           \
+            return -DCADEC_ENOSUP;  \
+        }                           \
+    } while (false)
+
+#include "dca_context.h"
+#include "ta.h"
+
+#define DCADEC_FLAG_KEEP_DMIX_MASK  \
+    (DCADEC_FLAG_KEEP_DMIX_2CH | DCADEC_FLAG_KEEP_DMIX_6CH)
 
 // WAVEFORMATEXTENSIBLE speakers
 enum WaveSpeaker {
