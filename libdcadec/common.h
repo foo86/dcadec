@@ -74,6 +74,10 @@ static inline uint16_t dca_bswap16(uint16_t x) { return (x << 8) | (x >> 8); }
 
 #define dca_countof(x)  (sizeof(x) / sizeof((x)[0]))
 
+#define DCA_BSWAP16_C(x)    ((((x) & 0x00ff)   <<  8) | (((x) & 0xff00)  >>  8))
+#define DCA_BSWAP32_C(x)    ((DCA_BSWAP16_C(x) << 16) | (DCA_BSWAP16_C(x >> 16)))
+#define DCA_BSWAP64_C(x)    ((DCA_BSWAP32_C(x) << 32) | (DCA_BSWAP32_C(x >> 32)))
+
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define DCA_16LE(x) ((uint16_t)(x))
 #define DCA_32LE(x) ((uint32_t)(x))
@@ -81,6 +85,12 @@ static inline uint16_t dca_bswap16(uint16_t x) { return (x << 8) | (x >> 8); }
 #define DCA_16BE(x) dca_bswap16(x)
 #define DCA_32BE(x) dca_bswap32(x)
 #define DCA_64BE(x) dca_bswap64(x)
+#define DCA_16LE_C(x)   (x)
+#define DCA_32LE_C(x)   (x)
+#define DCA_64LE_C(x)   (x)
+#define DCA_16BE_C(x)   DCA_BSWAP16_C(x)
+#define DCA_32BE_C(x)   DCA_BSWAP32_C(x)
+#define DCA_64BE_C(x)   DCA_BSWAP64_C(x)
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #define DCA_16LE(x) dca_bswap16(x)
 #define DCA_32LE(x) dca_bswap32(x)
@@ -88,6 +98,12 @@ static inline uint16_t dca_bswap16(uint16_t x) { return (x << 8) | (x >> 8); }
 #define DCA_16BE(x) ((uint16_t)(x))
 #define DCA_32BE(x) ((uint32_t)(x))
 #define DCA_64BE(x) ((uint64_t)(x))
+#define DCA_16LE_C(x)   DCA_BSWAP16_C(x)
+#define DCA_32LE_C(x)   DCA_BSWAP32_C(x)
+#define DCA_64LE_C(x)   DCA_BSWAP64_C(x)
+#define DCA_16BE_C(x)   (x)
+#define DCA_32BE_C(x)   (x)
+#define DCA_64BE_C(x)   (x)
 #else
 #error Unsupported byte order
 #endif

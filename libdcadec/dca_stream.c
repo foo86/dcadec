@@ -74,7 +74,7 @@ static int parse_hd_hdr(struct dcadec_stream *stream)
     if (fread(header, sizeof(header), 1, stream->fp) != 1)
         return fseeko(stream->fp, 0, SEEK_SET);
 
-    if (header[0] != DCA_64BE(DTSHDHDR))
+    if (header[0] != DCA_64BE_C(DTSHDHDR))
         return fseeko(stream->fp, 0, SEEK_SET);
 
     while (true) {
@@ -83,7 +83,7 @@ static int parse_hd_hdr(struct dcadec_stream *stream)
             return -1;
 
         switch (header[0]) {
-        case DCA_64BE(STRMDATA): {
+        case DCA_64BE_C(STRMDATA): {
             off_t pos = ftello(stream->fp);
             if (pos < 0)
                 return -1;
@@ -93,7 +93,7 @@ static int parse_hd_hdr(struct dcadec_stream *stream)
             return 1;
         }
 
-        case DCA_64BE(AUPR_HDR): {
+        case DCA_64BE_C(AUPR_HDR): {
             uint8_t data[21];
 
             if (size < sizeof(data))

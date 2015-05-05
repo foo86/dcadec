@@ -53,22 +53,22 @@ DCADEC_API int dcadec_frame_convert_bitstream(uint8_t *dst, size_t *dst_size,
         _src = memcpy(_dst, _src, src_size);
 
     switch (DCA_MEM32NE(_src)) {
-    case DCA_32BE(SYNC_WORD_CORE):
-    case DCA_32BE(SYNC_WORD_EXSS):
+    case DCA_32BE_C(SYNC_WORD_CORE):
+    case DCA_32BE_C(SYNC_WORD_EXSS):
         if (_src != _dst)
             memcpy(_dst, _src, src_size);
         *dst_size = src_size;
         return DCADEC_BITSTREAM_BE16;
 
-    case DCA_32BE(SYNC_WORD_CORE_LE):
-    case DCA_32BE(SYNC_WORD_EXSS_LE):
+    case DCA_32BE_C(SYNC_WORD_CORE_LE):
+    case DCA_32BE_C(SYNC_WORD_EXSS_LE):
         count = (src_size + 1) / 2;
         while (count--)
             *_dst++ = dca_bswap16(*_src++);
         *dst_size = src_size;
         return DCADEC_BITSTREAM_LE16;
 
-    case DCA_32BE(SYNC_WORD_CORE_BE14):
+    case DCA_32BE_C(SYNC_WORD_CORE_BE14):
         count = (src_size + 15) / 16;
         while (count--) {
             SRC_OP(BE)
@@ -79,7 +79,7 @@ DCADEC_API int dcadec_frame_convert_bitstream(uint8_t *dst, size_t *dst_size,
         *dst_size = src_size - src_size / 8;
         return DCADEC_BITSTREAM_BE14;
 
-    case DCA_32BE(SYNC_WORD_CORE_LE14):
+    case DCA_32BE_C(SYNC_WORD_CORE_LE14):
         count = (src_size + 15) / 16;
         while (count--) {
             SRC_OP(LE)

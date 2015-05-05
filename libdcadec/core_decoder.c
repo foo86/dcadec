@@ -1895,7 +1895,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
             size_t hdr_size, dist;
 
             switch (core->bits.data[sync_pos]) {
-            case DCA_32BE(SYNC_WORD_XCH):
+            case DCA_32BE_C(SYNC_WORD_XCH):
                 core->bits.index = (sync_pos + 1) * 32;
                 hdr_size = bits_get(&core->bits, 10) + 1;
                 // XCH comes last after all other extension streams. The
@@ -1910,7 +1910,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 }
                 break;
 
-            case DCA_32BE(SYNC_WORD_XXCH):
+            case DCA_32BE_C(SYNC_WORD_XXCH):
                 core->bits.index = (sync_pos + 1) * 32;
                 hdr_size = bits_get(&core->bits, 6) + 1;
                 if (!bits_check_crc(&core->bits, (sync_pos + 1) * 32,
@@ -1918,7 +1918,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                     xxch_pos = sync_pos + 1;
                 break;
 
-            case DCA_32BE(SYNC_WORD_X96):
+            case DCA_32BE_C(SYNC_WORD_X96):
                 // X96 comes last after all other extension streams (and can't
                 // coexist with XCH apparently). The distance between X96 sync
                 // word and end of the core frame must be equal to X96 frame
@@ -1932,7 +1932,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 }
                 break;
 
-            case DCA_32BE(SYNC_WORD_XBR):
+            case DCA_32BE_C(SYNC_WORD_XBR):
                 core->bits.index = (sync_pos + 1) * 32;
                 hdr_size = bits_get(&core->bits, 6) + 1;
                 if (!bits_check_crc(&core->bits, (sync_pos + 1) * 32,
