@@ -315,7 +315,7 @@ int main(int argc, char **argv)
             }
 
             if ((uint64_t)nsamples > npcmsamples)
-                nsamples = npcmsamples;
+                nsamples = (int)npcmsamples;
 
             if ((ret = dcadec_waveout_write(waveout, samples, nsamples,
                                             channel_mask, sample_rate,

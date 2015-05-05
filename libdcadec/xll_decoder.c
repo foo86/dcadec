@@ -530,12 +530,12 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
     if (chs->lsb_section_size[band]) {
         enforce(chs->lsb_section_size[band] <= band_data_nbytes,
                 "LSB section size too big");
-        enforce(chs->lsb_section_size[band] >= (xll->band_crc_present & 2),
+        enforce(chs->lsb_section_size[band] >= (xll->band_crc_present & 2U),
                 "LSB section size too small");
 
         // Skip to the start of LSB portion
         size_t scalable_lsbs_start = band_data_end -
-            chs->lsb_section_size[band] * 8 - (xll->band_crc_present & 2) * 8;
+            chs->lsb_section_size[band] * 8 - (xll->band_crc_present & 2U) * 8;
         if ((ret = bits_seek(&xll->bits, scalable_lsbs_start)) < 0)
             return ret;
 

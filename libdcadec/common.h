@@ -28,6 +28,18 @@
 #include <errno.h>
 #include <assert.h>
 
+#ifdef _MSC_VER
+#define inline      __inline
+#define restrict    __restrict
+
+#define fseeko  _fseeki64
+#define ftello  _ftelli64
+#define STDIN_FILENO    0
+#define STDOUT_FILENO   1
+
+typedef __int64 off_t;
+#endif
+
 #define AT_LEAST_GCC(major, minor)  \
     (defined __GNUC__) && ((__GNUC__ > (major)) || (__GNUC__ == (major) && __GNUC_MINOR__ >= (minor)))
 

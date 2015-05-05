@@ -16,6 +16,10 @@
 #include <stdio.h>
 #include <assert.h>
 
+#ifdef _MSC_VER
+#define inline      __inline
+#endif
+
 #include "ta.h"
 
 // Note: the actual minimum alignment is dictated by malloc(). It doesn't

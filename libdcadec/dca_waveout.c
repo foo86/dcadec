@@ -226,7 +226,7 @@ DCADEC_API struct dcadec_waveout *dcadec_waveout_open(const char *name)
             _close(fd);
             goto fail;
         }
-        if (!(wave->fp = fdopen(fd, "wb"))) {
+        if (!(wave->fp = _fdopen(fd, "wb"))) {
             _close(fd);
             goto fail;
         }
@@ -255,13 +255,13 @@ DCADEC_API void dcadec_waveout_close(struct dcadec_waveout *wave)
     if (wave->size > 60) {
         if (fseeko(wave->fp, 4, SEEK_SET) == 0) {
             if (wave->size <= UINT32_MAX)
-                write_int(wave, wave->size);
+                write_int(wave, (uint32_t)wave->size);
             else
                 write_int(wave, 0);
         }
         if (fseeko(wave->fp, 64, SEEK_SET) == 0) {
             if (wave->size <= UINT32_MAX)
-                write_int(wave, wave->size - 60);
+                write_int(wave, (uint32_t)(wave->size - 60));
             else
                 write_int(wave, 0);
         }

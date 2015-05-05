@@ -156,7 +156,7 @@ DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name)
             _close(fd);
             goto fail1;
         }
-        if (!(stream->fp = fdopen(fd, "rb"))) {
+        if (!(stream->fp = _fdopen(fd, "rb"))) {
             _close(fd);
             goto fail1;
         }
