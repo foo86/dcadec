@@ -108,15 +108,8 @@ static inline uint16_t dca_bswap16(uint16_t x) { return (x << 8) | (x >> 8); }
 #error Unsupported byte order
 #endif
 
-#define DCA_MAX(a, b) \
-    ({ typeof(a) _a = (a); \
-       typeof(b) _b = (b); \
-       _a > _b ? _a : _b; })
-
-#define DCA_MIN(a, b) \
-    ({ typeof(a) _a = (a); \
-       typeof(b) _b = (b); \
-       _a < _b ? _a : _b; })
+#define DCA_MIN(a, b)   ((a) < (b) ? (a) : (b))
+#define DCA_MAX(a, b)   ((a) > (b) ? (a) : (b))
 
 #define DCA_ALIGN(value, align) \
     (((value) + (align) - 1) & ~((align) - 1))
@@ -133,8 +126,12 @@ static inline uint16_t dca_bswap16(uint16_t x) { return (x << 8) | (x >> 8); }
 #define DCA_MEM40BE(data) \
     (((uint64_t)(data)[0] << 32) | DCA_MEM32BE(&(data)[1]))
 
-#define DCA_MEM32NE(data) \
-    ({ uint32_t _res; memcpy(&_res, data, sizeof(_res)); _res; })
+static inline uint32_t DCA_MEM32NE(const void *data)
+{
+    uint32_t res;
+    memcpy(&res, data, sizeof(res));
+    return res;
+}
 
 // WAVEFORMATEXTENSIBLE speakers
 enum WaveSpeaker {
