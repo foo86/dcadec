@@ -67,9 +67,21 @@ static inline uint16_t dca_bswap16(uint16_t x) { return (x << 8) | (x >> 8); }
 #define dca_bswap64(x)  __builtin_bswap64(x)
 #define dca_clz32(x)    __builtin_clz(x)
 #define dca_clz64(x)    __builtin_clzll(x)
-#define dca_popcount(x) __builtin_popcount(x)
 #else
 #error Unsupported compiler
+#endif
+
+#if (defined __GNUC__) && (defined __POPCNT__)
+#define dca_popcount(x) __builtin_popcount(x)
+#else
+static inline int dca_popcount(uint32_t x)
+{
+    x -= (x >> 1) & 0x55555555;
+    x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+    x = (x + (x >> 4)) & 0x0f0f0f0f;
+    x += x >> 8;
+    return (x + (x >> 16)) & 0x3f;
+}
 #endif
 
 #define dca_countof(x)  (sizeof(x) / sizeof((x)[0]))
