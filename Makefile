@@ -15,7 +15,9 @@ vpath %.pc.in $(SRC_DIR)
 
 -include .config
 
-ifdef CONFIG_NDEBUG
+ifdef CONFIG_DEBUG
+    CFLAGS += -D_DEBUG
+else
     CFLAGS += -DNDEBUG
 endif
 

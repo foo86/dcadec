@@ -178,11 +178,11 @@ static inline uint32_t DCA_MEM32NE(const void *data)
     return res;
 }
 
-#ifdef NDEBUG
-#define DCA_DEBUG(m)
-#else
+#ifdef _DEBUG
 #define DCA_DEBUG(m) \
     fprintf(stderr, "%s+%d: %s\n", __FILE__, __LINE__, m)
+#else
+#define DCA_DEBUG(m)
 #endif
 
 #define enforce(x, m) \
