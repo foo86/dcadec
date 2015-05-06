@@ -21,7 +21,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+
+#ifdef _MSC_VER
+#include "getopt.h"
+#else
 #include <unistd.h>
+#endif
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
