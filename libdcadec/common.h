@@ -28,20 +28,9 @@
 #include <errno.h>
 #include <assert.h>
 
-#ifdef _MSC_VER
-#define inline      __inline
-#define restrict    __restrict
-
-#define fseeko  _fseeki64
-#define ftello  _ftelli64
-#define STDIN_FILENO    0
-#define STDOUT_FILENO   1
-
-typedef __int64 off_t;
-#endif
-
-#define AT_LEAST_GCC(major, minor)  \
-    (defined __GNUC__) && ((__GNUC__ > (major)) || (__GNUC__ == (major) && __GNUC_MINOR__ >= (minor)))
+#include "compiler.h"
+#include "dca_context.h"
+#include "ta.h"
 
 #if AT_LEAST_GCC(3, 4)
 #define dca_clz32(x)    __builtin_clz(x)
@@ -123,20 +112,7 @@ static inline uint64_t dca_bswap64(uint64_t x)
 #define DCA_BSWAP32_C(x)    ((DCA_BSWAP16_C(x) << 16) | (DCA_BSWAP16_C(x >> 16)))
 #define DCA_BSWAP64_C(x)    ((DCA_BSWAP32_C(x) << 32) | (DCA_BSWAP32_C(x >> 32)))
 
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-#define DCA_16LE(x) ((uint16_t)(x))
-#define DCA_32LE(x) ((uint32_t)(x))
-#define DCA_64LE(x) ((uint64_t)(x))
-#define DCA_16BE(x) dca_bswap16(x)
-#define DCA_32BE(x) dca_bswap32(x)
-#define DCA_64BE(x) dca_bswap64(x)
-#define DCA_16LE_C(x)   (x)
-#define DCA_32LE_C(x)   (x)
-#define DCA_64LE_C(x)   (x)
-#define DCA_16BE_C(x)   DCA_BSWAP16_C(x)
-#define DCA_32BE_C(x)   DCA_BSWAP32_C(x)
-#define DCA_64BE_C(x)   DCA_BSWAP64_C(x)
-#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#if HAVE_BIGENDIAN
 #define DCA_16LE(x) dca_bswap16(x)
 #define DCA_32LE(x) dca_bswap32(x)
 #define DCA_64LE(x) dca_bswap64(x)
@@ -150,7 +126,18 @@ static inline uint64_t dca_bswap64(uint64_t x)
 #define DCA_32BE_C(x)   (x)
 #define DCA_64BE_C(x)   (x)
 #else
-#error Unsupported byte order
+#define DCA_16LE(x) ((uint16_t)(x))
+#define DCA_32LE(x) ((uint32_t)(x))
+#define DCA_64LE(x) ((uint64_t)(x))
+#define DCA_16BE(x) dca_bswap16(x)
+#define DCA_32BE(x) dca_bswap32(x)
+#define DCA_64BE(x) dca_bswap64(x)
+#define DCA_16LE_C(x)   (x)
+#define DCA_32LE_C(x)   (x)
+#define DCA_64LE_C(x)   (x)
+#define DCA_16BE_C(x)   DCA_BSWAP16_C(x)
+#define DCA_32BE_C(x)   DCA_BSWAP32_C(x)
+#define DCA_64BE_C(x)   DCA_BSWAP64_C(x)
 #endif
 
 #define DCA_MIN(a, b)   ((a) < (b) ? (a) : (b))
@@ -200,9 +187,6 @@ static inline uint32_t DCA_MEM32NE(const void *data)
             return -DCADEC_ENOSUP;  \
         }                           \
     } while (false)
-
-#include "dca_context.h"
-#include "ta.h"
 
 #define DCADEC_FLAG_KEEP_DMIX_MASK  \
     (DCADEC_FLAG_KEEP_DMIX_2CH | DCADEC_FLAG_KEEP_DMIX_6CH)
