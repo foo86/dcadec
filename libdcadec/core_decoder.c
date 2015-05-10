@@ -274,8 +274,10 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
     }
 
     // Subband activity count
-    for (ch = xch_base; ch < core->nchannels; ch++)
+    for (ch = xch_base; ch < core->nchannels; ch++) {
         core->nsubbands[ch] = bits_get(&core->bits, 5) + 2;
+        enforce(core->nsubbands[ch] <= MAX_SUBBANDS, "Invalid subband activity count");
+    }
 
     // High frequency VQ start subband
     for (ch = xch_base; ch < core->nchannels; ch++)
@@ -1611,12 +1613,14 @@ static int parse_x96_coding_header(struct x96_decoder *x96, bool exss, int xch_b
         x96->subband_start = bits_get(&core->bits, 5);
         enforce(x96->subband_start <= 27, "Invalid X96 subband start index");
     } else {
-        x96->subband_start = 32;
+        x96->subband_start = MAX_SUBBANDS;
     }
 
     // Subband activity count
-    for (ch = xch_base; ch < x96->nchannels; ch++)
+    for (ch = xch_base; ch < x96->nchannels; ch++) {
         x96->nsubbands[ch] = bits_get(&core->bits, 6) + 1;
+        enforce(x96->nsubbands[ch] >= MAX_SUBBANDS, "Invalid X96 subband activity count");
+    }
 
     // Joint intensity coding index
     for (ch = xch_base; ch < x96->nchannels; ch++)
