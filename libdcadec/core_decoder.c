@@ -284,8 +284,12 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
         core->subband_vq_start[ch] = bits_get(&core->bits, 5) + 1;
 
     // Joint intensity coding index
-    for (ch = xch_base; ch < core->nchannels; ch++)
-        core->joint_intensity_index[ch] = bits_get(&core->bits, 3);
+    for (ch = xch_base; ch < core->nchannels; ch++) {
+        if ((n = bits_get(&core->bits, 3)) && header == HEADER_XXCH)
+            n += xch_base - 1;
+        enforce(n <= core->nchannels, "Invalid joint intensity coding index");
+        core->joint_intensity_index[ch] = n;
+    }
 
     // Transient mode code book
     for (ch = xch_base; ch < core->nchannels; ch++)
@@ -1623,8 +1627,12 @@ static int parse_x96_coding_header(struct x96_decoder *x96, bool exss, int xch_b
     }
 
     // Joint intensity coding index
-    for (ch = xch_base; ch < x96->nchannels; ch++)
-        x96->joint_intensity_index[ch] = bits_get(&core->bits, 3);
+    for (ch = xch_base; ch < x96->nchannels; ch++) {
+        if ((n = bits_get(&core->bits, 3)) && xch_base)
+            n += xch_base - 1;
+        enforce(n <= x96->nchannels, "Invalid joint intensity coding index");
+        x96->joint_intensity_index[ch] = n;
+    }
 
     // Scale factor code book
     for (ch = xch_base; ch < x96->nchannels; ch++) {
