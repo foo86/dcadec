@@ -138,8 +138,10 @@ static int parse_hd_hdr(struct dcadec_stream *stream)
     return 0;
 }
 
-DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name)
+DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name, int flags)
 {
+    (void)flags;
+
     struct dcadec_stream *stream = ta_znew(NULL, struct dcadec_stream);
     if (!stream)
         return NULL;

@@ -207,7 +207,7 @@ int main(int argc, char **argv)
     }
 
     char *fn = argv[optind];
-    struct dcadec_stream *stream = dcadec_stream_open(strcmp(fn, "-") ? fn : NULL);
+    struct dcadec_stream *stream = dcadec_stream_open(strcmp(fn, "-") ? fn : NULL, 0);
     if (!stream) {
         fprintf(stderr, "Couldn't open input file\n");
         return 1;

@@ -38,9 +38,11 @@ struct dcadec_stream_info {
  *
  * @param name  Name of the file to be opened. Pass NULL to open standard input.
  *
+ * @param flags Currently unused, should be 0.
+ *
  * @return      Stream handle on success, NULL on failure.
  */
-DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name);
+DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name, int flags);
 
 /**
  * Close DTS stream.
