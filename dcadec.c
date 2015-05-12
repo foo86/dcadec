@@ -255,7 +255,7 @@ int main(int argc, char **argv)
         }
 
         fn = argv[optind + 1];
-        waveout = dcadec_waveout_open(strcmp(fn, "-") ? fn : NULL);
+        waveout = dcadec_waveout_open(strcmp(fn, "-") ? fn : NULL, 0);
         if (!waveout) {
             fprintf(stderr, "Couldn't open output file\n");
             dcadec_context_destroy(context);

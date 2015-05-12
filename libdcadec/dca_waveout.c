@@ -27,9 +27,11 @@
 #endif
 
 struct dcadec_waveout {
-    FILE        *fp;
+    FILE        *fp[SPEAKER_COUNT];
     uint64_t    size;
     uint8_t     *buffer;
+    char        *pattern;
+    int         flags;
 
     int         channel_mask;
     int         nchannels;
@@ -40,142 +42,134 @@ struct dcadec_waveout {
     int         block_align;
 };
 
-static void write_raw(struct dcadec_waveout *wave, const char *s)
+static const char * const dca_speaker_names[] = {
+    "C",    "L",    "R",    "Ls",
+    "Rs",   "LFE",  "Cs",   "Lsr",
+    "Rsr",  "Lss",  "Rss",  "Lc",
+    "Rc",   "Lh",   "Ch",   "Rh",
+    "LFE2", "Lw",   "Rw",   "Oh",
+    "Lhs",  "Rhs",  "Chr",  "Lhr",
+    "Rhr",  "Cl",   "Ll",   "Rl",
+    "RSV1", "RSV2", "RSV3", "RSV4"
+};
+
+struct header_buf {
+    uint8_t data[68];
+    size_t  size;
+};
+
+static void write_tag(struct header_buf *buf, const char *s)
 {
-    fwrite(s, strlen(s), 1, wave->fp);
+    assert(buf->size <= sizeof(buf->data) - 4);
+    memcpy(buf->data + buf->size, s, 4);
+    buf->size += 4;
 }
 
-static void write_short(struct dcadec_waveout *wave, int v)
+static void write_u16(struct header_buf *buf, int v)
 {
-    uint8_t buf[] = {
-        (v >> 0) & 0xff,
-        (v >> 8) & 0xff
-    };
-    fwrite(buf, sizeof(buf), 1, wave->fp);
+    assert(buf->size <= sizeof(buf->data) - 2);
+    buf->data[buf->size + 0] = (v >> 0) & 0xff;
+    buf->data[buf->size + 1] = (v >> 8) & 0xff;
+    buf->size += 2;
 }
 
-static void write_int(struct dcadec_waveout *wave, int v)
+static void write_u32(struct header_buf *buf, int v)
 {
-    uint8_t buf[] = {
-        (v >>  0) & 0xff,
-        (v >>  8) & 0xff,
-        (v >> 16) & 0xff,
-        (v >> 24) & 0xff
-    };
-    fwrite(buf, sizeof(buf), 1, wave->fp);
+    assert(buf->size <= sizeof(buf->data) - 4);
+    buf->data[buf->size + 0] = (v >>  0) & 0xff;
+    buf->data[buf->size + 1] = (v >>  8) & 0xff;
+    buf->data[buf->size + 2] = (v >> 16) & 0xff;
+    buf->data[buf->size + 3] = (v >> 24) & 0xff;
+    buf->size += 4;
 }
 
-static int write_header(struct dcadec_waveout *wave, int channel_mask,
-                        int sample_rate, int bits_per_sample)
+static int write_header(struct dcadec_waveout *wave, FILE *fp)
 {
-    wave->channel_mask = channel_mask;
-    wave->nchannels = dca_popcount(channel_mask);
-    wave->sample_rate = sample_rate;
-    wave->bits_per_sample = bits_per_sample;
-    wave->bytes_per_sample = (bits_per_sample + 7) >> 3;
-    wave->container_shift = (wave->bytes_per_sample << 3) - bits_per_sample;
-    wave->block_align = wave->nchannels * wave->bytes_per_sample;
+    bool extensible = !(wave->flags & DCADEC_WAVEOUT_FLAG_MONO);
 
-    write_raw(wave, "RIFF");
-    write_int(wave, 0);
-    write_raw(wave, "WAVE");
+    struct header_buf buf;
+    buf.size = 0;
 
-    write_raw(wave, "fmt ");
-    write_int(wave, 40);
+    write_tag(&buf, "RIFF");
+    if (wave->size && wave->size <= UINT32_MAX - (36 + 24 * extensible))
+        write_u32(&buf, (uint32_t)(wave->size + 36 + 24 * extensible));
+    else
+        write_u32(&buf, 0);
+
+    write_tag(&buf, "WAVE");
+
+    write_tag(&buf, "fmt ");
+    write_u32(&buf, 16 + 24 * extensible);
 
     // wFormatTag
-    write_short(wave, 0xfffe);
+    write_u16(&buf, extensible ? 0xfffe : 0x0001);
 
     // nChannels
-    write_short(wave, wave->nchannels);
+    write_u16(&buf, extensible ? wave->nchannels : 1);
 
     // nSamplesPerSec
-    write_int(wave, wave->sample_rate);
+    write_u32(&buf, wave->sample_rate);
 
     // nAvgBytesPerSec
-    write_int(wave, wave->sample_rate * wave->block_align);
+    write_u32(&buf, wave->sample_rate * wave->block_align);
 
     // nBlockAlign
-    write_short(wave, wave->block_align);
+    write_u16(&buf, wave->block_align);
 
     // wBitsPerSample
-    write_short(wave, wave->bytes_per_sample << 3);
+    write_u16(&buf, wave->bytes_per_sample << 3);
 
-    // cbSize
-    write_short(wave, 22);
+    if (extensible) {
+        // cbSize
+        write_u16(&buf, 22);
 
-    // wValidBitsPerSample
-    write_short(wave, wave->bits_per_sample);
+        // wValidBitsPerSample
+        write_u16(&buf, wave->bits_per_sample);
 
-    // dwChannelMask
-    write_int(wave, wave->channel_mask);
+        // dwChannelMask
+        write_u32(&buf, wave->channel_mask);
 
-    // SubFormat
-    write_int(wave, 1);
-    write_int(wave, 0x00100000);
-    write_int(wave, 0xaa000080);
-    write_int(wave, 0x719b3800);
+        // SubFormat
+        write_u32(&buf, 1);
+        write_u32(&buf, 0x00100000);
+        write_u32(&buf, 0xaa000080);
+        write_u32(&buf, 0x719b3800);
+    }
 
-    write_raw(wave, "data");
-    write_int(wave, 0);
+    write_tag(&buf, "data");
+    if (wave->size <= UINT32_MAX)
+        write_u32(&buf, (uint32_t)wave->size);
+    else
+        write_u32(&buf, 0);
 
-    if (ferror(wave->fp))
+    if (fwrite(buf.data, buf.size, 1, fp) != 1)
         return -DCADEC_EIO;
+
     return 0;
 }
 
-DCADEC_API int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
-                                    int nsamples, int channel_mask,
-                                    int sample_rate, int bits_per_sample)
+static int write_data(struct dcadec_waveout *wave, FILE *fp,
+                      int **samples, int nsamples, int nchannels)
 {
-    int ret;
-
-    if (nsamples == 0)
-        return 0;
-    if (nsamples < 0)
-        return -DCADEC_EINVAL;
-    if (!wave)
-        return -DCADEC_EINVAL;
-    if (!samples)
-        return -DCADEC_EINVAL;
-    if (!channel_mask)
-        return -DCADEC_EINVAL;
-    if (sample_rate < 8000 || sample_rate > 384000)
-        return -DCADEC_EINVAL;
-    if (bits_per_sample < 8 || bits_per_sample > 32)
-        return -DCADEC_EINVAL;
-
-    if (!wave->size) {
-        if ((ret = write_header(wave, channel_mask,
-                                sample_rate, bits_per_sample)) < 0)
-            return ret;
-        wave->size = 60;
-    } else {
-        if (channel_mask != wave->channel_mask)
-            return -DCADEC_EOUTCHG;
-        if (sample_rate != wave->sample_rate)
-            return -DCADEC_EOUTCHG;
-        if (bits_per_sample != wave->bits_per_sample)
-            return -DCADEC_EOUTCHG;
-    }
-
-    if (ta_alloc_fast(wave, &wave->buffer, nsamples, wave->block_align) < 0)
-        return -DCADEC_ENOMEM;
-
     int limit = 1 << (wave->bits_per_sample - 1);
     int mask = ~((1 << wave->bits_per_sample) - 1);
+    int shift = wave->container_shift;
+    int bps = wave->bytes_per_sample;
+    int nclipped = 0;
 
     uint8_t *dst = wave->buffer;
     for (int i = 0; i < nsamples; i++) {
-        for (int j = 0; j < wave->nchannels; j++) {
+        for (int j = 0; j < nchannels; j++) {
             int sample = samples[j][i];
 
-            if ((sample + limit) & mask)
-                return -DCADEC_EOVERFLOW;
+            if ((sample + limit) & mask) {
+                sample = (sample >> 31) ^ (limit - 1);
+                nclipped++;
+            }
 
-            sample <<= wave->container_shift;
+            sample <<= shift;
 
-            switch (wave->bytes_per_sample) {
+            switch (bps) {
             case 4:
                 dst[0] = (sample >>  0) & 0xff;
                 dst[1] = (sample >>  8) & 0xff;
@@ -198,25 +192,122 @@ DCADEC_API int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
                 return -DCADEC_EINVAL;
             }
 
-            dst += wave->bytes_per_sample;
+            dst += bps;
         }
     }
 
-    if (fwrite(wave->buffer, wave->block_align, nsamples, wave->fp) != (size_t)nsamples)
+    if (nclipped && !(wave->flags & DCADEC_WAVEOUT_FLAG_CLIP))
+        return -DCADEC_EOVERFLOW;
+
+    if (fwrite(wave->buffer, wave->block_align, nsamples, fp) != (size_t)nsamples)
         return -DCADEC_EIO;
-    wave->size += nsamples * wave->block_align;
-    return 0;
+
+    return nclipped;
 }
 
-DCADEC_API struct dcadec_waveout *dcadec_waveout_open(const char *name)
+DCADEC_API int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
+                                    int nsamples, int channel_mask,
+                                    int sample_rate, int bits_per_sample)
 {
+    int ret, nclipped;
+
+    if (nsamples == 0)
+        return 0;
+    if (nsamples < 0)
+        return -DCADEC_EINVAL;
+    if (!wave)
+        return -DCADEC_EINVAL;
+    if (!samples)
+        return -DCADEC_EINVAL;
+    if (!channel_mask)
+        return -DCADEC_EINVAL;
+    if (sample_rate < 8000 || sample_rate > 384000)
+        return -DCADEC_EINVAL;
+    if (bits_per_sample < 8 || bits_per_sample > 32)
+        return -DCADEC_EINVAL;
+
+    if (!wave->size) {
+        wave->channel_mask = channel_mask;
+        wave->nchannels = dca_popcount(channel_mask);
+        wave->sample_rate = sample_rate;
+        wave->bits_per_sample = bits_per_sample;
+        wave->bytes_per_sample = (bits_per_sample + 7) >> 3;
+        wave->container_shift = (wave->bytes_per_sample << 3) - bits_per_sample;
+
+        if (wave->flags & DCADEC_WAVEOUT_FLAG_MONO) {
+            wave->block_align = wave->bytes_per_sample;
+            for (int i = 0, j = 0; i < SPEAKER_COUNT; i++) {
+                if (!(wave->channel_mask & (1 << i)))
+                    continue;
+
+                if (!wave->fp[j]) {
+                    char name[1024];
+                    sprintf(name, wave->pattern, dca_speaker_names[i]);
+                    if (!(wave->fp[j] = fopen(name, "wb")))
+                        return -DCADEC_EIO;
+                }
+
+                if ((ret = write_header(wave, wave->fp[j])) < 0)
+                    return ret;
+
+                j++;
+            }
+        } else {
+            wave->block_align = wave->nchannels * wave->bytes_per_sample;
+            if ((ret = write_header(wave, wave->fp[0])) < 0)
+                return ret;
+        }
+    } else {
+        if (channel_mask != wave->channel_mask)
+            return -DCADEC_EOUTCHG;
+        if (sample_rate != wave->sample_rate)
+            return -DCADEC_EOUTCHG;
+        if (bits_per_sample != wave->bits_per_sample)
+            return -DCADEC_EOUTCHG;
+    }
+
+    if (ta_alloc_fast(wave, &wave->buffer, nsamples, wave->block_align) < 0)
+        return -DCADEC_ENOMEM;
+
+    if (wave->flags & DCADEC_WAVEOUT_FLAG_MONO) {
+        nclipped = 0;
+        for (int i = 0; i < wave->nchannels; i++) {
+            if ((ret = write_data(wave, wave->fp[i], &samples[i], nsamples, 1)) < 0)
+                return ret;
+            nclipped += ret;
+        }
+    } else {
+        if ((ret = write_data(wave, wave->fp[0], samples, nsamples, wave->nchannels)) < 0)
+            return ret;
+        nclipped = ret;
+    }
+
+    wave->size += nsamples * wave->block_align;
+    return nclipped;
+}
+
+DCADEC_API struct dcadec_waveout *dcadec_waveout_open(const char *name, int flags)
+{
+    if (flags & DCADEC_WAVEOUT_FLAG_MONO) {
+        if (!name || strlen(name) >= 1020)
+            return NULL;
+        char *p = strchr(name, '%');
+        if (!p || p[1] != 's' || strchr(p + 2, '%'))
+            return NULL;
+    }
+
     struct dcadec_waveout *wave = ta_znew(NULL, struct dcadec_waveout);
     if (!wave)
         return NULL;
 
     if (name) {
-        if (!(wave->fp = fopen(name, "wb")))
-            goto fail;
+        if (flags & DCADEC_WAVEOUT_FLAG_MONO) {
+            if (!(wave->pattern = ta_strdup(wave, name)))
+                goto fail;
+        } else {
+            if (!(wave->fp[0] = fopen(name, "wb")))
+                goto fail;
+        }
     } else {
         int fd;
 #ifdef _WIN32
@@ -226,20 +317,21 @@ DCADEC_API struct dcadec_waveout *dcadec_waveout_open(const char *name)
             _close(fd);
             goto fail;
         }
-        if (!(wave->fp = _fdopen(fd, "wb"))) {
+        if (!(wave->fp[0] = _fdopen(fd, "wb"))) {
             _close(fd);
             goto fail;
         }
 #else
         if ((fd = dup(STDOUT_FILENO)) < 0)
             goto fail;
-        if (!(wave->fp = fdopen(fd, "wb"))) {
+        if (!(wave->fp[0] = fdopen(fd, "wb"))) {
             close(fd);
             goto fail;
         }
 #endif
     }
 
+    wave->flags = flags;
     return wave;
 
 fail:
@@ -252,21 +344,13 @@ DCADEC_API void dcadec_waveout_close(struct dcadec_waveout *wave)
     if (!wave)
         return;
 
-    if (wave->size > 60) {
-        if (fseeko(wave->fp, 4, SEEK_SET) == 0) {
-            if (wave->size <= UINT32_MAX)
-                write_int(wave, (uint32_t)wave->size);
-            else
-                write_int(wave, 0);
-        }
-        if (fseeko(wave->fp, 64, SEEK_SET) == 0) {
-            if (wave->size <= UINT32_MAX)
-                write_int(wave, (uint32_t)(wave->size - 60));
-            else
-                write_int(wave, 0);
+    for (int i = 0; i < SPEAKER_COUNT; i++) {
+        if (wave->fp[i]) {
+            if (wave->size && !fseeko(wave->fp[i], 0, SEEK_SET))
+                write_header(wave, wave->fp[i]);
+            fclose(wave->fp[i]);
         }
     }
 
-    fclose(wave->fp);
     ta_free(wave);
 }

@@ -21,6 +21,14 @@
 
 #include "dca_context.h"
 
+/**@{*/
+/** Write a mono WAV file for each native DTS channel */
+#define DCADEC_WAVEOUT_FLAG_MONO    0x01
+
+/** Clip instead of raising PCM overflow error */
+#define DCADEC_WAVEOUT_FLAG_CLIP    0x02
+/**@}*/
+
 struct dcadec_waveout;
 
 /**
@@ -32,8 +40,10 @@ struct dcadec_waveout;
  * @param wave    Writer handle.
  *
  * @param samples   Array of pointers to planes containing PCM data for active
- *                  channels. Channels must be ordered according to
- *                  WAVEFORMATEXTENSIBLE specification.
+ *                  channels. Normally, channels must be ordered according to
+ *                  WAVEFORMATEXTENSIBLE specification. However, when
+ *                  DCADEC_WAVEOUT_FLAG_MONO is set, native DTS channel layout
+ *                  should be provided.
  *
  * @param nsamples  Number of PCM samples in each plane.
  *
@@ -44,7 +54,9 @@ struct dcadec_waveout;
  *
  * @param bits_per_sample   Audio PCM resolution in bits.
  *
- * @return      0 on success, negative error code on failure.
+ * @return      0 on success, negative error code on failure. Positive return
+ *              value indicates number of out-of-range PCM samples that were
+ *              clipped.
  */
 DCADEC_API int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
                                     int nsamples, int channel_mask,
@@ -53,11 +65,15 @@ DCADEC_API int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
  * Open WAV writer to file or standard output.
  *
  * @param name  Name of the file to be opened. Pass NULL to open standard
- *              output.
+ *              output. When DCADEC_WAVEOUT_FLAG_MONO is set, name must be
+ *              non-NULL and must include `%s' sub-string that will be replaced
+ *              with DTS channel name.
+ *
+ * @param flags Any number of DCADEC_WAVEOUT_FLAG_* constants OR'ed together.
  *
  * @return      Writer handle on success, NULL on failure.
  */
-DCADEC_API struct dcadec_waveout *dcadec_waveout_open(const char *name);
+DCADEC_API struct dcadec_waveout *dcadec_waveout_open(const char *name, int flags);
 
 /**
  * Close WAV writer. This function updates the WAV header if possible.
