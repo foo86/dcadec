@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <inttypes.h>
 
 #ifdef _MSC_VER
 #include "getopt.h"
@@ -285,6 +286,8 @@ int main(int argc, char **argv)
 
     uint32_t ndelayframes = 0;
     uint64_t npcmsamples = UINT64_MAX;
+    uint64_t nclippedsamples = 0;
+    uint64_t nskippedframes = 0;
 
     if (!parse_only && !no_strip) {
         struct dcadec_stream_info *info = dcadec_stream_get_info(stream);
@@ -318,10 +321,12 @@ int main(int argc, char **argv)
                                              &channel_mask, &sample_rate,
                                              &bits_per_sample, NULL)) < 0) {
                 fprintf(stderr, "Error filtering frame: %s\n", dcadec_strerror(ret));
-                if (flags & DCADEC_FLAG_STRICT)
+                if (flags & DCADEC_FLAG_STRICT) {
                     break;
-                else
+                } else {
+                    nskippedframes++;
                     goto next_packet;
+                }
             }
 
             if (ndelayframes) {
@@ -336,11 +341,16 @@ int main(int argc, char **argv)
                                             channel_mask, sample_rate,
                                             bits_per_sample)) < 0) {
                 fprintf(stderr, "Error writing WAV file: %s\n", dcadec_strerror(ret));
-                if ((flags & DCADEC_FLAG_STRICT) || ret == -DCADEC_EIO)
+                if ((flags & DCADEC_FLAG_STRICT) || ret != -DCADEC_EOUTCHG) {
                     break;
+                } else {
+                    nskippedframes++;
+                    goto next_packet;
+                }
             }
 
             npcmsamples -= nsamples;
+            nclippedsamples += ret;
         }
 
 next_packet:
@@ -362,10 +372,12 @@ next_packet:
 
         if ((ret = dcadec_context_parse(context, packet, size)) < 0) {
             fprintf(stderr, "Error parsing packet: %s\n", dcadec_strerror(ret));
-            if (flags & DCADEC_FLAG_STRICT)
+            if (flags & DCADEC_FLAG_STRICT) {
                 break;
-            else
+            } else {
+                nskippedframes++;
                 goto next_packet;
+            }
         }
     }
 
@@ -376,6 +388,10 @@ next_packet:
             fprintf(stderr, "Interrupted.\n");
         else if (ret == 0)
             fprintf(stderr, "Completed.\n");
+        if (nclippedsamples)
+            fprintf(stderr, "*** %" PRIu64 " samples clipped ***\n", nclippedsamples);
+        if (nskippedframes)
+            fprintf(stderr, "*** %" PRIu64 " frames skipped ***\n", nskippedframes);
     }
 
     dcadec_waveout_close(waveout);
