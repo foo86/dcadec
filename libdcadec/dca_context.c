@@ -243,14 +243,17 @@ static int filter_core_frame(struct dcadec_context *dca)
     dca->nframesamples = core->npcmsamples;
     dca->sample_rate = core->output_rate;
     dca->bits_per_sample = 24;
+
+    // Set profile
     if (core->xbr_present || core->xxch_present)
         dca->profile = DCADEC_PROFILE_HD_HRA;
     else if (core->es_format && core->xch_present)
         dca->profile = DCADEC_PROFILE_DS_ES;
-    else if (core->x96_present && !(dca->flags & DCADEC_FLAG_CORE_SYNTH_X96))
+    else if (core->x96_present)
         dca->profile = DCADEC_PROFILE_DS_96_24;
     else
         dca->profile = DCADEC_PROFILE_DS;
+
     return 0;
 }
 
