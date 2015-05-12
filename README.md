@@ -22,7 +22,7 @@ Usage
 
 Help screen of the program is reproduced below.
 ```
-Usage: ./dcadec [-26bcfhlmnPqSsx] <input.dts> [output.wav]
+Usage: ./dcadec [-26bcfhlmnPqSx] <input.dts> [output.wav]
 dcadec is a free DTS Coherent Acoustics decoder. Supported options:
 
 -2  Extract embedded 2.0 downmix.
@@ -52,9 +52,6 @@ dcadec is a free DTS Coherent Acoustics decoder. Supported options:
     and errors are still printed.
 
 -S  Don't strip padding samples for streams within DTS-HD container.
-
--s  Force bit width reduction of DTS core from 24 bit to source PCM resolution.
-    Developer option, degrades sound quality.
 
 -x  Force use of X96 synthesis filter for DTS core interpolation. Developer
     option, degrades sound quality.

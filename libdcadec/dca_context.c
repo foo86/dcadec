@@ -232,7 +232,7 @@ static int filter_core_frame(struct dcadec_context *dca)
         if (core->prim_dmix_embedded && core->prim_dmix_type == DMIX_TYPE_LoRo)
             coeff = core->prim_dmix_coeff;
         if ((ret = down_mix_prim_chset(dca, core->output_samples, core->npcmsamples,
-                                       &core->ch_mask, core->bits_per_sample, coeff)) < 0)
+                                       &core->ch_mask, 24, coeff)) < 0)
             return ret;
     }
 
@@ -242,7 +242,7 @@ static int filter_core_frame(struct dcadec_context *dca)
 
     dca->nframesamples = core->npcmsamples;
     dca->sample_rate = core->output_rate;
-    dca->bits_per_sample = core->bits_per_sample;
+    dca->bits_per_sample = 24;
     if (core->xbr_present || core->xxch_present)
         dca->profile = DCADEC_PROFILE_HD_HRA;
     else if (core->es_format && core->xch_present)

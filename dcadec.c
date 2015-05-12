@@ -43,7 +43,7 @@
 static void print_help(char *name)
 {
     fprintf(stderr,
-"Usage: %s [-26bcfhlmnPqSsx] <input.dts> [output.wav]\n"
+"Usage: %s [-26bcfhlmnPqSx] <input.dts> [output.wav]\n"
 "dcadec is a free DTS Coherent Acoustics decoder. Supported options:\n"
 "\n"
 "-2  Extract embedded 2.0 downmix.\n"
@@ -73,9 +73,6 @@ static void print_help(char *name)
 "    and errors are still printed.\n"
 "\n"
 "-S  Don't strip padding samples for streams within DTS-HD container.\n"
-"\n"
-"-s  Force bit width reduction of DTS core from 24 bit to source PCM resolution.\n"
-"    Developer option, degrades sound quality.\n"
 "\n"
 "-x  Force use of X96 synthesis filter for DTS core interpolation. Developer\n"
 "    option, degrades sound quality.\n"
@@ -197,9 +194,6 @@ int main(int argc, char **argv)
             break;
         case 'S':
             no_strip = true;
-            break;
-        case 's':
-            flags |= DCADEC_FLAG_CORE_SOURCE_PCM_RES;
             break;
         case 'x':
             flags |= DCADEC_FLAG_CORE_SYNTH_X96;

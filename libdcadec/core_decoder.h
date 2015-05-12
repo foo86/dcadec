@@ -145,7 +145,6 @@ struct core_decoder {
 
     int     npcmsamples;
     int     output_rate;
-    int     bits_per_sample;
 
     int     filter_flags;
 };

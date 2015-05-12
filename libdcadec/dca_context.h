@@ -93,8 +93,8 @@
  */
 #define DCADEC_FLAG_CORE_SYNTH_X96      0x04
 
-/** Force DTS core bit width reducion to source PCM resolution */
-#define DCADEC_FLAG_CORE_SOURCE_PCM_RES 0x08
+/** Reserved flag, don't use */
+#define DCADEC_FLAG_CORE_RESERVED       0x08
 
 /* Use FIR filter for floating point DTS core LFE channel interpolation */
 #define DCADEC_FLAG_CORE_LFE_FIR        0x10
