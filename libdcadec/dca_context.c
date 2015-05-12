@@ -120,9 +120,29 @@ static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dc
     return nchannels;
 }
 
+static void clip_samples(struct dcadec_context *dca, int nchannels)
+{
+    int nsamples = dca->nframesamples;
+
+    switch (dca->bits_per_sample) {
+    case 24:
+        for (int ch = 0; ch < nchannels; ch++)
+            for (int n = 0; n < nsamples; n++)
+                dca->samples[ch][n] = clip23(dca->samples[ch][n]);
+        break;
+    case 16:
+        for (int ch = 0; ch < nchannels; ch++)
+            for (int n = 0; n < nsamples; n++)
+                dca->samples[ch][n] = clip15(dca->samples[ch][n]);
+        break;
+    default:
+        assert(0);
+        break;
+    }
+}
+
 static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
-                               int nsamples, int *ch_mask, int bits_per_sample,
-                               int *dmix_coeff)
+                               int nsamples, int *ch_mask, int *dmix_coeff)
 {
     // With both KEEP_DMIX flags set, perfrom 2.0 downmix only when custom
     // matrix is present
@@ -190,25 +210,6 @@ static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
         pos++;
     }
 
-    // Perform clipping
-    for (int ch = 0; ch < 2; ch++) {
-        int *buf = dca->dmix_sample_buffer + ch * nsamples;
-        switch (bits_per_sample) {
-        case 24:
-            for (int n = 0; n < nsamples; n++)
-                buf[n] = clip23(buf[n]);
-            break;
-        case 16:
-            for (int n = 0; n < nsamples; n++)
-                buf[n] = clip15(buf[n]);
-            break;
-        default:
-            for (int n = 0; n < nsamples; n++)
-                buf[n] = clip__(buf[n], bits_per_sample - 1);
-            break;
-        }
-    }
-
     samples[SPEAKER_L] = dca->dmix_sample_buffer;
     samples[SPEAKER_R] = dca->dmix_sample_buffer + nsamples;
     *ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
@@ -232,12 +233,12 @@ static int filter_core_frame(struct dcadec_context *dca)
         if (core->prim_dmix_embedded && core->prim_dmix_type == DMIX_TYPE_LoRo)
             coeff = core->prim_dmix_coeff;
         if ((ret = down_mix_prim_chset(dca, core->output_samples, core->npcmsamples,
-                                       &core->ch_mask, 24, coeff)) < 0)
+                                       &core->ch_mask, coeff)) < 0)
             return ret;
     }
 
     // Reorder sample buffer pointers
-    if (reorder_samples(dca, core->output_samples, core->ch_mask) <= 0)
+    if ((ret = reorder_samples(dca, core->output_samples, core->ch_mask)) <= 0)
         return -DCADEC_EINVAL;
 
     dca->nframesamples = core->npcmsamples;
@@ -253,6 +254,10 @@ static int filter_core_frame(struct dcadec_context *dca)
         dca->profile = DCADEC_PROFILE_DS_96_24;
     else
         dca->profile = DCADEC_PROFILE_DS;
+
+    // Perform clipping
+    if (dca->flags & DCADEC_FLAG_KEEP_DMIX_2CH)
+        clip_samples(dca, ret);
 
     return 0;
 }
@@ -350,27 +355,6 @@ static void undo_down_mix(struct xll_chset *c, struct downmix *dmix)
     }
 }
 
-static void scale_down(int *buf, int nsamples, int bits_per_sample, int scale)
-{
-    if (scale == (1 << 15))
-        return;
-
-    switch (bits_per_sample) {
-    case 24:
-        for (int n = 0; n < nsamples; n++)
-            buf[n] = clip23(mul15(buf[n], scale));
-        break;
-    case 16:
-        for (int n = 0; n < nsamples; n++)
-            buf[n] = clip15(mul15(buf[n], scale));
-        break;
-    default:
-        for (int n = 0; n < nsamples; n++)
-            buf[n] = clip__(mul15(buf[n], scale), bits_per_sample - 1);
-        break;
-    }
-}
-
 static void scale_down_mix(struct xll_chset *c, struct downmix *dmix)
 {
     struct xll_decoder *xll = c->decoder;
@@ -387,19 +371,29 @@ static void scale_down_mix(struct xll_chset *c, struct downmix *dmix)
 
     // Scale down preceding channels in frequency band 0
     for (int i = 0; i < c->dmix_m; i++) {
-        scale_down(dmix->samples[XLL_BAND_0][i], nsamples,
-                   c->pcm_bit_res, c->dmix_scale[i]);
+        int scale = c->dmix_scale[i];
+        if (scale != (1 << 15)) {
+            int *buf = dmix->samples[XLL_BAND_0][i];
+            for (int k = 0; k < nsamples; k++)
+                buf[k] = mul15(buf[k], scale);
+        }
     }
 
     // Scale down preceding channels in frequency band 1
     if (c->nfreqbands > 1 && c->band_dmix_embedded[XLL_BAND_1]) {
         for (int i = 0; i < c->dmix_m; i++) {
-            // Scale down channel samples
-            scale_down(dmix->samples[XLL_BAND_1][i], nsamples,
-                       c->pcm_bit_res, c->dmix_scale[i]);
-            // Scale down decimator history
-            scale_down(dmix->deci_history[i] + 1, XLL_DECI_HISTORY - 1,
-                       c->pcm_bit_res, c->dmix_scale[i]);
+            int scale = c->dmix_scale[i];
+            if (scale != (1 << 15)) {
+                // Scale down channel samples
+                int *buf = dmix->samples[XLL_BAND_1][i];
+                for (int k = 0; k < nsamples; k++)
+                    buf[k] = mul15(buf[k], scale);
+
+                // Scale down decimator history
+                buf = dmix->deci_history[i];
+                for (int k = 1; k < XLL_DECI_HISTORY; k++)
+                    buf[k] = mul15(buf[k], scale);
+            }
         }
     }
 }
@@ -704,7 +698,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         if (p->dmix_embedded && p->dmix_type == DMIX_TYPE_LoRo)
             coeff = p->dmix_coeff;
         if ((ret = down_mix_prim_chset(dca, spkr_map, xll->nframesamples,
-                                       &ch_mask, p->pcm_bit_res, coeff)) < 0)
+                                       &ch_mask, coeff)) < 0)
             return ret;
     }
 
@@ -725,6 +719,11 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     dca->sample_rate = p->freq;
     dca->bits_per_sample = p->storage_bit_res;
     dca->profile = DCADEC_PROFILE_HD_MA;
+
+    // Perform clipping
+    if (dca->flags & DCADEC_FLAG_KEEP_DMIX_MASK)
+        clip_samples(dca, ret);
+
     return 0;
 }
 
