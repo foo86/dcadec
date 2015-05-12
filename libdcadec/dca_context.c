@@ -254,7 +254,7 @@ static int filter_core_frame(struct dcadec_context *dca)
     return 0;
 }
 
-static int map_spkr_to_core_ch(struct core_decoder *core, int spkr)
+static int map_spkr_to_core_spkr(struct core_decoder *core, int spkr)
 {
     if (core->ch_mask & (1 << spkr))
         return spkr;
@@ -490,8 +490,8 @@ static void force_lossy_output(struct core_decoder *core, struct xll_chset *c)
         int spkr = xll_map_ch_to_spkr(c, ch);
         if (spkr < 0)
             continue;
-        int core_ch = map_spkr_to_core_ch(core, spkr);
-        if (core_ch < 0)
+        int core_spkr = map_spkr_to_core_spkr(core, spkr);
+        if (core_spkr < 0)
             continue;
         c->residual_encode &= ~(1 << ch);
     }
@@ -556,8 +556,8 @@ static int combine_residual_core_frame(struct dcadec_context *dca,
         if (spkr < 0)
             return -DCADEC_EINVAL;
 
-        int core_ch = map_spkr_to_core_ch(core, spkr);
-        if (core_ch < 0)
+        int core_spkr = map_spkr_to_core_spkr(core, spkr);
+        if (core_spkr < 0)
             return -DCADEC_EINVAL;
 
         int shift = 24 - c->pcm_bit_res;
@@ -567,7 +567,7 @@ static int combine_residual_core_frame(struct dcadec_context *dca,
         int round = shift > 0 ? 1 << (shift - 1) : 0;
 
         int *dst = c->msb_sample_buffer[XLL_BAND_0][ch];
-        int *src = core->output_samples[core_ch];
+        int *src = core->output_samples[core_spkr];
         if (o) {
             // Undo embedded core downmix pre-scaling
             int scale_inv = o->dmix_scale_inv[c->dmix_m + ch];
