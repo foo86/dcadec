@@ -45,7 +45,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    struct dcadec_stream *stream = dcadec_stream_open(argv[1]);
+    struct dcadec_stream *stream = dcadec_stream_open(argv[1], 0);
     if (!stream) {
         fprintf(stderr, "Couldn't open input file\n");
         return 1;
