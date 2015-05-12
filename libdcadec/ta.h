@@ -27,6 +27,7 @@ void ta_free_children(void *ptr);
 bool ta_set_destructor(void *ptr, void (*destructor)(void *));
 bool ta_set_parent(void *ptr, void *ta_parent);
 void *ta_find_parent(void *ptr);
+char *ta_strdup(void *ta_parent, const char *str);
 
 static inline size_t ta_calc_array_size(size_t element_size, size_t count)
 {

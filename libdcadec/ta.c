@@ -281,3 +281,18 @@ void *ta_find_parent(void *ptr)
     }
     return NULL;
 }
+
+/* Return a copy of str.
+ * Returns NULL on OOM.
+ */
+char *ta_strdup(void *ta_parent, const char *str)
+{
+    if (str) {
+        size_t len = strlen(str) + 1;
+        char *dup = ta_alloc_size(ta_parent, len);
+        if (dup)
+            memcpy(dup, str, len);
+        return dup;
+    }
+    return NULL;
+}
