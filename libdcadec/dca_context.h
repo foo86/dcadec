@@ -117,7 +117,7 @@
 #define DCADEC_PROFILE_DS       0x01    /**< Digital Surround */
 #define DCADEC_PROFILE_DS_96_24 0x02    /**< Digital Surround 96/24 */
 #define DCADEC_PROFILE_DS_ES    0x04    /**< Digital Surround ES */
-#define DCADEC_PROFILE_HD_HRA   0x08    /**< High-Resolution Audio */
+#define DCADEC_PROFILE_HD_HRA   0x08    /**< High Resolution Audio */
 #define DCADEC_PROFILE_HD_MA    0x10    /**< Master Audio */
 #define DCADEC_PROFILE_EXPRESS  0x20    /**< Express */
 /**@}*/
