@@ -199,6 +199,10 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
 
         core->ch_mask = audio_mode_ch_mask[core->audio_mode];
 
+        // Add LFE channel if present
+        if (core->lfe_present)
+            core->ch_mask |= SPEAKER_MASK_LFE1;
+
         core->dmix_coeffs_present = core->dmix_embedded = false;
         break;
 
@@ -223,8 +227,18 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
         core->nchannels = audio_mode_nch[core->audio_mode] + n;
         assert(core->nchannels <= MAX_CHANNELS);
 
-        // Loudspeaker activity mask
-        core->ch_mask |= bits_get(&core->bits, core->xxch_mask_nbits - 6) << 6;
+        // Loudspeaker layout mask
+        core->xxch_spkr_mask =
+            bits_get(&core->bits, core->xxch_mask_nbits - SPEAKER_Cs) << SPEAKER_Cs;
+
+        enforce(dca_popcount(core->xxch_spkr_mask) == n,
+                "Invalid XXCH speaker layout mask");
+
+        enforce(!(core->xxch_core_mask & core->xxch_spkr_mask),
+                "XXCH speaker layout mask overlaps with core");
+
+        // Combine core and XXCH masks together
+        core->ch_mask = core->xxch_core_mask | core->xxch_spkr_mask;
 
         // Downmix coefficients present in stream
         core->dmix_coeffs_present = bits_get1(&core->bits);
@@ -827,26 +841,34 @@ static int parse_frame_data(struct core_decoder *core, enum HeaderType header, i
 
 static int map_prm_ch_to_spkr(struct core_decoder *core, int ch)
 {
+    // Try to map this channel to core first
     int pos = audio_mode_nch[core->audio_mode];
-    if (ch < pos)
-        return prm_ch_to_spkr_map[core->audio_mode][ch];
-
-    for (int spkr = SPEAKER_Cs; spkr < SPEAKER_COUNT; spkr++)
-        if (core->ch_mask & (1 << spkr))
-            if (pos++ == ch)
+    if (ch < pos) {
+        int spkr = prm_ch_to_spkr_map[core->audio_mode][ch];
+        if (core->xxch_present) {
+            if (core->xxch_core_mask & (1 << spkr))
                 return spkr;
-
-    return -1;
-}
-
-static int map_spkr_to_core_spkr(struct core_decoder *core, int spkr)
-{
-    if (core->ch_mask & (1 << spkr))
+            if (spkr == SPEAKER_Ls && (core->xxch_core_mask & SPEAKER_MASK_Lss))
+                return SPEAKER_Lss;
+            if (spkr == SPEAKER_Rs && (core->xxch_core_mask & SPEAKER_MASK_Rss))
+                return SPEAKER_Rss;
+            return -1;
+        }
         return spkr;
-    if (spkr == SPEAKER_Lss && (core->ch_mask & SPEAKER_MASK_Ls))
-        return SPEAKER_Ls;
-    if (spkr == SPEAKER_Rss && (core->ch_mask & SPEAKER_MASK_Rs))
-        return SPEAKER_Rs;
+    }
+
+    // Then XCH
+    if (core->xch_present && ch == pos)
+        return SPEAKER_Cs;
+
+    // Then XXCH
+    if (core->xxch_present)
+        for (int spkr = SPEAKER_Cs; spkr < core->xxch_mask_nbits; spkr++)
+            if (core->xxch_spkr_mask & (1 << spkr))
+                if (pos++ == ch)
+                    return spkr;
+
+    // No mapping
     return -1;
 }
 
@@ -871,10 +893,6 @@ int core_filter(struct core_decoder *core, int flags)
 
     // Number of PCM samples in this frame
     core->npcmsamples = (core->npcmblocks * NUM_PCMBLOCK_SAMPLES) << synth_x96;
-
-    // Add LFE channel if present
-    if (core->lfe_present)
-        core->ch_mask |= SPEAKER_MASK_LFE1;
 
     // Reallocate PCM output buffer
     if (ta_zalloc_fast(core, &core->output_buffer, core->npcmsamples * dca_popcount(core->ch_mask), sizeof(int)) < 0)
@@ -997,8 +1015,8 @@ int core_filter(struct core_decoder *core, int flags)
             // Undo embedded core downmix pre-scaling
             int scale_inv = core->dmix_scale_inv;
             if (scale_inv != (1 << 16)) {
-                for (int spkr = 0; spkr < SPEAKER_Cs; spkr++) {
-                    if ((core->ch_mask & (1 << spkr))) {
+                for (int spkr = 0; spkr < core->xxch_mask_nbits; spkr++) {
+                    if (core->xxch_core_mask & (1 << spkr)) {
                         int *samples = core->output_samples[spkr];
                         for (int n = 0; n < nsamples; n++)
                             samples[n] = mul16(samples[n], scale_inv);
@@ -1014,13 +1032,10 @@ int core_filter(struct core_decoder *core, int flags)
                     return -DCADEC_EINVAL;
                 for (int spkr2 = 0; spkr2 < core->xxch_mask_nbits; spkr2++) {
                     if (core->dmix_mask[ch] & (1 << spkr2)) {
-                        int spkr3 = map_spkr_to_core_spkr(core, spkr2);
-                        if (spkr3 < 0)
-                            return -DCADEC_EINVAL;
                         int coeff = mul16(*coeff_ptr++, scale_inv);
                         if (coeff) {
                             int *src = core->output_samples[spkr1];
-                            int *dst = core->output_samples[spkr3];
+                            int *dst = core->output_samples[spkr2];
                             for (int n = 0; n < nsamples; n++)
                                 dst[n] -= mul15(src[n], coeff);
                         }
@@ -1029,8 +1044,8 @@ int core_filter(struct core_decoder *core, int flags)
             }
 
             // Clip core channels
-            for (int spkr = 0; spkr < SPEAKER_Cs; spkr++) {
-                if (core->ch_mask & (1 << spkr)) {
+            for (int spkr = 0; spkr < core->xxch_mask_nbits; spkr++) {
+                if (core->xxch_core_mask & (1 << spkr)) {
                     int *samples = core->output_samples[spkr];
                     for (int n = 0; n < nsamples; n++)
                         samples[n] = clip23(samples[n]);
@@ -1101,7 +1116,7 @@ static int parse_xxch_frame(struct core_decoder *core)
 
     // Number of bits for loudspeaker mask
     core->xxch_mask_nbits = bits_get(&core->bits, 5) + 1;
-    enforce(core->xxch_mask_nbits > 6, "Invalid number of bits for XXCH speaker mask");
+    enforce(core->xxch_mask_nbits > SPEAKER_Cs, "Invalid number of bits for XXCH speaker mask");
 
     // Number of channel sets
     int xxch_nchsets = bits_get(&core->bits, 2) + 1;
@@ -1112,6 +1127,17 @@ static int parse_xxch_frame(struct core_decoder *core)
 
     // Core loudspeaker activity mask
     core->xxch_core_mask = bits_get(&core->bits, core->xxch_mask_nbits);
+
+    // Validate the core mask
+    int mask = core->ch_mask;
+
+    if ((mask & SPEAKER_MASK_Ls) && (core->xxch_core_mask & SPEAKER_MASK_Lss))
+        mask = (mask & ~SPEAKER_MASK_Ls) | SPEAKER_MASK_Lss;
+
+    if ((mask & SPEAKER_MASK_Rs) && (core->xxch_core_mask & SPEAKER_MASK_Rss))
+        mask = (mask & ~SPEAKER_MASK_Rs) | SPEAKER_MASK_Rss;
+
+    enforce(mask == core->xxch_core_mask, "Invalid XXCH core speaker activity mask");
 
     // Reserved
     // Byte align
@@ -1812,6 +1838,8 @@ static void revert_to_base_chset(struct core_decoder *core)
 {
     core->nchannels = audio_mode_nch[core->audio_mode];
     core->ch_mask = audio_mode_ch_mask[core->audio_mode];
+    if (core->lfe_present)
+        core->ch_mask |= SPEAKER_MASK_LFE1;
     core->dmix_coeffs_present = core->dmix_embedded = false;
 }
 

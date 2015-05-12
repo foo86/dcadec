@@ -132,6 +132,7 @@ struct core_decoder {
     bool    xxch_crc_present;
     int     xxch_mask_nbits;
     int     xxch_core_mask;
+    int     xxch_spkr_mask;
 
     bool    xbr_present;
 
