@@ -1294,7 +1294,7 @@ static int parse_xbr_frame(struct core_decoder *core, int flags)
     for (int i = 0; i < xbr_nchsets; i++) {
         header_pos = core->bits.index;
 
-        if (xbr_base_ch + xbr_nchannels[i] <= MAX_CHANNELS) {
+        if (xbr_base_ch + xbr_nchannels[i] <= core->nchannels) {
             int sub_pos = 0;
             for (int sf = 0; sf < core->nsubframes; sf++) {
                 if ((ret = parse_xbr_subframe(core, xbr_base_ch,
@@ -1781,7 +1781,7 @@ static int parse_x96_frame_exss(struct x96_decoder *x96, int flags)
     for (int i = 0; i < x96_nchsets; i++) {
         header_pos = core->bits.index;
 
-        if (x96_base_ch + x96_nchannels[i] <= MAX_CHANNELS) {
+        if (x96_base_ch + x96_nchannels[i] <= core->nchannels) {
             x96->nchannels = x96_base_ch + x96_nchannels[i];
             if ((ret = parse_x96_frame_data(x96, true, x96_base_ch)) < 0)
                 return ret;
