@@ -21,7 +21,7 @@ Usage
 
 Help screen of the program is reproduced below.
 ```
-Usage: ./dcadec [-26bcfhlnPqSsx] <input.dts> [output.wav]
+Usage: ./dcadec [-26bcfhlmnPqSsx] <input.dts> [output.wav]
 dcadec is a free DTS Coherent Acoustics decoder. Supported options:
 
 -2  Extract embedded 2.0 downmix.
@@ -37,9 +37,13 @@ dcadec is a free DTS Coherent Acoustics decoder. Supported options:
 
 -h  Show this help message.
 
--l  Enable lenient decoding mode. Attempt to recover from errors.
+-l  Enable lenient decoding mode. Attempt to recover from errors by skipping
+    non-decodable parts of the stream.
 
--n  No-act mode. Parse DTS bitstream without writing WAV file.
+-m  Write a mono WAV file for each native DTS channel. Output file name must
+    include `%s' sub-string that will be replaced with DTS channel name.
+
+-n  No-act mode. Parse DTS bitstream without writing WAV file(s).
 
 -P  Disable progress indicator.
 

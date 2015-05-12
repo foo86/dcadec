@@ -42,7 +42,7 @@
 static void print_help(char *name)
 {
     fprintf(stderr,
-"Usage: %s [-26bcfhlnPqSsx] <input.dts> [output.wav]\n"
+"Usage: %s [-26bcfhlmnPqSsx] <input.dts> [output.wav]\n"
 "dcadec is a free DTS Coherent Acoustics decoder. Supported options:\n"
 "\n"
 "-2  Extract embedded 2.0 downmix.\n"
@@ -58,9 +58,13 @@ static void print_help(char *name)
 "\n"
 "-h  Show this help message.\n"
 "\n"
-"-l  Enable lenient decoding mode. Attempt to recover from errors.\n"
+"-l  Enable lenient decoding mode. Attempt to recover from errors by skipping\n"
+"    non-decodable parts of the stream.\n"
 "\n"
-"-n  No-act mode. Parse DTS bitstream without writing WAV file.\n"
+"-m  Write a mono WAV file for each native DTS channel. Output file name must\n"
+"    include `%%s' sub-string that will be replaced with DTS channel name.\n"
+"\n"
+"-n  No-act mode. Parse DTS bitstream without writing WAV file(s).\n"
 "\n"
 "-P  Disable progress indicator.\n"
 "\n"
@@ -146,13 +150,14 @@ static void signal_handler(int sig)
 int main(int argc, char **argv)
 {
     int flags = DCADEC_FLAG_STRICT;
+    int wave_flags = 0;
     bool parse_only = false;
     bool no_progress = false;
     bool quiet = false;
     bool no_strip = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "26bcfhlnPqSsx")) != -1) {
+    while ((opt = getopt(argc, argv, "26bcfhlmnPqSsx")) != -1) {
         switch (opt) {
         case '2':
             flags |= DCADEC_FLAG_KEEP_DMIX_2CH;
@@ -174,6 +179,11 @@ int main(int argc, char **argv)
             return 0;
         case 'l':
             flags &= ~DCADEC_FLAG_STRICT;
+            wave_flags |= DCADEC_WAVEOUT_FLAG_CLIP;
+            break;
+        case 'm':
+            flags |= DCADEC_FLAG_NATIVE_LAYOUT;
+            wave_flags |= DCADEC_WAVEOUT_FLAG_MONO;
             break;
         case 'n':
             parse_only = true;
@@ -255,7 +265,7 @@ int main(int argc, char **argv)
         }
 
         fn = argv[optind + 1];
-        waveout = dcadec_waveout_open(strcmp(fn, "-") ? fn : NULL, 0);
+        waveout = dcadec_waveout_open(strcmp(fn, "-") ? fn : NULL, wave_flags);
         if (!waveout) {
             fprintf(stderr, "Couldn't open output file\n");
             dcadec_context_destroy(context);
