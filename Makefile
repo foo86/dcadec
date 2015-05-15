@@ -42,6 +42,10 @@ endif
 OUT_DEC ?= dcadec$(EXESUF)
 OUT_CUT ?= dcacut$(EXESUF)
 
+OUT_DEV ?= test/stddev$(EXESUF)
+SRC_DEV ?= test/stddev.c
+CFLAGS_DEV ?= -O2 -Wall -Wextra
+
 SRC_LIB = \
 libdcadec/bitstream.c \
 libdcadec/core_decoder.c \
@@ -135,11 +139,19 @@ $(OUT_CUT): $(OBJ_CUT) $(OUT_LIB)
 
 endif
 
+$(OUT_DEV): $(SRC_DEV)
+	$(CC) $(LDFLAGS) -o $@ $(CFLAGS_DEV) $< $(LIBS)
+
+check: $(OUT_DEC) $(OUT_DEV)
+	cd test && ./test.sh
+
 clean:
 	$(RM) $(OUT_LIB) $(OBJ_LIB) $(DEP_LIB) $(EXTRA_LIB)
 	$(RM) $(OUT_DEC) $(OBJ_DEC) $(DEP_DEC)
 	$(RM) $(OUT_CUT) $(OBJ_CUT) $(DEP_CUT)
 	$(RM) dcadec.pc
+	$(RM) $(OUT_DEV)
+	$(RM) -r test/decoded
 
 .PHONY: dcadec.pc
 dcadec.pc: dcadec.pc.in
