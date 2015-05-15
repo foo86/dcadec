@@ -144,16 +144,16 @@ static void clip_samples(struct dcadec_context *dca, int nchannels)
 static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
                                int nsamples, int *ch_mask, int *dmix_coeff)
 {
-    // With both KEEP_DMIX flags set, perfrom 2.0 downmix only when custom
-    // matrix is present
-    if (!dmix_coeff && (dca->flags & DCADEC_FLAG_KEEP_DMIX_6CH))
-        return 0;
-
     // No action if already 2.0. Remove LFE channel if 2.1.
     if ((*ch_mask & ~SPEAKER_MASK_LFE1) == (SPEAKER_MASK_L | SPEAKER_MASK_R)) {
         *ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
         return 0;
     }
+
+    // Unless both KEEP_DMIX flags are set, perform 2.0 downmix only when
+    // custom matrix is present
+    if (!dmix_coeff && !(dca->flags & DCADEC_FLAG_KEEP_DMIX_6CH))
+        return 0;
 
     // Reallocate downmix sample buffer
     if (ta_alloc_fast(dca, &dca->dmix_sample_buffer, 2 * nsamples, sizeof(int)) < 0)
