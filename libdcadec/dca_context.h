@@ -105,12 +105,6 @@
 /** Extract embedded 5.1 downmix */
 #define DCADEC_FLAG_KEEP_DMIX_6CH       0x40
 
-/**
- * Extract embedded 2.0 downmix if present, otherwise force 2.0 downmix using
- * default coefficients. Might result in clipping.
- */
-#define DCADEC_FLAG_FORCE_DMIX_2CH      0x60
-
 /** Output native DTS channel layout, not WAVEFORMATEXTENSIBLE layout */
 #define DCADEC_FLAG_NATIVE_LAYOUT       0x80
 
