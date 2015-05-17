@@ -46,12 +46,15 @@
 /**@}*/
 
 /**@{*/
-#ifdef _WIN32
+#if (defined _WIN32)
 #define DCADEC_SHARED_EXPORT    __declspec(dllexport)
 #define DCADEC_SHARED_IMPORT    __declspec(dllimport)
-#else
+#elif (__GNUC__ >= 4)
 #define DCADEC_SHARED_EXPORT    __attribute__((visibility("default")))
 #define DCADEC_SHARED_IMPORT    __attribute__((visibility("default")))
+#else
+#define DCADEC_SHARED_EXPORT
+#define DCADEC_SHARED_IMPORT
 #endif
 
 #ifdef DCADEC_SHARED
