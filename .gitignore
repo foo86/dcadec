@@ -3,7 +3,9 @@
 *.dll
 *.so
 *.a
-dcadec
-dcacut
+/dcadec
+/dcacut
 *.exe
 *.pc
+/test/decoded/
+/test/stddev
