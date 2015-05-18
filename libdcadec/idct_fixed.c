@@ -270,7 +270,7 @@ static void mod64_c(const int * restrict input, int * restrict output)
 void idct_perform64_fixed(int * restrict input, int * restrict output)
 {
     int mag = 0;
-    for (int i = 0; i < 32; i++)
+    for (int i = 0; i < 64; i++)
         mag += abs(input[i]);
 
     int shift = mag > 0x400000 ? 2 : 0;
