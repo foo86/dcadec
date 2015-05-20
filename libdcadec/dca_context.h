@@ -143,10 +143,9 @@ struct dcadec_core_info {
     int     bit_rate;       /**< Core stream bit rate in bytes per second,
                                  zero or negative if unavailable */
     int     npcmblocks;     /**< Number of audio sample blocks in a frame */
-    bool    xch_present;    /**< XCH extension data present and valid */
-    bool    xxch_present;   /**< XXCH extension data present and valid */
-    bool    xbr_present;    /**< XBR extension data present and valid */
-    bool    x96_present;    /**< X96 extension data present and valid */
+    bool    ext_audio_present;  /**< Extended audio present */
+    int     ext_audio_type;     /**< Extended audio type (only meaningful
+                                     when ext_audio_present is true) */
 };
 
 struct dcadec_exss_info {

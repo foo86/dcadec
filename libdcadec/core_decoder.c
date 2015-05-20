@@ -2120,6 +2120,8 @@ struct dcadec_core_info *core_get_info(struct core_decoder *core)
     info->es_format = core->es_format;
     info->bit_rate = core->bit_rate;
     info->npcmblocks = core->npcmblocks;
+    info->ext_audio_present = core->ext_audio_present;
+    info->ext_audio_type = core->ext_audio_type;
     return info;
 }
 
