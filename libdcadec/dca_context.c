@@ -736,6 +736,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
 
     dca->packet = 0;
 
+    // Parse backward compatible core sub-stream
     if (DCA_MEM32NE(data) == DCA_32BE_C(SYNC_WORD_CORE)) {
         if (!dca->core)
             if (!(dca->core = ta_znew(dca, struct core_decoder)))
@@ -754,18 +755,25 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
         }
     }
 
+    // Parse extension sub-stream (EXSS)
     if (DCA_MEM32NE(data) == DCA_32BE_C(SYNC_WORD_EXSS)) {
         if (!dca->exss)
             if (!(dca->exss = ta_znew(dca, struct exss_parser)))
                 return -DCADEC_ENOMEM;
 
-        if ((ret = exss_parse(dca->exss, data, size)) < 0)
-            goto fail;
+        if ((ret = exss_parse(dca->exss, data, size)) < 0) {
+            if (dca->flags & DCADEC_FLAG_STRICT)
+                return ret;
+        } else {
+            dca->packet |= DCADEC_PACKET_EXSS;
+        }
+    }
 
-        dca->packet |= DCADEC_PACKET_EXSS;
-
+    // Parse coding components in the first EXSS asset
+    if (dca->packet & DCADEC_PACKET_EXSS) {
         struct exss_asset *asset = &dca->exss->assets[0];
 
+        // Parse core component in EXSS
         if (!(dca->packet & DCADEC_PACKET_CORE) && (asset->extension_mask & EXSS_CORE)) {
             if (!dca->core)
                 if (!(dca->core = ta_znew(dca, struct core_decoder)))
@@ -777,33 +785,35 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
             dca->packet |= DCADEC_PACKET_CORE;
         }
 
-        if (!(dca->flags & DCADEC_FLAG_CORE_ONLY)) {
-            if ((dca->packet & DCADEC_PACKET_CORE) && (asset->extension_mask & (EXSS_XBR | EXSS_XXCH | EXSS_X96)))
-                if ((ret = core_parse_exss(dca->core, data, size, dca->flags, asset)) < 0)
-                    goto fail;
+        // Parse XLL component in EXSS
+        if (!(dca->flags & DCADEC_FLAG_CORE_ONLY) && (asset->extension_mask & EXSS_XLL)) {
+            if (!dca->xll) {
+                if (!(dca->xll = ta_znew(dca, struct xll_decoder)))
+                    return -DCADEC_ENOMEM;
+                dca->xll->flags = dca->flags;
+            }
 
-            if (asset->extension_mask & EXSS_XLL) {
-                if (!dca->xll) {
-                    if (!(dca->xll = ta_znew(dca, struct xll_decoder)))
-                        return -DCADEC_ENOMEM;
-                    dca->xll->flags = dca->flags;
-                }
-
-                if ((ret = xll_parse(dca->xll, data, size, asset)) < 0)
-                    goto fail;
-
+            if ((ret = xll_parse(dca->xll, data, size, asset)) < 0) {
+                if (dca->flags & DCADEC_FLAG_STRICT)
+                    return ret;
+            } else {
                 dca->packet |= DCADEC_PACKET_XLL;
             }
         }
-    } else if (!dca->packet) {
-        return -DCADEC_ENOSYNC;
     }
 
-    return 0;
+    if (!dca->packet)
+        return -DCADEC_ENOSYNC;
 
-fail:
-    if (!dca->packet || (dca->flags & DCADEC_FLAG_STRICT))
-        return ret;
+    // Parse core extensions in EXSS or backward compatible core sub-stream
+    if (!(dca->flags & DCADEC_FLAG_CORE_ONLY) && (dca->packet & DCADEC_PACKET_CORE)) {
+        struct exss_asset *asset = NULL;
+        if (dca->packet & DCADEC_PACKET_EXSS)
+            asset = &dca->exss->assets[0];
+        if ((ret = core_parse_exss(dca->core, data, size, dca->flags, asset)) < 0)
+            return ret;
+    }
+
     return 0;
 }
 

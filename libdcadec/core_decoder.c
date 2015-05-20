@@ -1071,8 +1071,6 @@ static int parse_xch_frame(struct core_decoder *core)
 
 static int parse_xxch_frame(struct core_decoder *core)
 {
-    enforce(!core->xch_present, "XXCH with XCH already present");
-
     size_t header_pos = core->bits.index;
 
     // XXCH sync word
@@ -1885,14 +1883,13 @@ static int parse_aux_data(struct core_decoder *core)
 
 static int parse_optional_info(struct core_decoder *core, int flags)
 {
-    int ret;
-
     // Time code stamp
     if (core->ts_present)
         bits_skip(&core->bits, 32);
 
     // Auxiliary data
     if (core->aux_present && (flags & DCADEC_FLAG_KEEP_DMIX_2CH)) {
+        int ret;
         if ((ret = parse_aux_data(core)) < 0) {
             if (flags & DCADEC_FLAG_STRICT)
                 return ret;
@@ -1909,103 +1906,76 @@ static int parse_optional_info(struct core_decoder *core, int flags)
         size_t last_pos = DCA_MIN(core->frame_size / 4, buf_size);
 
         // Search for extension sync words aligned on 4-byte boundary
-        size_t xch_pos = 0, xxch_pos = 0, x96_pos = 0, xbr_pos = 0;
+        switch (core->ext_audio_type) {
+        case 0:
+            if (flags & DCADEC_FLAG_KEEP_DMIX_MASK)
+                break;
 
-        while (sync_pos < last_pos) {
-            size_t hdr_size, dist;
-
-            switch (core->bits.data[sync_pos]) {
-            case DCA_32BE_C(SYNC_WORD_XCH):
-                core->bits.index = (sync_pos + 1) * 32;
-                hdr_size = bits_get(&core->bits, 10) + 1;
-                // XCH comes last after all other extension streams. The
-                // distance between XCH sync word and end of the core frame
-                // must be equal to XCH frame size. Off by one error is
-                // allowed for compatibility with legacy bitstreams.
-                dist = core->frame_size - sync_pos * 4;
-                if ((hdr_size == dist || hdr_size - 1 == dist)
-                    && bits_get(&core->bits, 7) == 0x08) {
-                    xch_pos = sync_pos + 1;
-                    sync_pos = last_pos - 1;
+            // The distance between XCH sync word and end of the core frame
+            // must be equal to XCH frame size. Off by one error is allowed for
+            // compatibility with legacy bitstreams. Minimum XCH frame size is
+            // 96 bytes. AMODE and PCHS are further checked to reduce
+            // probability of alias sync detection.
+            for (; sync_pos < last_pos; sync_pos++) {
+                if (core->bits.data[sync_pos] == DCA_32BE_C(SYNC_WORD_XCH)) {
+                    core->bits.index = (sync_pos + 1) * 32;
+                    size_t frame_size = bits_get(&core->bits, 10) + 1;
+                    size_t dist = core->frame_size - sync_pos * 4;
+                    if (frame_size >= 96
+                        && (frame_size == dist || frame_size - 1 == dist)
+                        && bits_get(&core->bits, 7) == 0x08) {
+                        core->xch_pos = core->bits.index;
+                        break;
+                    }
                 }
-                break;
+            }
 
-            case DCA_32BE_C(SYNC_WORD_XXCH):
-                core->bits.index = (sync_pos + 1) * 32;
-                hdr_size = bits_get(&core->bits, 6) + 1;
-                if (!bits_check_crc(&core->bits, (sync_pos + 1) * 32,
-                                    sync_pos * 32 + hdr_size * 8))
-                    xxch_pos = sync_pos;
-                break;
+            if (flags & DCADEC_FLAG_STRICT)
+                enforce2(core->xch_pos, "XCH sync word not found");
+            break;
 
-            case DCA_32BE_C(SYNC_WORD_X96):
-                // X96 comes last after all other extension streams (and can't
-                // coexist with XCH apparently). The distance between X96 sync
-                // word and end of the core frame must be equal to X96 frame
-                // size.
-                core->bits.index = (sync_pos + 1) * 32;
-                hdr_size = bits_get(&core->bits, 12) + 1;
-                dist = core->frame_size - sync_pos * 4;
-                if (hdr_size == dist) {
-                    x96_pos = sync_pos + 1;
-                    sync_pos = last_pos - 1;
+        case 2:
+            // The distance between X96 sync word and end of the core frame
+            // must be equal to X96 frame size. Minimum X96 frame size is 96
+            // bytes.
+            for (; sync_pos < last_pos; sync_pos++) {
+                if (core->bits.data[sync_pos] == DCA_32BE_C(SYNC_WORD_X96)) {
+                    core->bits.index = (sync_pos + 1) * 32;
+                    size_t frame_size = bits_get(&core->bits, 12) + 1;
+                    size_t dist = core->frame_size - sync_pos * 4;
+                    if (frame_size >= 96 && frame_size == dist) {
+                        core->x96_pos = core->bits.index;
+                        break;
+                    }
                 }
+            }
+
+            if (flags & DCADEC_FLAG_STRICT)
+                enforce2(core->x96_pos, "X96 sync word not found");
+            break;
+
+        case 6:
+            if (flags & DCADEC_FLAG_KEEP_DMIX_MASK)
                 break;
 
-            case DCA_32BE_C(SYNC_WORD_XBR):
-                core->bits.index = (sync_pos + 1) * 32;
-                hdr_size = bits_get(&core->bits, 6) + 1;
-                if (!bits_check_crc(&core->bits, (sync_pos + 1) * 32,
-                                    sync_pos * 32 + hdr_size * 8))
-                    xbr_pos = sync_pos;
-                break;
+            // XXCH frame header CRC must be valid. Minimum XXCH frame header
+            // size is 6 bytes.
+            for (; sync_pos < last_pos; sync_pos++) {
+                if (core->bits.data[sync_pos] == DCA_32BE_C(SYNC_WORD_XXCH)) {
+                    core->bits.index = (sync_pos + 1) * 32;
+                    size_t hdr_size = bits_get(&core->bits, 6) + 1;
+                    if (hdr_size >= 6 &&
+                        !bits_check_crc(&core->bits, (sync_pos + 1) * 32,
+                                        sync_pos * 32 + hdr_size * 8)) {
+                        core->xxch_pos = sync_pos * 32;
+                        break;
+                    }
+                }
             }
 
-            sync_pos++;
-        }
-
-        if (xch_pos && !(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
-            core->bits.index = xch_pos * 32 + 17;
-            if ((ret = parse_xch_frame(core)) < 0) {
-                if (flags & DCADEC_FLAG_STRICT)
-                    return ret;
-                revert_to_base_chset(core);
-            } else {
-                core->xch_present = true;
-            }
-        }
-
-        if (xxch_pos && !(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
-            core->bits.index = xxch_pos * 32;
-            if ((ret = parse_xxch_frame(core)) < 0) {
-                if (flags & DCADEC_FLAG_STRICT)
-                    return ret;
-                revert_to_base_chset(core);
-            } else {
-                core->xxch_present = true;
-            }
-        }
-
-        if (x96_pos) {
-            core->bits.index = x96_pos * 32 + 12;
-            if ((ret = alloc_x96_decoder(core)) < 0)
-                return ret;
-            if ((ret = parse_x96_frame(core->x96_decoder)) < 0) {
-                if (flags & DCADEC_FLAG_STRICT)
-                    return ret;
-            } else {
-                core->x96_present = true;
-            }
-        }
-
-        if (xbr_pos) {
-            core->bits.index = xbr_pos * 32;
-            if ((ret = parse_xbr_frame(core, flags)) < 0) {
-                if (flags & DCADEC_FLAG_STRICT)
-                    return ret;
-            } else {
-                core->xbr_present = true;
-            }
+            if (flags & DCADEC_FLAG_STRICT)
+                enforce2(core->xxch_pos, "XXCH sync word not found");
+            break;
         }
     }
 
@@ -2019,6 +1989,10 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
     core->xxch_present = false;
     core->xbr_present = false;
     core->x96_present = false;
+
+    core->xch_pos   = 0;
+    core->xxch_pos  = 0;
+    core->x96_pos   = 0;
 
     if (asset) {
         bits_init(&core->bits, data + asset->core_offset, asset->core_size);
@@ -2050,19 +2024,42 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
 
     (void)size;
 
-    if ((asset->extension_mask & EXSS_XXCH) && !core->xxch_present
-        && !(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
-        bits_init(&core->bits, data + asset->xxch_offset, asset->xxch_size);
-        if ((ret = parse_xxch_frame(core)) < 0) {
-            if (flags & DCADEC_FLAG_STRICT)
-                return ret;
-            revert_to_base_chset(core);
-        } else {
-            core->xxch_present = true;
+    // Parse (X)XCH unless downmixing
+    if (!(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
+        if (asset && (asset->extension_mask & EXSS_XXCH)) {
+            struct bitstream temp = core->bits;
+            bits_init(&core->bits, data + asset->xxch_offset, asset->xxch_size);
+            if ((ret = parse_xxch_frame(core)) < 0) {
+                if (flags & DCADEC_FLAG_STRICT)
+                    return ret;
+                revert_to_base_chset(core);
+            } else {
+                core->xxch_present = true;
+            }
+            core->bits = temp;
+        } else if (core->xxch_pos) {
+            core->bits.index = core->xxch_pos;
+            if ((ret = parse_xxch_frame(core)) < 0) {
+                if (flags & DCADEC_FLAG_STRICT)
+                    return ret;
+                revert_to_base_chset(core);
+            } else {
+                core->xxch_present = true;
+            }
+        } else if (core->xch_pos) {
+            core->bits.index = core->xch_pos;
+            if ((ret = parse_xch_frame(core)) < 0) {
+                if (flags & DCADEC_FLAG_STRICT)
+                    return ret;
+                revert_to_base_chset(core);
+            } else {
+                core->xch_present = true;
+            }
         }
     }
 
-    if ((asset->extension_mask & EXSS_X96) && !core->x96_present) {
+    // Parse X96
+    if (asset && (asset->extension_mask & EXSS_X96)) {
         bits_init(&core->bits, data + asset->x96_offset, asset->x96_size);
         if ((ret = alloc_x96_decoder(core)) < 0)
             return ret;
@@ -2072,9 +2069,20 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
         } else {
             core->x96_present = true;
         }
+    } else if (core->x96_pos) {
+        core->bits.index = core->x96_pos;
+        if ((ret = alloc_x96_decoder(core)) < 0)
+            return ret;
+        if ((ret = parse_x96_frame(core->x96_decoder)) < 0) {
+            if (flags & DCADEC_FLAG_STRICT)
+                return ret;
+        } else {
+            core->x96_present = true;
+        }
     }
 
-    if ((asset->extension_mask & EXSS_XBR) && !core->xbr_present) {
+    // Parse XBR
+    if (asset && (asset->extension_mask & EXSS_XBR)) {
         bits_init(&core->bits, data + asset->xbr_offset, asset->xbr_size);
         if ((ret = parse_xbr_frame(core, flags)) < 0) {
             if (flags & DCADEC_FLAG_STRICT)
