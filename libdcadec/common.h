@@ -172,21 +172,17 @@ static inline uint32_t DCA_MEM32NE(const void *data)
 #define DCA_DEBUG(m)
 #endif
 
-#define enforce(x, m) \
-    do {                                \
-        if (!(x)) {                     \
-            DCA_DEBUG(m);               \
-            return -DCADEC_EBADDATA;    \
-        }                               \
+#define enforce3(x, m, e) \
+    do {                        \
+        if (!(x)) {             \
+            DCA_DEBUG(m);       \
+            return -(e);        \
+        }                       \
     } while (false)
 
-#define require(x, m) \
-    do {                            \
-        if (!(x)) {                 \
-            DCA_DEBUG(m);           \
-            return -DCADEC_ENOSUP;  \
-        }                           \
-    } while (false)
+#define enforce(x, m)   enforce3(x, m, DCADEC_EBADDATA)
+#define enforce2(x, m)  enforce3(x, m, DCADEC_ENOSYNC)
+#define require(x, m)   enforce3(x, m, DCADEC_ENOSUP)
 
 #define DCADEC_FLAG_KEEP_DMIX_MASK  \
     (DCADEC_FLAG_KEEP_DMIX_2CH | DCADEC_FLAG_KEEP_DMIX_6CH)

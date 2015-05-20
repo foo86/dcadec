@@ -1075,15 +1075,16 @@ static int parse_xxch_frame(struct core_decoder *core)
 
     size_t header_pos = core->bits.index;
 
+    // XXCH sync word
+    enforce2(bits_get(&core->bits, 32) == SYNC_WORD_XXCH, "Invalid XXCH sync word");
+
     // XXCH frame header length
     size_t header_size = bits_get(&core->bits, 6) + 1;
-    enforce(header_size > 4, "Invalid XXCH header size");
-
-    size_t header_end = header_pos + header_size * 8 - 32;
+    size_t header_end = header_pos + header_size * 8;
 
     // Check XXCH frame header CRC
     int ret;
-    if ((ret = bits_check_crc(&core->bits, header_pos, header_end)) < 0)
+    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_end)) < 0)
         return ret;
 
     // CRC presence flag for channel set header
@@ -1248,13 +1249,16 @@ static int parse_xbr_frame(struct core_decoder *core, int flags)
 
     size_t header_pos = core->bits.index;
 
+    // XBR sync word
+    enforce2(bits_get(&core->bits, 32) == SYNC_WORD_XBR, "Invalid XBR sync word");
+
     // XBR frame header length
     size_t header_size = bits_get(&core->bits, 6) + 1;
-    enforce(header_size > 4, "Invalid XBR header size");
+    size_t header_end = header_pos + header_size * 8;
 
     // Check XBR frame header CRC
     int ret;
-    if ((ret = bits_check_crc(&core->bits, header_pos, header_pos + header_size * 8 - 32)) < 0)
+    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_end)) < 0)
         return ret;
 
     // Number of channel sets
@@ -1286,7 +1290,7 @@ static int parse_xbr_frame(struct core_decoder *core, int flags)
     // Reserved
     // Byte align
     // CRC16 of XBR frame header
-    if ((ret = bits_seek(&core->bits, header_pos + header_size * 8 - 32)) < 0)
+    if ((ret = bits_seek(&core->bits, header_end)) < 0)
         return ret;
 
     // Channel set data
@@ -1732,15 +1736,16 @@ static int parse_x96_frame_exss(struct x96_decoder *x96, int flags)
     struct core_decoder *core = x96->core;
     size_t header_pos = core->bits.index;
 
+    // X96 sync word
+    enforce2(bits_get(&core->bits, 32) == SYNC_WORD_X96, "Invalid X96 sync word");
+
     // X96 frame header length
     size_t header_size = bits_get(&core->bits, 6) + 1;
-    enforce(header_size > 4, "Invalid X96 header size");
-
-    size_t header_end = header_pos + header_size * 8 - 32;
+    size_t header_end = header_pos + header_size * 8;
 
     // Check X96 frame header CRC
     int ret;
-    if ((ret = bits_check_crc(&core->bits, header_pos, header_end)) < 0)
+    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_end)) < 0)
         return ret;
 
     // Revision number
@@ -1828,7 +1833,7 @@ static int parse_aux_data(struct core_decoder *core)
 
     // Auxiliary data sync word
     uint32_t sync = bits_get(&core->bits, 32);
-    enforce(sync == SYNC_WORD_REV1AUX, "Invalid auxiliary data sync word");
+    enforce2(sync == SYNC_WORD_REV1AUX, "Invalid auxiliary data sync word");
 
     // Auxiliary decode time stamp flag
     if (bits_get1(&core->bits)) {
@@ -1930,7 +1935,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 hdr_size = bits_get(&core->bits, 6) + 1;
                 if (!bits_check_crc(&core->bits, (sync_pos + 1) * 32,
                                     sync_pos * 32 + hdr_size * 8))
-                    xxch_pos = sync_pos + 1;
+                    xxch_pos = sync_pos;
                 break;
 
             case DCA_32BE_C(SYNC_WORD_X96):
@@ -1952,7 +1957,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 hdr_size = bits_get(&core->bits, 6) + 1;
                 if (!bits_check_crc(&core->bits, (sync_pos + 1) * 32,
                                     sync_pos * 32 + hdr_size * 8))
-                    xbr_pos = sync_pos + 1;
+                    xbr_pos = sync_pos;
                 break;
             }
 
@@ -2048,46 +2053,34 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
     if ((asset->extension_mask & EXSS_XXCH) && !core->xxch_present
         && !(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
         bits_init(&core->bits, data + asset->xxch_offset, asset->xxch_size);
-        if (bits_get(&core->bits, 32) == SYNC_WORD_XXCH) {
-            if ((ret = parse_xxch_frame(core)) < 0) {
-                if (flags & DCADEC_FLAG_STRICT)
-                    return ret;
-                revert_to_base_chset(core);
-            } else {
-                core->xxch_present = true;
-            }
-        } else if (flags & DCADEC_FLAG_STRICT) {
-            return -DCADEC_ENOSYNC;
+        if ((ret = parse_xxch_frame(core)) < 0) {
+            if (flags & DCADEC_FLAG_STRICT)
+                return ret;
+            revert_to_base_chset(core);
+        } else {
+            core->xxch_present = true;
         }
     }
 
     if ((asset->extension_mask & EXSS_X96) && !core->x96_present) {
         bits_init(&core->bits, data + asset->x96_offset, asset->x96_size);
-        if (bits_get(&core->bits, 32) == SYNC_WORD_X96) {
-            if ((ret = alloc_x96_decoder(core)) < 0)
+        if ((ret = alloc_x96_decoder(core)) < 0)
+            return ret;
+        if ((ret = parse_x96_frame_exss(core->x96_decoder, flags)) < 0) {
+            if (flags & DCADEC_FLAG_STRICT)
                 return ret;
-            if ((ret = parse_x96_frame_exss(core->x96_decoder, flags)) < 0) {
-                if (flags & DCADEC_FLAG_STRICT)
-                    return ret;
-            } else {
-                core->x96_present = true;
-            }
-        } else if (flags & DCADEC_FLAG_STRICT) {
-            return -DCADEC_ENOSYNC;
+        } else {
+            core->x96_present = true;
         }
     }
 
     if ((asset->extension_mask & EXSS_XBR) && !core->xbr_present) {
         bits_init(&core->bits, data + asset->xbr_offset, asset->xbr_size);
-        if (bits_get(&core->bits, 32) == SYNC_WORD_XBR) {
-            if ((ret = parse_xbr_frame(core, flags)) < 0) {
-                if (flags & DCADEC_FLAG_STRICT)
-                    return ret;
-            } else {
-                core->xbr_present = true;
-            }
-        } else if (flags & DCADEC_FLAG_STRICT) {
-            return -DCADEC_ENOSYNC;
+        if ((ret = parse_xbr_frame(core, flags)) < 0) {
+            if (flags & DCADEC_FLAG_STRICT)
+                return ret;
+        } else {
+            core->xbr_present = true;
         }
     }
 
