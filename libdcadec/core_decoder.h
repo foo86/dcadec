@@ -126,19 +126,16 @@ struct core_decoder {
     int     prim_dmix_type;
     int     prim_dmix_coeff[4 * 6];
 
-    bool    xch_present;
+    int     ext_audio_mask;
+
     size_t  xch_pos;
 
-    bool    xxch_present;
     bool    xxch_crc_present;
     int     xxch_mask_nbits;
     int     xxch_core_mask;
     int     xxch_spkr_mask;
     size_t  xxch_pos;
 
-    bool    xbr_present;
-
-    bool                x96_present;
     struct x96_decoder  *x96_decoder;
     size_t              x96_pos;
 

@@ -246,11 +246,11 @@ static int filter_core_frame(struct dcadec_context *dca)
     dca->bits_per_sample = 24;
 
     // Set profile
-    if (core->xbr_present || core->xxch_present)
+    if (core->ext_audio_mask & (EXSS_XBR | EXSS_XXCH | EXSS_X96))
         dca->profile = DCADEC_PROFILE_HD_HRA;
-    else if (core->es_format && core->xch_present)
+    else if (core->ext_audio_mask & (CSS_XXCH | CSS_XCH))
         dca->profile = DCADEC_PROFILE_DS_ES;
-    else if (core->x96_present)
+    else if (core->ext_audio_mask & CSS_X96)
         dca->profile = DCADEC_PROFILE_DS_96_24;
     else
         dca->profile = DCADEC_PROFILE_DS;

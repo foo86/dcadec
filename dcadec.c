@@ -95,7 +95,7 @@ static void print_info(struct dcadec_context *context)
         if (exss->profile & DCADEC_PROFILE_HD_MA)
             fprintf(stderr, "DTS-HD Master Audio");
         else if (exss->profile & DCADEC_PROFILE_HD_HRA)
-            fprintf(stderr, "DTS-HD High-Resolution Audio");
+            fprintf(stderr, "DTS-HD High Resolution Audio");
         else if (exss->profile & DCADEC_PROFILE_DS_ES)
             fprintf(stderr, "DTS-ES Discrete");
         else if (exss->profile & DCADEC_PROFILE_DS_96_24)

@@ -845,7 +845,7 @@ static int map_prm_ch_to_spkr(struct core_decoder *core, int ch)
     int pos = audio_mode_nch[core->audio_mode];
     if (ch < pos) {
         int spkr = prm_ch_to_spkr_map[core->audio_mode][ch];
-        if (core->xxch_present) {
+        if (core->ext_audio_mask & (CSS_XXCH | EXSS_XXCH)) {
             if (core->xxch_core_mask & (1 << spkr))
                 return spkr;
             if (spkr == SPEAKER_Ls && (core->xxch_core_mask & SPEAKER_MASK_Lss))
@@ -858,11 +858,11 @@ static int map_prm_ch_to_spkr(struct core_decoder *core, int ch)
     }
 
     // Then XCH
-    if (core->xch_present && ch == pos)
+    if ((core->ext_audio_mask & CSS_XCH) && ch == pos)
         return SPEAKER_Cs;
 
     // Then XXCH
-    if (core->xxch_present)
+    if (core->ext_audio_mask & (CSS_XXCH | EXSS_XXCH))
         for (int spkr = SPEAKER_Cs; spkr < core->xxch_mask_nbits; spkr++)
             if (core->xxch_spkr_mask & (1 << spkr))
                 if (pos++ == ch)
@@ -879,7 +879,7 @@ int core_filter(struct core_decoder *core, int flags)
     // Externally set CORE_SYNTH_X96 flags implies that X96 synthesis should be
     // enabled, yet actual X96 subband data should be discarded. This is a special
     // case for lossless residual decoder that apparently ignores X96 data.
-    if (!(flags & DCADEC_FLAG_CORE_SYNTH_X96) && core->x96_present) {
+    if (!(flags & DCADEC_FLAG_CORE_SYNTH_X96) && (core->ext_audio_mask & (CSS_X96 | EXSS_X96))) {
         x96 = core->x96_decoder;
         if (x96)
             flags |= DCADEC_FLAG_CORE_SYNTH_X96;
@@ -999,7 +999,7 @@ int core_filter(struct core_decoder *core, int flags)
         int nsamples = core->npcmsamples;
 
         // Undo embedded XCH downmix
-        if (core->es_format && core->xch_present && core->audio_mode >= 8) {
+        if (core->es_format && (core->ext_audio_mask & CSS_XCH) && core->audio_mode >= 8) {
             int *samples_ls = core->output_samples[SPEAKER_Ls];
             int *samples_rs = core->output_samples[SPEAKER_Rs];
             int *samples_cs = core->output_samples[SPEAKER_Cs];
@@ -1985,10 +1985,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
 int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
                int flags, struct exss_asset *asset)
 {
-    core->xch_present = false;
-    core->xxch_present = false;
-    core->xbr_present = false;
-    core->x96_present = false;
+    core->ext_audio_mask    = 0;
 
     core->xch_pos   = 0;
     core->xxch_pos  = 0;
@@ -2034,7 +2031,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
                     return ret;
                 revert_to_base_chset(core);
             } else {
-                core->xxch_present = true;
+                core->ext_audio_mask |= EXSS_XXCH;
             }
             core->bits = temp;
         } else if (core->xxch_pos) {
@@ -2044,7 +2041,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
                     return ret;
                 revert_to_base_chset(core);
             } else {
-                core->xxch_present = true;
+                core->ext_audio_mask |= CSS_XXCH;
             }
         } else if (core->xch_pos) {
             core->bits.index = core->xch_pos;
@@ -2053,7 +2050,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
                     return ret;
                 revert_to_base_chset(core);
             } else {
-                core->xch_present = true;
+                core->ext_audio_mask |= CSS_XCH;
             }
         }
     }
@@ -2067,7 +2064,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
             if (flags & DCADEC_FLAG_STRICT)
                 return ret;
         } else {
-            core->x96_present = true;
+            core->ext_audio_mask |= EXSS_X96;
         }
     } else if (core->x96_pos) {
         core->bits.index = core->x96_pos;
@@ -2077,7 +2074,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
             if (flags & DCADEC_FLAG_STRICT)
                 return ret;
         } else {
-            core->x96_present = true;
+            core->ext_audio_mask |= CSS_X96;
         }
     }
 
@@ -2088,7 +2085,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
             if (flags & DCADEC_FLAG_STRICT)
                 return ret;
         } else {
-            core->xbr_present = true;
+            core->ext_audio_mask |= EXSS_XBR;
         }
     }
 
@@ -2123,17 +2120,12 @@ struct dcadec_core_info *core_get_info(struct core_decoder *core)
     info->es_format = core->es_format;
     info->bit_rate = core->bit_rate;
     info->npcmblocks = core->npcmblocks;
-    info->xch_present = core->xch_present;
-    info->xxch_present = core->xxch_present;
-    info->xbr_present = core->xbr_present;
-    info->x96_present = core->x96_present;
     return info;
 }
 
 struct dcadec_exss_info *core_get_info_exss(struct core_decoder *core)
 {
-    if (!core->xch_present && !core->xxch_present &&
-        !core->xbr_present && !core->x96_present)
+    if (!(core->ext_audio_mask & (CSS_XXCH | CSS_X96 | CSS_XCH)))
         return NULL;
 
     struct dcadec_exss_info *info = ta_znew(NULL, struct dcadec_exss_info);
@@ -2141,18 +2133,16 @@ struct dcadec_exss_info *core_get_info_exss(struct core_decoder *core)
         return NULL;
 
     info->nchannels = core->nchannels + !!core->lfe_present;
-    info->sample_rate = core->sample_rate << core->x96_present;
+    info->sample_rate = core->sample_rate << !!(core->ext_audio_mask & CSS_X96);
     info->bits_per_sample = core->source_pcm_res;
-    if (core->xbr_present || core->xxch_present)
-        info->profile = DCADEC_PROFILE_HD_HRA;
-    else if (core->es_format && core->xch_present)
+    if (core->ext_audio_mask & (CSS_XXCH | CSS_XCH))
         info->profile = DCADEC_PROFILE_DS_ES;
-    else if (core->x96_present)
+    else if (core->ext_audio_mask & CSS_X96)
         info->profile = DCADEC_PROFILE_DS_96_24;
     else
         info->profile = DCADEC_PROFILE_DS;
     info->embedded_stereo = (core->prim_dmix_embedded &&
                              core->prim_dmix_type == DMIX_TYPE_LoRo);
-    info->embedded_6ch = (core->xch_present || core->xxch_present);
+    info->embedded_6ch = !!(core->ext_audio_mask & (CSS_XXCH | CSS_XCH));
     return info;
 }
