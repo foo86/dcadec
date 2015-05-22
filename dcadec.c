@@ -88,6 +88,32 @@ static void print_help(char *name)
 "Public License version 2.1 for details.\n", name);
 }
 
+static const char * const spkr_pair_names[] = {
+    "C",    "LR",     "LsRs",   "LFE",
+    "Cs",   "LhRh",   "LsrRsr", "Ch",
+    "Oh",   "LcRc",   "LwRw",   "LssRss",
+    "LFE2", "LhsRhs", "Chr",    "LhrRhr"
+};
+
+static char *make_spkr_mask_str(int mask)
+{
+    static char buf[128];
+
+    if (!mask)
+        return "???";
+
+    buf[0] = 0;
+    for (int i = 0; i < 16; i++) {
+        if (mask & (1 << i)) {
+            if (buf[0])
+                strcat(buf, " ");
+            strcat(buf, spkr_pair_names[i]);
+        }
+    }
+
+    return buf;
+}
+
 static void print_info(struct dcadec_context *context)
 {
     struct dcadec_exss_info *exss = dcadec_context_get_exss_info(context);
@@ -104,9 +130,9 @@ static void print_info(struct dcadec_context *context)
             fprintf(stderr, "DTS Express");
         else
             fprintf(stderr, "Unknown Extension Profile");
-        fprintf(stderr, ": %d ch, %.f kHz, %d bit\n",
-            exss->nchannels, exss->sample_rate / 1000.0f,
-            exss->bits_per_sample);
+        fprintf(stderr, ": %d ch (%s), %.f kHz, %d bit\n",
+            exss->nchannels, make_spkr_mask_str(exss->spkr_mask),
+            exss->sample_rate / 1000.0f, exss->bits_per_sample);
         dcadec_context_free_exss_info(exss);
     }
 

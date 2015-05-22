@@ -36,6 +36,8 @@ struct exss_asset {
     bool    one_to_one_map_ch_to_spkr;
     bool    embedded_stereo;
     bool    embedded_6ch;
+    bool    spkr_mask_enabled;
+    int     spkr_mask;
     int     representation_type;
 
     int     coding_mode;

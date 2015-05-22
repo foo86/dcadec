@@ -156,6 +156,7 @@ struct dcadec_exss_info {
     int profile;            /**< Type of DTS profile encoded */
     bool embedded_stereo;   /**< 2.0 downmix has been embedded into the stream */
     bool embedded_6ch;      /**< 5.1 downmix has been embedded into the stream */
+    int spkr_mask;          /**< Speaker activity mask, zero if unavailable */
 };
 
 /**

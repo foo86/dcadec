@@ -2125,6 +2125,32 @@ struct dcadec_core_info *core_get_info(struct core_decoder *core)
     return info;
 }
 
+static int make_spkr_pair_mask(int mask1)
+{
+    int mask2 = 0;
+
+#define MAP(m1, m2)  if ((mask1 & (m1)) == (m1))    mask2 |= (m2);
+    MAP(SPEAKER_MASK_C,                         SPEAKER_PAIR_C)
+    MAP(SPEAKER_MASK_L   | SPEAKER_MASK_R,      SPEAKER_PAIR_LR)
+    MAP(SPEAKER_MASK_Ls  | SPEAKER_MASK_Rs,     SPEAKER_PAIR_LsRs)
+    MAP(SPEAKER_MASK_LFE1,                      SPEAKER_PAIR_LFE1)
+    MAP(SPEAKER_MASK_Cs,                        SPEAKER_PAIR_Cs)
+    MAP(SPEAKER_MASK_Lh  | SPEAKER_MASK_Rh,     SPEAKER_PAIR_LhRh)
+    MAP(SPEAKER_MASK_Lsr | SPEAKER_MASK_Rsr,    SPEAKER_PAIR_LsrRsr)
+    MAP(SPEAKER_MASK_Ch,                        SPEAKER_PAIR_Ch)
+    MAP(SPEAKER_MASK_Oh,                        SPEAKER_PAIR_Oh)
+    MAP(SPEAKER_MASK_Lc  | SPEAKER_MASK_Rc,     SPEAKER_PAIR_LcRc)
+    MAP(SPEAKER_MASK_Lw  | SPEAKER_MASK_Rw,     SPEAKER_PAIR_LwRw)
+    MAP(SPEAKER_MASK_Lss | SPEAKER_MASK_Rss,    SPEAKER_PAIR_LssRss)
+    MAP(SPEAKER_MASK_LFE2,                      SPEAKER_PAIR_LFE2)
+    MAP(SPEAKER_MASK_Lhs | SPEAKER_MASK_Rhs,    SPEAKER_PAIR_LhsRhs)
+    MAP(SPEAKER_MASK_Chr,                       SPEAKER_PAIR_Chr)
+    MAP(SPEAKER_MASK_Lhr | SPEAKER_MASK_Rhr,    SPEAKER_PAIR_LhrRhr)
+#undef MAP
+
+    return mask2;
+}
+
 struct dcadec_exss_info *core_get_info_exss(struct core_decoder *core)
 {
     if (!(core->ext_audio_mask & (CSS_XXCH | CSS_X96 | CSS_XCH)))
@@ -2146,5 +2172,6 @@ struct dcadec_exss_info *core_get_info_exss(struct core_decoder *core)
     info->embedded_stereo = (core->prim_dmix_embedded &&
                              core->prim_dmix_type == DMIX_TYPE_LoRo);
     info->embedded_6ch = !!(core->ext_audio_mask & (CSS_XXCH | CSS_XCH));
+    info->spkr_mask = make_spkr_pair_mask(core->ch_mask);
     return info;
 }

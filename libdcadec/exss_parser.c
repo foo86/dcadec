@@ -123,18 +123,21 @@ static int parse_descriptor(struct exss_asset *asset)
             if (asset->nchannels_total > 6)
                 asset->embedded_6ch = bits_get1(&exss->bits);
 
-            int spkr_mask_nbits = 16; // ???
-
             // Speaker mask enabled flag
-            if (bits_get1(&exss->bits)) {
+            asset->spkr_mask_enabled = bits_get1(&exss->bits);
+
+            int spkr_mask_nbits = 0;
+            if (asset->spkr_mask_enabled) {
                 // Number of bits for speaker activity mask
                 spkr_mask_nbits = (bits_get(&exss->bits, 2) + 1) << 2;
                 // Loudspeaker activity mask
-                bits_skip(&exss->bits, spkr_mask_nbits);
+                asset->spkr_mask = bits_get(&exss->bits, spkr_mask_nbits);
             }
 
             // Number of speaker remapping sets
             int spkr_remap_nsets = bits_get(&exss->bits, 3);
+            enforce(!spkr_remap_nsets || spkr_mask_nbits,
+                    "Speaker mask disabled yet there are remapping sets");
 
             // Standard loudspeaker layout mask
             int nspeakers[8];
@@ -155,6 +158,9 @@ static int parse_descriptor(struct exss_asset *asset)
         } else {
             asset->embedded_stereo = false;
             asset->embedded_6ch = false;
+            asset->spkr_mask_enabled = false;
+            asset->spkr_mask = 0;
+
             // Representation type
             asset->representation_type = bits_get(&exss->bits, 3);
         }
@@ -492,5 +498,9 @@ struct dcadec_exss_info *exss_get_info(struct exss_parser *exss)
         info->profile = DCADEC_PROFILE_UNKNOWN;
     info->embedded_stereo = asset->embedded_stereo;
     info->embedded_6ch = asset->embedded_6ch;
+    if (asset->spkr_mask_enabled)
+        info->spkr_mask = asset->spkr_mask;
+    else if (asset->nchannels_total == 2)
+        info->spkr_mask = SPEAKER_PAIR_LR;
     return info;
 }
