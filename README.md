@@ -78,6 +78,12 @@ Some dcadec usage examples follow.
   $ ./dcadec input.dts output.wav
   ```
 
+* Decode DTS file to multiple mono WAVs:  
+
+  ```
+  $ ./dcadec -m input.dts output_%s.wav
+  ```
+
 * Decode DTS file and play with mpv:  
 
   ```
