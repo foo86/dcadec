@@ -166,6 +166,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         if (chs->ch_mask_enabled) {
             // Channel mask for set
             chs->ch_mask = bits_get(&xll->bits, xll->ch_mask_nbits);
+            enforce(dca_popcount(chs->ch_mask) == chs->nchannels, "Invalid channel mask");
         } else {
             chs->ch_mask = 0;
             // Angular speaker position table
@@ -746,11 +747,17 @@ int xll_map_ch_to_spkr(struct xll_chset *chs, int ch)
                 if (pos++ == ch)
                     return spkr;
         return -1;  // Invalid
-    } else {
-        if (chs->nchannels != 2)
-            return -1;
-        return ch + 1;  // Map to L/R
     }
+
+    // Map to LtRt
+    if (chs->nchannels == 2) {
+        if (ch == 0)
+            return SPEAKER_L;
+        if (ch == 1)
+            return SPEAKER_R;
+    }
+
+    return -1;
 }
 
 static int parse_common_header(struct xll_decoder *xll)
@@ -1041,9 +1048,6 @@ fail:
 int xll_parse(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
 {
     int ret;
-
-    if (!asset->one_to_one_map_ch_to_spkr && asset->nchannels_total != 2)
-        return -DCADEC_ENOSUP;
 
     if (xll->hd_stream_id != asset->hd_stream_id) {
         xll_clear(xll);

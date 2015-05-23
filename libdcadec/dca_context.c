@@ -423,9 +423,12 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
         if (c->primary_chset && c != p)
             return -DCADEC_ENOSUP;
 
+        // Reject non-primary channel sets w/o channel mask
+        if (!c->ch_mask_enabled && c != p)
+            return -DCADEC_ENOSUP;
+
         // Reject parallel downmix
-        // Reject hierarchial downmix without channel mask
-        if (!c->primary_chset && c->dmix_embedded && (!c->hier_chset || !c->ch_mask_enabled))
+        if (!c->primary_chset && c->dmix_embedded && !c->hier_chset)
             return -DCADEC_ENOSUP;
 
         // For now, PCM characteristics of all channel sets must be the same
@@ -444,11 +447,6 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
         // Reject sampling frequency modifier
         if (c->interpolate)
             return -DCADEC_ENOSUP;
-
-        // Validate channel masks
-        for (int ch = 0; ch < c->nchannels; ch++)
-            if (xll_map_ch_to_spkr(c, ch) < 0)
-                return -DCADEC_EINVAL;
 
         residual |= c->residual_encode != (1 << c->nchannels) - 1;
     }
@@ -659,7 +657,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     int *spkr_map[SPEAKER_COUNT] = { NULL };
     int ch_mask = 0;
 
-    // Fake up channel mask for primary channel set if needed
+    // Fake up channel mask for primary channel set if needed for LtRt decoding
     if (!p->ch_mask_enabled) {
         if (p->nchannels == 2)
             p->ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
