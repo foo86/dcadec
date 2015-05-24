@@ -289,6 +289,12 @@ enum SpeakerPair {
     SPEAKER_PAIR_ALL_2  = 0xae66
 };
 
+// Table 7-11: Representation type
+enum RepresentationType {
+    REPR_TYPE_LtRt  = 2,
+    REPR_TYPE_LhRh  = 3
+};
+
 // Table 7-15: Core/extension mask
 enum ExtensionMask {
     CSS_CORE    = 0x001,

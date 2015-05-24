@@ -2169,15 +2169,21 @@ struct dcadec_exss_info *core_get_info_exss(struct core_decoder *core)
     info->nchannels = core->nchannels + !!core->lfe_present;
     info->sample_rate = core->sample_rate << !!(core->ext_audio_mask & CSS_X96);
     info->bits_per_sample = core->source_pcm_res;
+
     if (core->ext_audio_mask & (CSS_XXCH | CSS_XCH))
         info->profile = DCADEC_PROFILE_DS_ES;
     else if (core->ext_audio_mask & CSS_X96)
         info->profile = DCADEC_PROFILE_DS_96_24;
     else
         info->profile = DCADEC_PROFILE_DS;
+
     info->embedded_stereo = (core->prim_dmix_embedded &&
                              core->prim_dmix_type == DMIX_TYPE_LoRo);
     info->embedded_6ch = !!(core->ext_audio_mask & (CSS_XXCH | CSS_XCH));
     info->spkr_mask = make_spkr_pair_mask(core->ch_mask);
+
+    if (core->audio_mode == AMODE_STEREO_TOTAL)
+        info->matrix_encoding = DCADEC_MATRIX_ENCODING_SURROUND;
+
     return info;
 }

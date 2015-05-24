@@ -125,6 +125,17 @@
 #define DCADEC_PROFILE_EXPRESS  0x20    /**< Express */
 /**@}*/
 
+/**@{*/
+/** Not matrix encoded */
+#define DCADEC_MATRIX_ENCODING_NONE         0
+
+/**< Encoded for matrix surround decoding */
+#define DCADEC_MATRIX_ENCODING_SURROUND     1
+
+/**< Audio processed for headphone playback */
+#define DCADEC_MATRIX_ENCODING_HEADPHONE    2
+/**@}*/
+
 /**
  * Size in bytes of empty padding that must be present after the end of input
  * buffer. libdcadec may overread the input buffer up to this number of bytes.
@@ -157,6 +168,7 @@ struct dcadec_exss_info {
     bool embedded_stereo;   /**< 2.0 downmix has been embedded into the stream */
     bool embedded_6ch;      /**< 5.1 downmix has been embedded into the stream */
     int spkr_mask;          /**< Speaker activity mask, zero if unavailable */
+    int matrix_encoding;    /**< Matrix encoding type */
 };
 
 /**

@@ -484,10 +484,13 @@ struct dcadec_exss_info *exss_get_info(struct exss_parser *exss)
     struct dcadec_exss_info *info = ta_znew(NULL, struct dcadec_exss_info);
     if (!info)
         return NULL;
+
     struct exss_asset *asset = &exss->assets[0];
+
     info->nchannels = asset->nchannels_total;
     info->sample_rate = asset->max_sample_rate;
     info->bits_per_sample = asset->pcm_bit_res;
+
     if (asset->extension_mask & EXSS_XLL)
         info->profile = DCADEC_PROFILE_HD_MA;
     else if (asset->extension_mask & (EXSS_XBR | EXSS_XXCH | EXSS_X96))
@@ -496,11 +499,21 @@ struct dcadec_exss_info *exss_get_info(struct exss_parser *exss)
         info->profile = DCADEC_PROFILE_EXPRESS;
     else
         info->profile = DCADEC_PROFILE_UNKNOWN;
+
     info->embedded_stereo = asset->embedded_stereo;
     info->embedded_6ch = asset->embedded_6ch;
+
     if (asset->spkr_mask_enabled)
         info->spkr_mask = asset->spkr_mask;
     else if (asset->nchannels_total == 2)
         info->spkr_mask = SPEAKER_PAIR_LR;
+
+    if (!asset->one_to_one_map_ch_to_spkr) {
+        if (asset->representation_type == REPR_TYPE_LtRt)
+            info->matrix_encoding = DCADEC_MATRIX_ENCODING_SURROUND;
+        else if (asset->representation_type == REPR_TYPE_LhRh)
+            info->matrix_encoding = DCADEC_MATRIX_ENCODING_HEADPHONE;
+    }
+
     return info;
 }
