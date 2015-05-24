@@ -249,8 +249,10 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         chs->decor_enabled[band] = bits_get1(&xll->bits);
         if (chs->decor_enabled[band] && chs->nchannels > 1) {
             // Original channel order
-            for (i = 0; i < chs->nchannels; i++)
+            for (i = 0; i < chs->nchannels; i++) {
                 chs->orig_order[band][i] = bits_get(&xll->bits, ch_nbits[chs->nchannels - 1]);
+                enforce(chs->orig_order[band][i] < chs->nchannels, "Invalid original channel order");
+            }
             // Pairwise channel coefficients
             for (i = 0; i < chs->nchannels / 2; i++) {
                 if (bits_get1(&xll->bits))
