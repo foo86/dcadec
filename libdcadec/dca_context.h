@@ -208,8 +208,7 @@ DCADEC_API void dcadec_context_free_core_info(struct dcadec_core_info *info);
 
 /**
  * Get information about extension sub-stream (EXSS) payload of the parsed
- * packet. When no EXSS is present but backward compatible DTS core sub-stream
- * contains extended audio, then information about extended audio in core
+ * packet. When no EXSS is present information about extended audio in core
  * sub-stream is returned.
  *
  * @param dca   Pointer to decoder context.

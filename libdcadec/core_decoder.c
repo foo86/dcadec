@@ -2159,9 +2159,6 @@ static int make_spkr_pair_mask(int mask1)
 
 struct dcadec_exss_info *core_get_info_exss(struct core_decoder *core)
 {
-    if (!(core->ext_audio_mask & (CSS_XXCH | CSS_X96 | CSS_XCH)))
-        return NULL;
-
     struct dcadec_exss_info *info = ta_znew(NULL, struct dcadec_exss_info);
     if (!info)
         return NULL;

@@ -117,6 +117,12 @@ static char *make_spkr_mask_str(int mask)
 static void print_info(struct dcadec_context *context, FILE *fp)
 {
     struct dcadec_exss_info *exss = dcadec_context_get_exss_info(context);
+
+    if (exss && exss->profile == DCADEC_PROFILE_DS) {
+        dcadec_context_free_exss_info(exss);
+        exss = NULL;
+    }
+
     if (exss) {
         if (exss->profile & DCADEC_PROFILE_HD_MA)
             fprintf(fp, "DTS-HD Master Audio");
