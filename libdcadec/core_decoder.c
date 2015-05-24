@@ -42,18 +42,22 @@ enum HeaderType {
     HEADER_XXCH
 };
 
-// Mode 0: A (mono)
-// Mode 1: A + B (dual mono)
-// Mode 2: L + R (stereo)
-// Mode 3: (L+R) + (L-R) (sum-diff)
-// Mode 4: LT + RT (left and right total)
-// Mode 5: C + L + R
-// Mode 6: L + R + S
-// Mode 7: C + L + R + S
-// Mode 8: L + R + SL + SR
-// Mode 9: C + L + R + SL + SR
+enum AudioMode {
+    AMODE_MONO,             // Mode 0: A (mono)
+    AMODE_MONO_DUAL,        // Mode 1: A + B (dual mono)
+    AMODE_STEREO,           // Mode 2: L + R (stereo)
+    AMODE_STEREO_SUMDIFF,   // Mode 3: (L+R) + (L-R) (sum-diff)
+    AMODE_STEREO_TOTAL,     // Mode 4: LT + RT (left and right total)
+    AMODE_3F,               // Mode 5: C + L + R
+    AMODE_2F1R,             // Mode 6: L + R + S
+    AMODE_3F1R,             // Mode 7: C + L + R + S
+    AMODE_2F2R,             // Mode 8: L + R + SL + SR
+    AMODE_3F2R,             // Mode 9: C + L + R + SL + SR
 
-static const int8_t prm_ch_to_spkr_map[10][5] = {
+    AMODE_COUNT
+};
+
+static const int8_t prm_ch_to_spkr_map[AMODE_COUNT][5] = {
     { SPEAKER_C,        -1,         -1,         -1,         -1 },
     { SPEAKER_L, SPEAKER_R,         -1,         -1,         -1 },
     { SPEAKER_L, SPEAKER_R,         -1,         -1,         -1 },
@@ -66,7 +70,7 @@ static const int8_t prm_ch_to_spkr_map[10][5] = {
     { SPEAKER_C, SPEAKER_L, SPEAKER_R,  SPEAKER_Ls, SPEAKER_Rs }
 };
 
-static const uint8_t audio_mode_ch_mask[10] = {
+static const uint8_t audio_mode_ch_mask[AMODE_COUNT] = {
     SPEAKER_MASK_C,
     SPEAKER_MASK_L | SPEAKER_MASK_R,
     SPEAKER_MASK_L | SPEAKER_MASK_R,
@@ -103,7 +107,9 @@ static int parse_frame_header(struct core_decoder *core)
 
     // Audio channel arrangement
     core->audio_mode = bits_get(&core->bits, 6);
-    require(core->audio_mode < 10, "Unsupported audio channel arrangement");
+    require(core->audio_mode < AMODE_COUNT &&
+            core->audio_mode != AMODE_STEREO_SUMDIFF,
+            "Unsupported audio channel arrangement");
 
     // Core audio sampling frequency
     core->sample_rate = sample_rates[bits_get(&core->bits, 4)];
@@ -999,7 +1005,7 @@ int core_filter(struct core_decoder *core, int flags)
         int nsamples = core->npcmsamples;
 
         // Undo embedded XCH downmix
-        if (core->es_format && (core->ext_audio_mask & CSS_XCH) && core->audio_mode >= 8) {
+        if (core->es_format && (core->ext_audio_mask & CSS_XCH) && core->audio_mode >= AMODE_2F2R) {
             int *samples_ls = core->output_samples[SPEAKER_Ls];
             int *samples_rs = core->output_samples[SPEAKER_Rs];
             int *samples_cs = core->output_samples[SPEAKER_Cs];
