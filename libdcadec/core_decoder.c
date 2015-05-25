@@ -57,6 +57,12 @@ enum AudioMode {
     AMODE_COUNT
 };
 
+enum ExtAudioType {
+    EXT_AUDIO_XCH   = 0,
+    EXT_AUDIO_X96   = 2,
+    EXT_AUDIO_XXCH  = 6
+};
+
 static const int8_t prm_ch_to_spkr_map[AMODE_COUNT][5] = {
     { SPEAKER_C,        -1,         -1,         -1,         -1 },
     { SPEAKER_L, SPEAKER_R,         -1,         -1,         -1 },
@@ -135,9 +141,6 @@ static int parse_frame_header(struct core_decoder *core)
     bits_skip1(&core->bits);
 
     // Extension audio descriptor flag
-    // 0 - Channel extension (XCH)
-    // 2 - Frequency extension (X96)
-    // 6 - Channel extension (XXCH)
     core->ext_audio_type = bits_get(&core->bits, 3);
 
     // Extended coding flag
@@ -1913,7 +1916,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
 
         // Search for extension sync words aligned on 4-byte boundary
         switch (core->ext_audio_type) {
-        case 0:
+        case EXT_AUDIO_XCH:
             if (flags & DCADEC_FLAG_KEEP_DMIX_MASK)
                 break;
 
@@ -1940,7 +1943,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 enforce2(core->xch_pos, "XCH sync word not found");
             break;
 
-        case 2:
+        case EXT_AUDIO_X96:
             // The distance between X96 sync word and end of the core frame
             // must be equal to X96 frame size. Minimum X96 frame size is 96
             // bytes.
@@ -1960,7 +1963,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 enforce2(core->x96_pos, "X96 sync word not found");
             break;
 
-        case 6:
+        case EXT_AUDIO_XXCH:
             if (flags & DCADEC_FLAG_KEEP_DMIX_MASK)
                 break;
 
