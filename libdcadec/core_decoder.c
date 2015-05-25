@@ -2031,6 +2031,7 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
         bits_init(&core->bits, data + asset->core_offset, asset->core_size);
         if (bits_get(&core->bits, 32) != SYNC_WORD_CORE_EXSS)
             return -DCADEC_ENOSYNC;
+        size = asset->core_size;
     } else {
         bits_init(&core->bits, data, size);
         bits_skip(&core->bits, 32);
@@ -2045,6 +2046,8 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
         return ret;
     if ((ret = parse_optional_info(core, flags)) < 0)
         return ret;
+    if (core->frame_size > size)
+        core->frame_size = size;
     if ((ret = bits_seek(&core->bits, core->frame_size * 8)) < 0)
         return ret;
     return 0;
