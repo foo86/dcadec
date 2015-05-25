@@ -113,9 +113,7 @@ static int parse_frame_header(struct core_decoder *core)
 
     // Audio channel arrangement
     core->audio_mode = bits_get(&core->bits, 6);
-    require(core->audio_mode < AMODE_COUNT &&
-            core->audio_mode != AMODE_STEREO_SUMDIFF,
-            "Unsupported audio channel arrangement");
+    require(core->audio_mode < AMODE_COUNT, "Unsupported audio channel arrangement");
 
     // Core audio sampling frequency
     core->sample_rate = sample_rates[bits_get(&core->bits, 4)];
@@ -176,10 +174,10 @@ static int parse_frame_header(struct core_decoder *core)
     core->es_format = !!(pcmr_index & 1);
 
     // Front sum/difference flag
-    require(bits_get1(&core->bits) == false, "Front sum/difference not supported");
+    core->sumdiff_front = bits_get1(&core->bits);
 
     // Surround sum/difference flag
-    require(bits_get1(&core->bits) == false, "Surround sum/difference not supported");
+    core->sumdiff_surround = bits_get1(&core->bits);
 
     // Dialog normalization / unspecified
     bits_skip(&core->bits, 4);
@@ -1059,6 +1057,35 @@ int core_filter(struct core_decoder *core, int flags)
                     for (int n = 0; n < nsamples; n++)
                         samples[n] = clip23(samples[n]);
                 }
+            }
+        }
+    }
+
+    if (!(core->ext_audio_mask & (CSS_XXCH | CSS_XCH | EXSS_XXCH))) {
+        int nsamples = core->npcmsamples;
+
+        // Front sum/difference decoding
+        if ((core->sumdiff_front && core->audio_mode > AMODE_MONO)
+            || core->audio_mode == AMODE_STEREO_SUMDIFF) {
+            int *samples_l = core->output_samples[SPEAKER_L];
+            int *samples_r = core->output_samples[SPEAKER_R];
+            for (int n = 0; n < nsamples; n++) {
+                int res1 = samples_l[n] + samples_r[n];
+                int res2 = samples_l[n] - samples_r[n];
+                samples_l[n] = clip23(res1);
+                samples_r[n] = clip23(res2);
+            }
+        }
+
+        // Surround sum/difference decoding
+        if (core->sumdiff_surround && core->audio_mode >= AMODE_2F2R) {
+            int *samples_ls = core->output_samples[SPEAKER_Ls];
+            int *samples_rs = core->output_samples[SPEAKER_Rs];
+            for (int n = 0; n < nsamples; n++) {
+                int res1 = samples_ls[n] + samples_rs[n];
+                int res2 = samples_ls[n] - samples_rs[n];
+                samples_ls[n] = clip23(res1);
+                samples_rs[n] = clip23(res2);
             }
         }
     }

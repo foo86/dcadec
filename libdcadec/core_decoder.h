@@ -85,6 +85,8 @@ struct core_decoder {
     bool    filter_perfect;
     int     source_pcm_res;
     bool    es_format;
+    bool    sumdiff_front;
+    bool    sumdiff_surround;
 
     int     nsubframes;
     int     nsubsubframes[MAX_SUBFRAMES];
