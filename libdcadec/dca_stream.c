@@ -280,6 +280,10 @@ static int read_frame(struct dcadec_stream *stream, uint32_t *sync_p)
     if (fread(buf + sizeof(header), frame_size - sizeof(header), 1, stream->fp) != 1)
         return 0;
 
+    // Work around overread that occurs for 14-bit streams with excessive frame size
+    if (sync == SYNC_WORD_CORE_LE14 || sync == SYNC_WORD_CORE_BE14)
+        stream->backup_sync = DCA_MEM32BE(&buf[frame_size - 4]);
+
     // Convert the frame in place
     if ((ret = dcadec_frame_convert_bitstream(buf, &frame_size, buf, frame_size)) < 0)
         return ret;
