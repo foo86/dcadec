@@ -777,18 +777,17 @@ static int parse_common_header(struct xll_decoder *xll)
     // Lossless frame header length
     size_t header_size = bits_get(&xll->bits, 8) + 1;
 
+    // Check CRC
+    if ((ret = bits_check_crc(&xll->bits, 32, header_size * 8)) < 0)
+        return ret;
+
     // Number of bits used to read frame size
     int frame_size_nbits = bits_get(&xll->bits, 5) + 1;
 
     // Number of bytes in a lossless frame
-    xll->frame_size = (size_t)bits_get(&xll->bits, frame_size_nbits) + 1;
-
-    enforce(xll->frame_size <= XLL_PBR_SIZE, "Invalid XLL frame size");
-    enforce(header_size <= xll->frame_size, "Invalid XLL common header size");
-
-    // Check CRC
-    if ((ret = bits_check_crc(&xll->bits, 32, header_size * 8)) < 0)
-        return ret;
+    xll->frame_size = bits_get(&xll->bits, frame_size_nbits);
+    enforce(xll->frame_size < XLL_PBR_SIZE, "Invalid XLL frame size");
+    xll->frame_size++;
 
     // Number of channels sets per frame
     xll->nchsets = bits_get(&xll->bits, 4) + 1;
@@ -886,9 +885,9 @@ static int parse_navi_table(struct xll_decoder *xll)
             for_each_chset(xll, chs) {
                 size_t size = 0;
                 if (chs->nfreqbands > band) {
-                    size = (size_t)bits_get(&xll->bits, xll->seg_size_nbits) + 1;
-                    if (size < 1 || size > xll->frame_size)
-                        return -DCADEC_EBADDATA;
+                    size = bits_get(&xll->bits, xll->seg_size_nbits);
+                    enforce(size < xll->frame_size, "Invalid NAVI size");
+                    size++;
                 }
                 *navi_ptr++ = size;
                 navi_size += size;
@@ -896,8 +895,7 @@ static int parse_navi_table(struct xll_decoder *xll)
         }
     }
 
-    if (navi_size > xll->frame_size)
-        return -DCADEC_EBADDATA;
+    enforce(navi_size <= xll->frame_size, "Invalid NAVI size");
 
     // Byte align
     // CRC16

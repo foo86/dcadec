@@ -378,17 +378,15 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
     // Extension substream header length
     size_t header_size = bits_get(&exss->bits, 8 + 4 * wide_hdr) + 1;
 
+    // Check CRC
+    if ((ret = bits_check_crc(&exss->bits, 32 + 8, header_size * 8)) < 0)
+        return ret;
+
     exss->exss_size_nbits = 16 + 4 * wide_hdr;
 
     // Number of bytes of extension substream
     exss->exss_size = bits_get(&exss->bits, exss->exss_size_nbits) + 1;
-
     enforce(exss->exss_size <= size, "Invalid EXSS size");
-    enforce(header_size <= exss->exss_size, "Invalid EXSS header size");
-
-    // Check CRC
-    if ((ret = bits_check_crc(&exss->bits, 32 + 8, header_size * 8)) < 0)
-        return ret;
 
     // Per stream static fields presence flag
     exss->static_fields_present = bits_get1(&exss->bits);
