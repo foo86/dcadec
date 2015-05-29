@@ -731,8 +731,8 @@ int xll_assemble_freq_bands(struct xll_chset *chs)
 
         // Assemble
         for (int i = 0; i < nsamples; i++) {
-            *ptr++ = band1[i + 0];
-            *ptr++ = band0[i + 1];
+            *ptr++ = *band1++;
+            *ptr++ = *++band0;
         }
     }
 
