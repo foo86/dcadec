@@ -34,6 +34,10 @@
 #define DTSHDHDR    UINT64_C(0x4454534844484452)
 #define STRMDATA    UINT64_C(0x5354524D44415441)
 
+#define TAG_RIFF    0x46464952
+#define TAG_WAVE    0x45564157
+#define TAG_data    0x61746164
+
 #if (defined _WIN32)
 #define DCA_FGETC   _fgetc_nolock
 #elif (defined _BSD_SOURCE)
@@ -135,7 +139,51 @@ static int parse_hd_hdr(struct dcadec_stream *stream)
             return -1;
     }
 
-    return 0;
+    return -1;
+}
+
+static int parse_wav_hdr(struct dcadec_stream *stream)
+{
+    uint32_t header[2];
+
+    if (fread(header, sizeof(header), 1, stream->fp) != 1)
+        goto rewind;
+
+    if (header[0] != DCA_32LE_C(TAG_RIFF))
+        goto rewind;
+
+    if (fread(header, sizeof(header[0]), 1, stream->fp) != 1)
+        goto rewind;
+
+    if (header[0] != DCA_32LE_C(TAG_WAVE))
+        goto rewind;
+
+    while (true) {
+        if (fread(header, sizeof(header), 1, stream->fp) != 1)
+            return -1;
+
+        uint32_t size = DCA_32LE(header[1]);
+
+        if (header[0] == DCA_32LE_C(TAG_data)) {
+            off_t pos = ftello(stream->fp);
+            if (pos < 0)
+                return -1;
+            if (size) {
+                stream->stream_size = size;
+                stream->stream_start = pos;
+                stream->stream_end = pos + size;
+            }
+            return 1;
+        }
+
+        if (fseeko(stream->fp, size, SEEK_CUR) < 0)
+            return -1;
+    }
+
+    return -1;
+
+rewind:
+    return fseeko(stream->fp, 0, SEEK_SET);
 }
 
 DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name, int flags)
@@ -172,14 +220,18 @@ DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name, int flags)
 #endif
     }
 
-    if (fseeko(stream->fp, 0, SEEK_END) == 0) {
+    if (!fseeko(stream->fp, 0, SEEK_END)) {
         off_t pos = ftello(stream->fp);
         if (pos > 0)
             stream->stream_size = pos;
         if (fseeko(stream->fp, 0, SEEK_SET) < 0)
             goto fail2;
-        if (pos > 0 && parse_hd_hdr(stream) < 0)
-            goto fail2;
+        if (pos > 0) {
+            int ret;
+            if ((ret = parse_hd_hdr(stream)) < 0 ||
+                (!ret && parse_wav_hdr(stream) < 0))
+                goto fail2;
+        }
     }
 
     if (!(stream->buffer = ta_zalloc_size(stream, BUFFER_ALIGN * 2)))
