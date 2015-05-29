@@ -182,7 +182,7 @@ DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name, int flags)
             goto fail2;
     }
 
-    if (!(stream->buffer = ta_zalloc_size(stream, BUFFER_ALIGN)))
+    if (!(stream->buffer = ta_zalloc_size(stream, BUFFER_ALIGN * 2)))
         goto fail2;
 
     return stream;
