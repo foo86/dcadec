@@ -34,10 +34,6 @@
 #define DTSHDHDR    UINT64_C(0x4454534844484452)
 #define STRMDATA    UINT64_C(0x5354524D44415441)
 
-#define TAG_RIFF    0x46464952
-#define TAG_WAVE    0x45564157
-#define TAG_data    0x61746164
-
 #if (defined _WIN32)
 #define DCA_FGETC   _fgetc_nolock
 #elif (defined _BSD_SOURCE)

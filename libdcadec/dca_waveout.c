@@ -58,13 +58,6 @@ struct header_buf {
     size_t  size;
 };
 
-static void write_tag(struct header_buf *buf, const char *s)
-{
-    assert(buf->size <= sizeof(buf->data) - 4);
-    memcpy(buf->data + buf->size, s, 4);
-    buf->size += 4;
-}
-
 static void write_u16(struct header_buf *buf, int v)
 {
     assert(buf->size <= sizeof(buf->data) - 2);
@@ -90,15 +83,15 @@ static int write_header(struct dcadec_waveout *wave, FILE *fp)
     struct header_buf buf;
     buf.size = 0;
 
-    write_tag(&buf, "RIFF");
+    write_u32(&buf, TAG_RIFF);
     if (wave->size && wave->size <= UINT32_MAX - (36 + 24 * extensible))
         write_u32(&buf, (uint32_t)(wave->size + 36 + 24 * extensible));
     else
         write_u32(&buf, 0);
 
-    write_tag(&buf, "WAVE");
+    write_u32(&buf, TAG_WAVE);
 
-    write_tag(&buf, "fmt ");
+    write_u32(&buf, TAG_fmt);
     write_u32(&buf, 16 + 24 * extensible);
 
     // wFormatTag
@@ -136,7 +129,7 @@ static int write_header(struct dcadec_waveout *wave, FILE *fp)
         write_u32(&buf, 0x719b3800);
     }
 
-    write_tag(&buf, "data");
+    write_u32(&buf, TAG_data);
     if (wave->size <= UINT32_MAX)
         write_u32(&buf, (uint32_t)wave->size);
     else

@@ -187,6 +187,13 @@ static inline uint32_t DCA_MEM32NE(const void *data)
 #define DCADEC_FLAG_KEEP_DMIX_MASK  \
     (DCADEC_FLAG_KEEP_DMIX_2CH | DCADEC_FLAG_KEEP_DMIX_6CH)
 
+enum WaveTag {
+    TAG_RIFF    = 0x46464952,
+    TAG_WAVE    = 0x45564157,
+    TAG_data    = 0x61746164,
+    TAG_fmt     = 0x20746d66
+};
+
 // WAVEFORMATEXTENSIBLE speakers
 enum WaveSpeaker {
     WAVESPKR_FL,  WAVESPKR_FR,  WAVESPKR_FC,  WAVESPKR_LFE,
