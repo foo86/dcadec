@@ -603,8 +603,7 @@ void xll_filter_band_data(struct xll_chset *chs, int band)
             }
         } else {
             // Inverse fixed coefficient prediction
-            order = chs->fixed_pred_order[band][i];
-            for (j = 0; j < order; j++)
+            for (j = 0; j < chs->fixed_pred_order[band][i]; j++)
                 for (k = 1; k < nsamples; k++)
                     buf[k] += buf[k - 1];
         }
