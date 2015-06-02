@@ -744,7 +744,7 @@ int xll_map_ch_to_spkr(struct xll_chset *chs, int ch)
 
     if (chs->ch_mask_enabled) {
         for (int spkr = 0, pos = 0; spkr < xll->ch_mask_nbits; spkr++)
-            if (chs->ch_mask & (1 << spkr))
+            if (chs->ch_mask & (1U << spkr))
                 if (pos++ == ch)
                     return spkr;
         return -1;  // Invalid

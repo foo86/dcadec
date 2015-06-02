@@ -82,7 +82,7 @@ static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dc
 
     if (dca->flags & DCADEC_FLAG_NATIVE_LAYOUT) {
         for (int dca_ch = 0; dca_ch < SPEAKER_COUNT; dca_ch++) {
-            if (dca_mask & (1 << dca_ch)) {
+            if (dca_mask & (1U << dca_ch)) {
                 if (!dca_samples[dca_ch])
                     return -DCADEC_EINVAL;
                 dca->samples[nchannels++] = dca_samples[dca_ch];
@@ -165,7 +165,7 @@ static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
 
     // Perform downmix
     for (int spkr = 0, pos = 0; spkr < SPEAKER_COUNT; spkr++) {
-        if (!(*ch_mask & (1 << spkr)))
+        if (!(*ch_mask & (1U << spkr)))
             continue;
 
         for (int ch = 0; ch < 2; ch++) {
@@ -264,7 +264,7 @@ static int filter_core_frame(struct dcadec_context *dca)
 
 static int map_spkr_to_core_spkr(struct core_decoder *core, int spkr)
 {
-    if (core->ch_mask & (1 << spkr))
+    if (core->ch_mask & (1U << spkr))
         return spkr;
     if (spkr == SPEAKER_Lss && (core->ch_mask & SPEAKER_MASK_Ls))
         return SPEAKER_Ls;

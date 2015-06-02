@@ -225,7 +225,7 @@ DCADEC_API int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
         if (wave->flags & DCADEC_WAVEOUT_FLAG_MONO) {
             wave->block_align = wave->bytes_per_sample;
             for (int i = 0, j = 0; i < SPEAKER_COUNT; i++) {
-                if (!(wave->channel_mask & (1 << i)))
+                if (!(wave->channel_mask & (1U << i)))
                     continue;
 
                 if (!wave->fp[j]) {
