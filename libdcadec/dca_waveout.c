@@ -38,7 +38,6 @@ struct dcadec_waveout {
     int         sample_rate;
     int         bits_per_sample;
     int         bytes_per_sample;
-    int         container_shift;
     int         block_align;
 };
 
@@ -146,7 +145,6 @@ static int write_data(struct dcadec_waveout *wave, FILE *fp,
 {
     int limit = 1 << (wave->bits_per_sample - 1);
     int mask = ~((1 << wave->bits_per_sample) - 1);
-    int shift = wave->container_shift;
     int bps = wave->bytes_per_sample;
     int nclipped = 0;
 
@@ -159,8 +157,6 @@ static int write_data(struct dcadec_waveout *wave, FILE *fp,
                 sample = (sample >> 31) ^ (limit - 1);
                 nclipped++;
             }
-
-            sample <<= shift;
 
             switch (bps) {
             case 4:
@@ -225,7 +221,6 @@ DCADEC_API int dcadec_waveout_write(struct dcadec_waveout *wave, int **samples,
         wave->sample_rate = sample_rate;
         wave->bits_per_sample = bits_per_sample;
         wave->bytes_per_sample = (bits_per_sample + 7) >> 3;
-        wave->container_shift = (wave->bytes_per_sample << 3) - bits_per_sample;
 
         if (wave->flags & DCADEC_WAVEOUT_FLAG_MONO) {
             wave->block_align = wave->bytes_per_sample;
