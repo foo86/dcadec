@@ -84,7 +84,7 @@ static void dct_b(const int * restrict input, int * restrict output)
     };
 
     for (int i = 0; i < 8; i++) {
-        int64_t res = (int64_t)input[0] << 23;
+        int64_t res = (int64_t)input[0] * (1 << 23);
         for (int j = 0; j < 7; j++)
             res += (int64_t)cos_mod[i][j] * input[1 + j];
         output[i] = norm23(res);
@@ -191,7 +191,7 @@ void idct_perform32_fixed(int * restrict input, int * restrict output)
     mod_c(input, output);
 
     for (int i = 0; i < 32; i++)
-        output[i] = clip23(output[i] << shift);
+        output[i] = clip23(output[i] * (1 << shift));
 }
 
 static void mod64_a(const int * restrict input, int * restrict output)
@@ -322,5 +322,5 @@ void idct_perform64_fixed(int * restrict input, int * restrict output)
     mod64_c(input, output);
 
     for (int i = 0; i < 64; i++)
-        output[i] = clip23(output[i] << shift);
+        output[i] = clip23(output[i] * (1 << shift));
 }

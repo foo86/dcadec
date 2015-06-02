@@ -710,7 +710,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         int nsamples = xll->nframesamples;
         for (int ch = 0; ch < ret; ch++)
             for (int n = 0; n < nsamples; n++)
-                dca->samples[ch][n] <<= shift;
+                dca->samples[ch][n] *= 1 << shift;
     }
 
     dca->nframesamples = xll->nframesamples;

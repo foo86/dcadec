@@ -665,10 +665,10 @@ void xll_assemble_msbs_lsbs(struct xll_chset *chs, int band)
                 int *lsb = chs->lsb_sample_buffer[band][ch];
                 int adj = chs->bit_width_adjust[band][ch];
                 for (int n = 0; n < nsamples; n++)
-                    msb[n] = (msb[n] << shift) + (lsb[n] << adj);
+                    msb[n] = (msb[n] * (1 << shift)) + (lsb[n] << adj);
             } else {
                 for (int n = 0; n < nsamples; n++)
-                    msb[n] <<= shift;
+                    msb[n] *= 1 << shift;
             }
         }
     }
