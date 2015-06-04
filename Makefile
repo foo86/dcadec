@@ -6,7 +6,6 @@ PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 LIBDIR ?= $(PREFIX)/lib
 INCLUDEDIR ?= $(PREFIX)/include
-PKG_CONFIG_PATH ?= $(LIBDIR)/pkgconfig
 
 SRC_DIR := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 vpath %.c $(SRC_DIR)
@@ -158,10 +157,10 @@ dcadec.pc: dcadec.pc.in
 	sed 's,%PREFIX%,$(PREFIX),;s,%LIBDIR%,$(LIBDIR),;s,%INCLUDEDIR%,$(INCLUDEDIR),;s,%VERSION%,$(VERSION),' $< > $@
 
 install-lib: $(OUT_LIB) dcadec.pc
-	install -d -m 755 $(DESTDIR)$(LIBDIR) $(DESTDIR)$(PKG_CONFIG_PATH) $(DESTDIR)$(INCLUDEDIR)/libdcadec
+	install -d -m 755 $(DESTDIR)$(LIBDIR) $(DESTDIR)$(LIBDIR)/pkgconfig $(DESTDIR)$(INCLUDEDIR)/libdcadec
 	install -m 644 $(OUT_LIB) $(DESTDIR)$(LIBDIR)
 	install -m 644 $(addprefix $(SRC_DIR)/, $(INC_LIB)) $(DESTDIR)$(INCLUDEDIR)/libdcadec
-	install -m 644 dcadec.pc $(DESTDIR)$(PKG_CONFIG_PATH)
+	install -m 644 dcadec.pc $(DESTDIR)$(LIBDIR)/pkgconfig
 
 install-dec: $(OUT_DEC)
 	install -d -m 755 $(DESTDIR)$(BINDIR)
