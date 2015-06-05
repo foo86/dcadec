@@ -1995,12 +1995,12 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 break;
 
             // XXCH frame header CRC must be valid. Minimum XXCH frame header
-            // size is 6 bytes.
+            // size is 11 bytes.
             for (; sync_pos < last_pos; sync_pos++) {
                 if (core->bits.data[sync_pos] == DCA_32BE_C(SYNC_WORD_XXCH)) {
                     core->bits.index = (sync_pos + 1) * 32;
                     size_t hdr_size = bits_get(&core->bits, 6) + 1;
-                    if (hdr_size >= 6 &&
+                    if (hdr_size >= 11 &&
                         !bits_check_crc(&core->bits, (sync_pos + 1) * 32,
                                         sync_pos * 32 + hdr_size * 8)) {
                         core->xxch_pos = sync_pos * 32;
