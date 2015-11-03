@@ -27,11 +27,6 @@ const uint32_t exss_sample_rates[16] = {
      48000,  96000, 192000, 384000
 };
 
-static int count_chs_for_mask(int mask)
-{
-    return dca_popcount(mask) + dca_popcount(mask & SPEAKER_PAIR_ALL_2);
-}
-
 static void parse_xll_parameters(struct exss_asset *asset)
 {
     struct exss_parser *exss = asset->parser;
@@ -421,6 +416,13 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, int size)
         // Number of audio assets in extension substream
         exss->nassets = bits_get(&exss->bits, 3) + 1;
 
+        // Reject unsupported features for now
+        if (exss->npresents > 1 || exss->nassets > 1) {
+            exss_err_once("Multiple audio presentations "
+                          "and/or assets are not supported");
+            return -DCADEC_ENOSUP;
+        }
+
         // Active extension substream mask for audio presentation
         int active_exss_mask[8];
         for (i = 0; i < exss->npresents; i++)
@@ -451,13 +453,6 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, int size)
     } else {
         exss->npresents = 1;
         exss->nassets = 1;
-    }
-
-    // Reject unsupported features for now
-    if (exss->exss_index > 0 || exss->npresents != 1 || exss->nassets != 1) {
-        exss_err_once("Multiple sub-streams, audio presentations "
-                      "and/or assets are not supported");
-        return -DCADEC_ENOSUP;
     }
 
     // Reallocate assets
