@@ -179,7 +179,7 @@ static void signal_handler(int sig)
 
 int main(int argc, char **argv)
 {
-    int flags = DCADEC_FLAG_STRICT;
+    int flags = DCADEC_FLAG_STRICT | DCADEC_FLAG_DONT_CLIP;
     int wave_flags = 0;
     bool parse_only = false;
     bool no_progress = false;
@@ -191,9 +191,11 @@ int main(int argc, char **argv)
         switch (opt) {
         case '2':
             flags |= DCADEC_FLAG_KEEP_DMIX_2CH;
+            flags &= ~DCADEC_FLAG_DONT_CLIP;
             break;
         case '6':
             flags |= DCADEC_FLAG_KEEP_DMIX_6CH;
+            flags &= ~DCADEC_FLAG_DONT_CLIP;
             break;
         case 'b':
             flags |= DCADEC_FLAG_CORE_BIT_EXACT;

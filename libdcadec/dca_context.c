@@ -125,6 +125,9 @@ static void clip_samples(struct dcadec_context *dca, int nchannels)
 {
     int nsamples = dca->nframesamples;
 
+    if (dca->flags & DCADEC_FLAG_DONT_CLIP)
+        return;
+
     switch (dca->bits_per_sample) {
     case 24:
         for (int ch = 0; ch < nchannels; ch++)
@@ -721,8 +724,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     dca->profile = DCADEC_PROFILE_HD_MA;
 
     // Perform clipping
-    if (dca->flags & DCADEC_FLAG_KEEP_DMIX_MASK)
-        clip_samples(dca, ret);
+    clip_samples(dca, ret);
 
     return 0;
 }

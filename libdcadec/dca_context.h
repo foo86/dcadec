@@ -113,6 +113,9 @@
 
 /** Don't conceal errors */
 #define DCADEC_FLAG_STRICT              0x100
+
+/** Don't clip returned PCM samples to output bit depth */
+#define DCADEC_FLAG_DONT_CLIP           0x200
 /**@}*/
 
 /**@{*/
