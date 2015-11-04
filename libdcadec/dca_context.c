@@ -27,6 +27,7 @@
 #define DCADEC_PACKET_XLL   0x04
 
 #define DCADEC_PACKET_FILTERED  0x100
+#define DCADEC_PACKET_RECOVERY  0x200
 
 struct dcadec_context {
     int flags;
@@ -508,8 +509,9 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
         return ret;
 
     // Force lossy downmixed output if this is the first core frame since
-    // the last time history was cleared
-    if (dca->core_residual_valid == false && xll->nchsets > 1) {
+    // the last time history was cleared, or XLL decoder is recovering from sync loss
+    if ((dca->core_residual_valid == false && xll->nchsets > 1) ||
+        (dca->packet & DCADEC_PACKET_RECOVERY)) {
         for_each_chset(xll, c) {
             if (c < &xll->chset[xll->nactivechsets])
                 force_lossy_output(core, c);
@@ -732,6 +734,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
     if (!dca || !data || size < 4 || ((uintptr_t)data & 3))
         return -DCADEC_EINVAL;
 
+    int prev_packet = dca->packet;
     dca->packet = 0;
 
     // Parse backward compatible core sub-stream
@@ -792,7 +795,12 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
             }
 
             if ((ret = xll_parse(dca->xll, data, size, asset)) < 0) {
-                if (dca->flags & DCADEC_FLAG_STRICT)
+                // Conceal XLL synchronization error
+                if (ret == -DCADEC_ENOSYNC &&
+                    (prev_packet & DCADEC_PACKET_XLL) &&
+                    (dca->packet & DCADEC_PACKET_CORE))
+                    dca->packet |= DCADEC_PACKET_XLL | DCADEC_PACKET_RECOVERY;
+                else if (dca->flags & DCADEC_FLAG_STRICT)
                     return ret;
             } else {
                 dca->packet |= DCADEC_PACKET_XLL;
