@@ -560,6 +560,23 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
     return bits_seek(&xll->bits, band_data_end);
 }
 
+static void chs_clear_band_data(struct xll_chset *chs, int band, int seg)
+{
+    struct xll_decoder *xll = chs->decoder;
+
+    for (int i = 0; i < chs->nchannels; i++)
+        memset(chs->msb_sample_buffer[band][i] +
+               seg * xll->nsegsamples, 0, xll->nsegsamples * sizeof(int));
+
+    if (seg == 0 && band == 1)
+        memset(chs->deci_history, 0, sizeof(chs->deci_history));
+
+    if (chs->lsb_section_size[band])
+        for (int i = 0; i < chs->nchannels; i++)
+            memset(chs->lsb_sample_buffer[band][i] +
+                   seg * xll->nsegsamples, 0, xll->nsegsamples * sizeof(int));
+}
+
 void xll_clear_band_data(struct xll_chset *chs, int band)
 {
     struct xll_decoder *xll = chs->decoder;
@@ -915,13 +932,21 @@ static int parse_band_data(struct xll_decoder *xll)
             return ret;
     }
 
+    size_t navi_pos = xll->bits.index;
     size_t *navi_ptr = xll->navi;
     for (int band = 0; band < xll->nfreqbands; band++) {
         for (int seg = 0; seg < xll->nframesegs; seg++) {
             for_each_chset(xll, chs) {
-                if (chs->nfreqbands > band)
-                    if ((ret = chs_parse_band_data(chs, band, seg, *navi_ptr)) < 0)
-                        return ret;
+                if (chs->nfreqbands > band) {
+                    navi_pos += *navi_ptr * 8;
+                    if ((ret = chs_parse_band_data(chs, band, seg, *navi_ptr)) < 0) {
+                        if (xll->flags & DCADEC_FLAG_STRICT)
+                            return ret;
+                        // Zero band data and advance to next segment
+                        chs_clear_band_data(chs, band, seg);
+                        xll->bits.index = navi_pos;
+                    }
+                }
                 navi_ptr++;
             }
         }
