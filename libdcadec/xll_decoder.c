@@ -305,6 +305,11 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
             // Size of LSB section in any segment
             chs->lsb_section_size[band] = bits_get(&xll->bits, xll->seg_size_nbits);
 
+            // Account for optional CRC bytes after LSB section
+            if (chs->lsb_section_size[band] && (xll->band_crc_present > 2 ||
+                                                (band == 0 && xll->band_crc_present > 1)))
+                chs->lsb_section_size[band] += 2;
+
             // Number of bits to represent the samples in LSB part
             int tmp = 0;
             for (i = 0; i < chs->nchannels; i++)
@@ -532,14 +537,11 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
     // Start unpacking LSB portion of the segment
     if (chs->lsb_section_size[band]) {
         enforce(chs->lsb_section_size[band] <= band_data_nbytes,
-                "LSB section size too big");
-        enforce(chs->lsb_section_size[band] >= (xll->band_crc_present & 2U),
-                "LSB section size too small");
+                "Invalid LSB section size");
 
         // Skip to the start of LSB portion
-        size_t scalable_lsbs_start = band_data_end -
-            chs->lsb_section_size[band] * 8 - (xll->band_crc_present & 2U) * 8;
-        if ((ret = bits_seek(&xll->bits, scalable_lsbs_start)) < 0)
+        if ((ret = bits_seek(&xll->bits, band_data_end -
+                             chs->lsb_section_size[band] * 8)) < 0)
             return ret;
 
         // Unpack all LSB parts of residuals of this segment
