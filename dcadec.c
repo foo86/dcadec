@@ -179,7 +179,7 @@ static void signal_handler(int sig)
 
 int main(int argc, char **argv)
 {
-    int flags = DCADEC_FLAG_STRICT | DCADEC_FLAG_DONT_CLIP;
+    int flags = DCADEC_FLAG_STRICT;
     int wave_flags = 0;
     bool parse_only = false;
     bool no_progress = false;
@@ -191,11 +191,9 @@ int main(int argc, char **argv)
         switch (opt) {
         case '2':
             flags |= DCADEC_FLAG_KEEP_DMIX_2CH;
-            flags &= ~DCADEC_FLAG_DONT_CLIP;
             break;
         case '6':
             flags |= DCADEC_FLAG_KEEP_DMIX_6CH;
-            flags &= ~DCADEC_FLAG_DONT_CLIP;
             break;
         case 'b':
             flags |= DCADEC_FLAG_CORE_BIT_EXACT;
@@ -211,7 +209,6 @@ int main(int argc, char **argv)
             return 0;
         case 'l':
             flags &= ~DCADEC_FLAG_STRICT;
-            wave_flags |= DCADEC_WAVEOUT_FLAG_CLIP;
             break;
         case 'm':
             flags |= DCADEC_FLAG_NATIVE_LAYOUT;
@@ -314,7 +311,6 @@ int main(int argc, char **argv)
 
     uint32_t ndelayframes = 0;
     uint64_t npcmsamples = UINT64_MAX;
-    uint64_t nclippedsamples = 0;
     uint64_t nskippedframes = 0;
     uint64_t nlossyframes = 0;
 
@@ -382,7 +378,6 @@ int main(int argc, char **argv)
             }
 
             npcmsamples -= nsamples;
-            nclippedsamples += ret;
         }
 
 next_packet:
@@ -420,8 +415,6 @@ next_packet:
             fprintf(stderr, "Interrupted.\n");
         else if (ret == 0)
             fprintf(stderr, "Completed.\n");
-        if (nclippedsamples)
-            fprintf(stderr, "*** %" PRIu64 " samples clipped ***\n", nclippedsamples);
         if (nskippedframes)
             fprintf(stderr, "*** %" PRIu64 " frames skipped ***\n", nskippedframes);
         if (nlossyframes > 1)
