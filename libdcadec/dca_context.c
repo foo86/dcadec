@@ -30,6 +30,9 @@
 #define DCADEC_PACKET_RECOVERY  0x200
 
 struct dcadec_context {
+    dcadec_log_cb log_cb;
+    void *log_cbarg;
+
     int flags;
     int packet;
     int status;
@@ -783,6 +786,40 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     return status;
 }
 
+static int alloc_core_decoder(struct dcadec_context *dca)
+{
+    if (!dca->core) {
+        if (!(dca->core = ta_znew(dca, struct core_decoder)))
+            return -DCADEC_ENOMEM;
+        dca->core->log_cb = dca->log_cb;
+        dca->core->log_cbarg = dca->log_cbarg;
+    }
+    return 0;
+}
+
+static int alloc_exss_parser(struct dcadec_context *dca)
+{
+    if (!dca->exss) {
+        if (!(dca->exss = ta_znew(dca, struct exss_parser)))
+            return -DCADEC_ENOMEM;
+        dca->exss->log_cb = dca->log_cb;
+        dca->exss->log_cbarg = dca->log_cbarg;
+    }
+    return 0;
+}
+
+static int alloc_xll_decoder(struct dcadec_context *dca)
+{
+    if (!dca->xll) {
+        if (!(dca->xll = ta_znew(dca, struct xll_decoder)))
+            return -DCADEC_ENOMEM;
+        dca->xll->log_cb = dca->log_cb;
+        dca->xll->log_cbarg = dca->log_cbarg;
+        dca->xll->flags = dca->flags;
+    }
+    return 0;
+}
+
 DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, size_t size)
 {
     int status = 0, ret;
@@ -795,10 +832,8 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
 
     // Parse backward compatible core sub-stream
     if (DCA_MEM32NE(data) == DCA_32BE_C(SYNC_WORD_CORE)) {
-        if (!dca->core)
-            if (!(dca->core = ta_znew(dca, struct core_decoder)))
-                return -DCADEC_ENOMEM;
-
+        if ((ret = alloc_core_decoder(dca)) < 0)
+            return ret;
         if ((ret = core_parse(dca->core, data, size, dca->flags, NULL)) < 0)
             return ret;
         if (ret > status)
@@ -814,31 +849,28 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
         }
     }
 
+    struct exss_asset *asset = NULL;
+
     // Parse extension sub-stream (EXSS)
     if (DCA_MEM32NE(data) == DCA_32BE_C(SYNC_WORD_EXSS)) {
-        if (!dca->exss)
-            if (!(dca->exss = ta_znew(dca, struct exss_parser)))
-                return -DCADEC_ENOMEM;
-
+        if ((ret = alloc_exss_parser(dca)) < 0)
+            return ret;
         if ((ret = exss_parse(dca->exss, data, size)) < 0) {
             if (dca->flags & DCADEC_FLAG_STRICT)
                 return ret;
             status = DCADEC_WEXSSFAILED;
         } else {
             dca->packet |= DCADEC_PACKET_EXSS;
+            asset = &dca->exss->assets[0];
         }
     }
 
     // Parse coding components in the first EXSS asset
     if (dca->packet & DCADEC_PACKET_EXSS) {
-        struct exss_asset *asset = &dca->exss->assets[0];
-
         // Parse core component in EXSS
         if (!(dca->packet & DCADEC_PACKET_CORE) && (asset->extension_mask & EXSS_CORE)) {
-            if (!dca->core)
-                if (!(dca->core = ta_znew(dca, struct core_decoder)))
-                    return -DCADEC_ENOMEM;
-
+            if ((ret = alloc_core_decoder(dca)) < 0)
+                return ret;
             if ((ret = core_parse(dca->core, data, size, dca->flags, asset)) < 0)
                 return ret;
             if (ret > status)
@@ -849,12 +881,8 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
 
         // Parse XLL component in EXSS
         if (!(dca->flags & DCADEC_FLAG_CORE_ONLY) && (asset->extension_mask & EXSS_XLL)) {
-            if (!dca->xll) {
-                if (!(dca->xll = ta_znew(dca, struct xll_decoder)))
-                    return -DCADEC_ENOMEM;
-                dca->xll->flags = dca->flags;
-            }
-
+            if ((ret = alloc_xll_decoder(dca)) < 0)
+                return ret;
             if ((ret = xll_parse(dca->xll, data, size, asset)) < 0) {
                 // Conceal XLL synchronization error
                 if (ret == -DCADEC_ENOSYNC &&
@@ -880,9 +908,6 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
 
     // Parse core extensions in EXSS or backward compatible core sub-stream
     if (!(dca->flags & DCADEC_FLAG_CORE_ONLY) && (dca->packet & DCADEC_PACKET_CORE)) {
-        struct exss_asset *asset = NULL;
-        if (dca->packet & DCADEC_PACKET_EXSS)
-            asset = &dca->exss->assets[0];
         if ((ret = core_parse_exss(dca->core, data, size, dca->flags, asset)) < 0)
             return ret;
         if (ret > status)
@@ -989,6 +1014,28 @@ DCADEC_API struct dcadec_context *dcadec_context_create(int flags)
 DCADEC_API void dcadec_context_destroy(struct dcadec_context *dca)
 {
     ta_free(dca);
+}
+
+DCADEC_API void dcadec_context_set_log_cb(struct dcadec_context *dca,
+                                          dcadec_log_cb log_cb,
+                                          void *log_cbarg)
+{
+    if (dca) {
+        dca->log_cb = log_cb;
+        dca->log_cbarg = log_cbarg;
+        if (dca->core) {
+            dca->core->log_cb = log_cb;
+            dca->core->log_cbarg = log_cbarg;
+        }
+        if (dca->exss) {
+            dca->exss->log_cb = log_cb;
+            dca->exss->log_cbarg = log_cbarg;
+        }
+        if (dca->xll) {
+            dca->xll->log_cb = log_cb;
+            dca->xll->log_cbarg = log_cbarg;
+        }
+    }
 }
 
 DCADEC_API const char *dcadec_strerror(int errnum)

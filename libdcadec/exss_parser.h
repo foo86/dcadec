@@ -21,6 +21,8 @@
 
 #include "bitstream.h"
 
+#define exss_err(msg)   dca_log(ERROR, exss, msg)
+
 struct exss_parser;
 
 struct exss_asset {
@@ -69,6 +71,9 @@ struct exss_asset {
 
 struct exss_parser {
     struct bitstream   bits;
+
+    dcadec_log_cb   log_cb;
+    void            *log_cbarg;
 
     int     exss_index;
     int     exss_size_nbits;

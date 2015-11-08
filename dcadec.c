@@ -177,6 +177,28 @@ static void signal_handler(int sig)
 }
 #endif
 
+static void my_log_cb(int level, const char *file, int line,
+                      const char *message, void *cbarg)
+{
+    (void)cbarg;
+
+    if (level > DCADEC_LOG_WARNING)
+        return;
+
+    const char *prefix = "UNKNOWN";
+
+    switch (level) {
+    case DCADEC_LOG_ERROR:
+        prefix = "ERROR";
+        break;
+    case DCADEC_LOG_WARNING:
+        prefix = "WARNING";
+        break;
+    }
+
+    fprintf(stderr, "%s: %s+%d: %s\n", prefix, file, line, message);
+}
+
 int main(int argc, char **argv)
 {
     int flags = DCADEC_FLAG_STRICT;
@@ -271,6 +293,8 @@ int main(int argc, char **argv)
         dcadec_stream_close(stream);
         return 1;
     }
+
+    dcadec_context_set_log_cb(context, my_log_cb, NULL);
 
     if ((ret = dcadec_context_parse(context, packet, size)) < 0) {
         fprintf(stderr, "Error parsing packet: %s\n", dcadec_strerror(ret));

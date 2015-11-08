@@ -136,8 +136,10 @@ static int parse_descriptor(struct exss_asset *asset)
 
             // Number of speaker remapping sets
             int spkr_remap_nsets = bits_get(&exss->bits, 3);
-            enforce(!spkr_remap_nsets || spkr_mask_nbits,
-                    "Speaker mask disabled yet there are remapping sets");
+            if (spkr_remap_nsets && !spkr_mask_nbits) {
+                exss_err("Speaker mask disabled yet there are remapping sets");
+                return -DCADEC_EBADDATA;
+            }
 
             // Standard loudspeaker layout mask
             int nspeakers[8];
@@ -386,7 +388,10 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
 
     // Number of bytes of extension substream
     exss->exss_size = bits_get(&exss->bits, exss->exss_size_nbits) + 1;
-    enforce(exss->exss_size <= size, "Invalid EXSS size");
+    if (exss->exss_size > size) {
+        exss_err("Packet too short");
+        return -DCADEC_EBADDATA;
+    }
 
     // Per stream static fields presence flag
     exss->static_fields_present = bits_get1(&exss->bits);
@@ -456,7 +461,10 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
         exss->assets[i].asset_offset = offset;
         exss->assets[i].asset_size = bits_get(&exss->bits, exss->exss_size_nbits) + 1;
         offset += exss->assets[i].asset_size;
-        enforce(offset <= exss->exss_size, "EXSS asset out of bounds");
+        if (offset > exss->exss_size) {
+            exss_err("Asset out of bounds");
+            return -DCADEC_EBADDATA;
+        }
     }
 
     // Audio asset descriptor

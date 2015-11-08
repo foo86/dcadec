@@ -97,31 +97,48 @@ static int parse_frame_header(struct core_decoder *core)
 
     // Deficit sample count
     core->deficit_samples = bits_get(&core->bits, 5) + 1;
-    enforce(core->deficit_samples == 32 || core->normal_frame == false,
-            "Invalid deficit sample count");
+    if (core->deficit_samples < 32 && core->normal_frame) {
+        core_err("Invalid deficit sample count");
+        return -DCADEC_EBADDATA;
+    }
 
     // CRC present flag
     core->crc_present = bits_get1(&core->bits);
 
     // Number of PCM sample blocks
     core->npcmblocks = bits_get(&core->bits, 7) + 1;
-    enforce(core->npcmblocks >= 8, "Invalid number of PCM sample blocks");
+    if (core->npcmblocks < 8) {
+        core_err("Invalid number of PCM sample blocks");
+        return -DCADEC_EBADDATA;
+    }
 
     // Primary frame byte size
     core->frame_size = bits_get(&core->bits, 14) + 1;
-    enforce(core->frame_size >= 96, "Invalid frame size");
+    if (core->frame_size < 96) {
+        core_err("Invalid frame size");
+        return -DCADEC_EBADDATA;
+    }
 
     // Audio channel arrangement
     core->audio_mode = bits_get(&core->bits, 6);
-    require(core->audio_mode < AMODE_COUNT, "Unsupported audio channel arrangement");
+    if (core->audio_mode >= AMODE_COUNT) {
+        core_err("Unsupported audio channel arrangement");
+        return -DCADEC_ENOSUP;
+    }
 
     // Core audio sampling frequency
     core->sample_rate = sample_rates[bits_get(&core->bits, 4)];
-    enforce(core->sample_rate != 0, "Invalid core audio sampling frequency");
+    if (!core->sample_rate) {
+        core_err("Invalid core audio sampling frequency");
+        return -DCADEC_EBADDATA;
+    }
 
     // Transmission bit rate
     core->bit_rate = bit_rates[bits_get(&core->bits, 5)];
-    enforce(core->bit_rate != -1, "Invalid transmission bit rate");
+    if (core->bit_rate == -1) {
+        core_err("Invalid transmission bit rate");
+        return -DCADEC_EBADDATA;
+    }
 
     // Reserved field
     bits_skip1(&core->bits);
@@ -149,7 +166,10 @@ static int parse_frame_header(struct core_decoder *core)
 
     // Low frequency effects flag
     core->lfe_present = bits_get(&core->bits, 2);
-    enforce(core->lfe_present < 3, "Invalid low frequency effects flag");
+    if (core->lfe_present == 3) {
+        core_err("Invalid low frequency effects flag");
+        return -DCADEC_EBADDATA;
+    }
 
     // Predictor history flag switch
     core->predictor_history = bits_get1(&core->bits);
@@ -170,7 +190,10 @@ static int parse_frame_header(struct core_decoder *core)
     // Source PCM resolution
     int pcmr_index = bits_get(&core->bits, 3);
     core->source_pcm_res = sample_res[pcmr_index];
-    enforce(core->source_pcm_res != 0, "Invalid source PCM resolution");
+    if (!core->source_pcm_res) {
+        core_err("Invalid source PCM resolution");
+        return -DCADEC_EBADDATA;
+    }
     core->es_format = !!(pcmr_index & 1);
 
     // Front sum/difference flag
@@ -200,8 +223,10 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
 
         // Number of primary audio channels
         core->nchannels = bits_get(&core->bits, 3) + 1;
-        enforce(core->nchannels == audio_mode_nch[core->audio_mode],
-                "Invalid number of primary audio channels");
+        if (core->nchannels != audio_mode_nch[core->audio_mode]) {
+            core_err("Invalid number of primary audio channels");
+            return -DCADEC_EBADDATA;
+        }
         assert(core->nchannels <= MAX_CHANNELS - 2);
 
         core->ch_mask = audio_mode_ch_mask[core->audio_mode];
@@ -230,7 +255,10 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
 
         // Number of channels in a channel set
         n = bits_get(&core->bits, 3) + 1;
-        require(n < 3, "Too many XXCH audio channels");
+        if (n > 2) {
+            core_err("Unsupported number of XXCH channels");
+            return -DCADEC_ENOSUP;
+        }
         core->nchannels = audio_mode_nch[core->audio_mode] + n;
         assert(core->nchannels <= MAX_CHANNELS);
 
@@ -238,11 +266,15 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
         unsigned int mask = bits_get(&core->bits, core->xxch_mask_nbits - SPEAKER_Cs);
         core->xxch_spkr_mask = mask << SPEAKER_Cs;
 
-        enforce(dca_popcount(core->xxch_spkr_mask) == n,
-                "Invalid XXCH speaker layout mask");
+        if (dca_popcount(core->xxch_spkr_mask) != n) {
+            core_err("Invalid XXCH speaker layout mask");
+            return -DCADEC_EBADDATA;
+        }
 
-        enforce(!(core->xxch_core_mask & core->xxch_spkr_mask),
-                "XXCH speaker layout mask overlaps with core");
+        if (core->xxch_core_mask & core->xxch_spkr_mask) {
+            core_err("XXCH speaker layout mask overlaps with core");
+            return -DCADEC_EBADDATA;
+        }
 
         // Combine core and XXCH masks together
         core->ch_mask = core->xxch_core_mask | core->xxch_spkr_mask;
@@ -258,8 +290,10 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
             int code = bits_get(&core->bits, 6);
             if (code) {
                 unsigned int index = code * 4 - 44;
-                enforce(index < dca_countof(dmix_table_inv),
-                        "Invalid downmix scale index");
+                if (index >= dca_countof(dmix_table_inv)) {
+                    core_err("Invalid downmix scale index");
+                    return -DCADEC_EBADDATA;
+                }
                 core->dmix_scale_inv = dmix_table_inv[index];
             } else {
                 core->dmix_scale_inv = 0;
@@ -278,8 +312,10 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
                         int sign = (code >> 6) - 1; code &= 63;
                         if (code) {
                             unsigned int index = code * 4 - 4;
-                            enforce(index < dca_countof(dmix_table),
-                                    "Invalid downmix coefficient index");
+                            if (index >= dca_countof(dmix_table)) {
+                                core_err("Invalid downmix coefficient index");
+                                return -DCADEC_EBADDATA;
+                            }
                             *coeff_ptr++ = (dmix_table[index] ^ sign) - sign;
                         } else {
                             *coeff_ptr++ = 0;
@@ -297,7 +333,10 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
     // Subband activity count
     for (ch = xch_base; ch < core->nchannels; ch++) {
         core->nsubbands[ch] = bits_get(&core->bits, 5) + 2;
-        enforce(core->nsubbands[ch] <= MAX_SUBBANDS, "Invalid subband activity count");
+        if (core->nsubbands[ch] > MAX_SUBBANDS) {
+            core_err("Invalid subband activity count");
+            return -DCADEC_EBADDATA;
+        }
     }
 
     // High frequency VQ start subband
@@ -308,7 +347,10 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
     for (ch = xch_base; ch < core->nchannels; ch++) {
         if ((n = bits_get(&core->bits, 3)) && header == HEADER_XXCH)
             n += xch_base - 1;
-        enforce(n <= core->nchannels, "Invalid joint intensity coding index");
+        if (n > core->nchannels) {
+            core_err("Invalid joint intensity coding index");
+            return -DCADEC_EBADDATA;
+        }
         core->joint_intensity_index[ch] = n;
     }
 
@@ -319,13 +361,19 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
     // Scale factor code book
     for (ch = xch_base; ch < core->nchannels; ch++) {
         core->scale_factor_sel[ch] = bits_get(&core->bits, 3);
-        enforce(core->scale_factor_sel[ch] < 7, "Invalid scale factor code book");
+        if (core->scale_factor_sel[ch] == 7) {
+            core_err("Invalid scale factor code book");
+            return -DCADEC_EBADDATA;
+        }
     }
 
     // Bit allocation quantizer select
     for (ch = xch_base; ch < core->nchannels; ch++) {
         core->bit_allocation_sel[ch] = bits_get(&core->bits, 3);
-        enforce(core->bit_allocation_sel[ch] < 7, "Invalid bit allocation quantizer select");
+        if (core->bit_allocation_sel[ch] == 7) {
+            core_err("Invalid bit allocation quantizer select");
+            return -DCADEC_EBADDATA;
+        }
     }
 
     // Quantization index codebook select
@@ -374,7 +422,11 @@ static int parse_scale(struct core_decoder *core, int *scale_index, int sel)
         *scale_index = bits_get(&core->bits, sel + 1);
 
     // Look up scale factor from the root square table
-    enforce((unsigned int)*scale_index < scale_size, "Invalid scale factor index");
+    if ((unsigned int)*scale_index >= scale_size) {
+        core_err("Invalid scale factor index");
+        return -DCADEC_EBADDATA;
+    }
+
     return scale_table[*scale_index];
 }
 
@@ -390,7 +442,12 @@ static int parse_joint_scale(struct core_decoder *core, int sel)
     // Bias by 64
     scale_index += 64;
 
-    enforce((unsigned int)scale_index < dca_countof(joint_scale_factors), "Invalid joint scale factor index");
+    // Look up joint scale factor
+    if ((unsigned int)scale_index >= dca_countof(joint_scale_factors)) {
+        core_err("Invalid joint scale factor index");
+        return -DCADEC_EBADDATA;
+    }
+
     return joint_scale_factors[scale_index];
 }
 
@@ -429,7 +486,10 @@ static int parse_subframe_header(struct core_decoder *core, int sf,
                 abits = bits_get_unsigned_vlc(&core->bits, &bit_allocation_huff[sel]) + 1;
             else
                 abits = bits_get(&core->bits, sel - 1);
-            enforce(abits < 27, "Invalid bit allocation index");
+            if (abits >= 27) {
+                core_err("Invalid bit allocation index");
+                return -DCADEC_EBADDATA;
+            }
             core->bit_allocation[ch][band] = abits;
         }
     }
@@ -449,7 +509,10 @@ static int parse_subframe_header(struct core_decoder *core, int sf,
                     int sel = core->transition_mode_sel[ch];
                     const struct huffman *huff = &transition_mode_huff[sel];
                     int trans_ssf = bits_get_unsigned_vlc(&core->bits, huff);
-                    enforce(trans_ssf < 4, "Invalid transition mode index");
+                    if (trans_ssf >= 4) {
+                        core_err("Invalid transition mode index");
+                        return -DCADEC_EBADDATA;
+                    }
                     core->transition_mode[sf][ch][band] = trans_ssf;
                 }
             }
@@ -497,7 +560,10 @@ static int parse_subframe_header(struct core_decoder *core, int sf,
         // Only if joint subband coding is enabled
         if (core->joint_intensity_index[ch]) {
             core->joint_scale_sel[ch] = bits_get(&core->bits, 3);
-            enforce(core->joint_scale_sel[ch] < 7, "Invalid joint scale factor code book");
+            if (core->joint_scale_sel[ch] == 7) {
+                core_err("Invalid joint scale factor code book");
+                return -DCADEC_EBADDATA;
+            }
         }
     }
 
@@ -542,7 +608,11 @@ static int parse_block_code(struct core_decoder *core, int *value, int sel)
         code /= levels;
     }
 
-    enforce(code == 0, "Failed to decode block code");
+    if (code) {
+        core_err("Failed to decode block code");
+        return -DCADEC_EBADDATA;
+    }
+
     return 0;
 }
 
@@ -662,7 +732,10 @@ static int parse_subframe_audio(struct core_decoder *core, int sf, enum HeaderTy
 
     // Number of subband samples in this subframe
     int nsamples = core->nsubsubframes[sf] * NUM_SUBBAND_SAMPLES;
-    enforce(*sub_pos + nsamples <= core->npcmblocks, "Subband sample buffer overflow");
+    if (*sub_pos + nsamples > core->npcmblocks) {
+        core_err("Subband sample buffer overflow");
+        return -DCADEC_EBADDATA;
+    }
 
     // VQ encoded subbands
     for (ch = xch_base; ch < core->nchannels; ch++) {
@@ -695,8 +768,10 @@ static int parse_subframe_audio(struct core_decoder *core, int sf, enum HeaderTy
 
         // Extract scale factor index from the bit stream
         unsigned int scale_index = bits_get(&core->bits, 8);
-        enforce(scale_index < dca_countof(scale_factors_7bit),
-                "Invalid LFE scale factor index");
+        if (scale_index >= dca_countof(scale_factors_7bit)) {
+            core_err("Invalid LFE scale factor index");
+            return -DCADEC_EBADDATA;
+        }
 
         // Look up the 7-bit root square quantization table
         int scale = scale_factors_7bit[scale_index];
@@ -724,8 +799,11 @@ static int parse_subframe_audio(struct core_decoder *core, int sf, enum HeaderTy
                     return ret;
 
         // DSYNC
-        if (ssf == core->nsubsubframes[sf] - 1 || core->sync_ssf)
-            enforce(bits_get(&core->bits, 16) == 0xffff, "DSYNC check failed");
+        if ((ssf == core->nsubsubframes[sf] - 1 || core->sync_ssf)
+            && bits_get(&core->bits, 16) != 0xffff) {
+            core_err("DSYNC check failed");
+            return -DCADEC_EBADDATA;
+        }
     }
 
     // Inverse ADPCM
@@ -1095,7 +1173,10 @@ int core_filter(struct core_decoder *core, int flags)
 
 static int parse_xch_frame(struct core_decoder *core)
 {
-    enforce(!(core->ch_mask & SPEAKER_MASK_Cs), "XCH with Cs speaker already present");
+    if (core->ch_mask & SPEAKER_MASK_Cs) {
+        core_err("XCH with Cs speaker already present");
+        return -DCADEC_EBADDATA;
+    }
 
     int ret;
     if ((ret = parse_frame_data(core, HEADER_XCH, core->nchannels)) < 0)
@@ -1110,7 +1191,10 @@ static int parse_xxch_frame(struct core_decoder *core)
     size_t header_pos = core->bits.index;
 
     // XXCH sync word
-    enforce2(bits_get(&core->bits, 32) == SYNC_WORD_XXCH, "Invalid XXCH sync word");
+    if (bits_get(&core->bits, 32) != SYNC_WORD_XXCH) {
+        core_err("Invalid XXCH sync word");
+        return -DCADEC_ENOSYNC;
+    }
 
     // XXCH frame header length
     size_t header_size = bits_get(&core->bits, 6) + 1;
@@ -1126,11 +1210,17 @@ static int parse_xxch_frame(struct core_decoder *core)
 
     // Number of bits for loudspeaker mask
     core->xxch_mask_nbits = bits_get(&core->bits, 5) + 1;
-    enforce(core->xxch_mask_nbits > SPEAKER_Cs, "Invalid number of bits for XXCH speaker mask");
+    if (core->xxch_mask_nbits <= SPEAKER_Cs) {
+        core_err("Invalid number of bits for XXCH speaker mask");
+        return -DCADEC_EBADDATA;
+    }
 
     // Number of channel sets
     int xxch_nchsets = bits_get(&core->bits, 2) + 1;
-    require(xxch_nchsets == 1, "Unsupported number of XXCH channel sets");
+    if (xxch_nchsets > 1) {
+        core_err("Unsupported number of XXCH channel sets");
+        return -DCADEC_ENOSUP;
+    }
 
     // Channel set 0 data byte size
     int xxch_frame_size = bits_get(&core->bits, 14) + 1;
@@ -1147,7 +1237,10 @@ static int parse_xxch_frame(struct core_decoder *core)
     if ((mask & SPEAKER_MASK_Rs) && (core->xxch_core_mask & SPEAKER_MASK_Rss))
         mask = (mask & ~SPEAKER_MASK_Rs) | SPEAKER_MASK_Rss;
 
-    enforce(mask == core->xxch_core_mask, "Invalid XXCH core speaker activity mask");
+    if (mask != core->xxch_core_mask) {
+        core_err("Invalid XXCH core speaker activity mask");
+        return -DCADEC_EBADDATA;
+    }
 
     // Reserved
     // Byte align
@@ -1173,7 +1266,10 @@ static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xb
 
     // Number of subband samples in this subframe
     int nsamples = core->nsubsubframes[sf] * NUM_SUBBAND_SAMPLES;
-    enforce(*sub_pos + nsamples <= core->npcmblocks, "Subband sample buffer overflow");
+    if (*sub_pos + nsamples > core->npcmblocks) {
+        core_err("Subband sample buffer overflow");
+        return -DCADEC_EBADDATA;
+    }
 
     // Number of bits for XBR bit allocation index
     for (ch = xbr_base_ch; ch < xbr_nchannels; ch++)
@@ -1187,7 +1283,10 @@ static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xb
     // Number of bits for scale indices
     for (ch = xbr_base_ch; ch < xbr_nchannels; ch++) {
         xbr_scale_nbits[ch] = bits_get(&core->bits, 3);
-        enforce(xbr_scale_nbits[ch] > 0, "Invalid number of bits for XBR scale factor index");
+        if (!xbr_scale_nbits[ch]) {
+            core_err("Invalid number of bits for XBR scale factor index");
+            return -DCADEC_EBADDATA;
+        }
     }
 
     // XBR scale factors
@@ -1208,11 +1307,17 @@ static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xb
         for (band = 0; band < xbr_nsubbands[ch]; band++) {
             if (xbr_bit_allocation[ch][band] > 0) {
                 unsigned int scale_index = bits_get(&core->bits, xbr_scale_nbits[ch]);
-                enforce(scale_index < scale_size, "Invalid XBR scale factor index");
+                if (scale_index >= scale_size) {
+                    core_err("Invalid XBR scale factor index");
+                    return -DCADEC_EBADDATA;
+                }
                 xbr_scale_factors[ch][band][0] = scale_table[scale_index];
                 if (xbr_transition_mode && core->transition_mode[sf][ch][band]) {
                     scale_index = bits_get(&core->bits, xbr_scale_nbits[ch]);
-                    enforce(scale_index < scale_size, "Invalid XBR scale factor index");
+                    if (scale_index >= scale_size) {
+                        core_err("Invalid XBR scale factor index");
+                        return -DCADEC_EBADDATA;
+                    }
                     xbr_scale_factors[ch][band][1] = scale_table[scale_index];
                 }
             }
@@ -1266,8 +1371,11 @@ static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xb
         }
 
         // DSYNC
-        if (ssf == core->nsubsubframes[sf] - 1 || core->sync_ssf)
-            enforce(bits_get(&core->bits, 16) == 0xffff, "DSYNC check failed");
+        if ((ssf == core->nsubsubframes[sf] - 1 || core->sync_ssf)
+            && bits_get(&core->bits, 16) != 0xffff) {
+            core_err("DSYNC check failed");
+            return -DCADEC_EBADDATA;
+        }
     }
 
     // Advance subband sample pointer for the next subframe
@@ -1284,7 +1392,10 @@ static int parse_xbr_frame(struct core_decoder *core)
     size_t header_pos = core->bits.index;
 
     // XBR sync word
-    enforce2(bits_get(&core->bits, 32) == SYNC_WORD_XBR, "Invalid XBR sync word");
+    if (bits_get(&core->bits, 32) != SYNC_WORD_XBR) {
+        core_err("Invalid XBR sync word");
+        return -DCADEC_ENOSYNC;
+    }
 
     // XBR frame header length
     size_t header_size = bits_get(&core->bits, 6) + 1;
@@ -1311,8 +1422,10 @@ static int parse_xbr_frame(struct core_decoder *core)
         int xbr_band_nbits = bits_get(&core->bits, 2) + 5;
         for (int ch1 = 0; ch1 < xbr_nchannels[i]; ch1++, ch2++) {
             xbr_nsubbands[ch2] = bits_get(&core->bits, xbr_band_nbits) + 1;
-            enforce(xbr_nsubbands[ch2] <= MAX_SUBBANDS,
-                    "Invalid number of active XBR subbands");
+            if (xbr_nsubbands[ch2] > MAX_SUBBANDS) {
+                core_err("Invalid number of active XBR subbands");
+                return -DCADEC_EBADDATA;
+            }
         }
     }
 
@@ -1391,7 +1504,10 @@ static int parse_x96_subframe_audio(struct x96_decoder *x96, int sf, int xch_bas
 
     // Number of subband samples in this subframe
     int nsamples = core->nsubsubframes[sf] * NUM_SUBBAND_SAMPLES;
-    enforce(*sub_pos + nsamples <= core->npcmblocks, "Subband sample buffer overflow");
+    if (*sub_pos + nsamples > core->npcmblocks) {
+        core_err("Subband sample buffer overflow");
+        return -DCADEC_EBADDATA;
+    }
 
     // Number of VQ lookup iterations for this subframe
     int n_ssf_iter = core->nsubsubframes[sf] / 2;
@@ -1450,8 +1566,11 @@ static int parse_x96_subframe_audio(struct x96_decoder *x96, int sf, int xch_bas
                         return ret;
 
         // DSYNC
-        if (ssf == core->nsubsubframes[sf] - 1 || core->sync_ssf)
-            enforce(bits_get(&core->bits, 16) == 0xffff, "DSYNC check failed");
+        if ((ssf == core->nsubsubframes[sf] - 1 || core->sync_ssf)
+            && bits_get(&core->bits, 16) != 0xffff) {
+            core_err("DSYNC check failed");
+            return -DCADEC_EBADDATA;
+        }
     }
 
     // Inverse ADPCM
@@ -1575,7 +1694,12 @@ static int parse_x96_subframe_header(struct x96_decoder *x96, int xch_base)
                 abits += bits_get_signed_vlc(&core->bits, huff);
             else
                 abits = bits_get(&core->bits, 3 + x96->high_res);
-            enforce((unsigned int)abits <= abits_max, "Invalid bit allocation index");
+
+            if ((unsigned int)abits > abits_max) {
+                core_err("Invalid bit allocation index");
+                return -DCADEC_EBADDATA;
+            }
+
             x96->bit_allocation[ch][band] = abits;
         }
     }
@@ -1599,7 +1723,10 @@ static int parse_x96_subframe_header(struct x96_decoder *x96, int xch_base)
         // Only if joint subband coding is enabled
         if (x96->joint_intensity_index[ch]) {
             x96->joint_scale_sel[ch] = bits_get(&core->bits, 3);
-            enforce(x96->joint_scale_sel[ch] < 7, "Invalid joint scale factor code book");
+            if (x96->joint_scale_sel[ch] == 7) {
+                core_err("Invalid joint scale factor code book");
+                return -DCADEC_EBADDATA;
+            }
         }
     }
 
@@ -1649,7 +1776,10 @@ static int parse_x96_coding_header(struct x96_decoder *x96, bool exss, int xch_b
     // First encoded subband
     if (x96->rev_no < 8) {
         x96->subband_start = bits_get(&core->bits, 5);
-        enforce(x96->subband_start <= 27, "Invalid X96 subband start index");
+        if (x96->subband_start > 27) {
+            core_err("Invalid X96 subband start index");
+            return -DCADEC_EBADDATA;
+        }
     } else {
         x96->subband_start = MAX_SUBBANDS;
     }
@@ -1657,21 +1787,30 @@ static int parse_x96_coding_header(struct x96_decoder *x96, bool exss, int xch_b
     // Subband activity count
     for (ch = xch_base; ch < x96->nchannels; ch++) {
         x96->nsubbands[ch] = bits_get(&core->bits, 6) + 1;
-        enforce(x96->nsubbands[ch] >= MAX_SUBBANDS, "Invalid X96 subband activity count");
+        if (x96->nsubbands[ch] < MAX_SUBBANDS) {
+            core_err("Invalid X96 subband activity count");
+            return -DCADEC_EBADDATA;
+        }
     }
 
     // Joint intensity coding index
     for (ch = xch_base; ch < x96->nchannels; ch++) {
         if ((n = bits_get(&core->bits, 3)) && xch_base)
             n += xch_base - 1;
-        enforce(n <= x96->nchannels, "Invalid joint intensity coding index");
+        if (n > x96->nchannels) {
+            core_err("Invalid joint intensity coding index");
+            return -DCADEC_EBADDATA;
+        }
         x96->joint_intensity_index[ch] = n;
     }
 
     // Scale factor code book
     for (ch = xch_base; ch < x96->nchannels; ch++) {
         x96->scale_factor_sel[ch] = bits_get(&core->bits, 3);
-        enforce(x96->scale_factor_sel[ch] < 6, "Invalid scale factor code book");
+        if (x96->scale_factor_sel[ch] >= 6) {
+            core_err("Invalid scale factor code book");
+            return -DCADEC_EBADDATA;
+        }
     }
 
     // Bit allocation quantizer select
@@ -1741,7 +1880,10 @@ static int parse_x96_frame(struct x96_decoder *x96)
 
     // Revision number
     x96->rev_no = bits_get(&core->bits, 4);
-    require(x96->rev_no >= 1 && x96->rev_no <= 8, "Unsupported X96 revision");
+    if (x96->rev_no < 1 || x96->rev_no > 8) {
+        core_err("Unsupported X96 revision");
+        return -DCADEC_ENOSUP;
+    }
 
     x96->crc_present = false;
     x96->nchannels = core->nchannels;
@@ -1766,7 +1908,10 @@ static int parse_x96_frame_exss(struct x96_decoder *x96)
     size_t header_pos = core->bits.index;
 
     // X96 sync word
-    enforce2(bits_get(&core->bits, 32) == SYNC_WORD_X96, "Invalid X96 sync word");
+    if (bits_get(&core->bits, 32) != SYNC_WORD_X96) {
+        core_err("Invalid X96 sync word");
+        return -DCADEC_ENOSYNC;
+    }
 
     // X96 frame header length
     size_t header_size = bits_get(&core->bits, 6) + 1;
@@ -1779,7 +1924,10 @@ static int parse_x96_frame_exss(struct x96_decoder *x96)
 
     // Revision number
     x96->rev_no = bits_get(&core->bits, 4);
-    require(x96->rev_no >= 1 && x96->rev_no <= 8, "Unsupported X96 revision");
+    if (x96->rev_no < 1 || x96->rev_no > 8) {
+        core_err("Unsupported X96 revision");
+        return -DCADEC_ENOSUP;
+    }
 
     // CRC presence flag for channel set header
     x96->crc_present = bits_get1(&core->bits);
@@ -1856,7 +2004,10 @@ static int parse_aux_data(struct core_decoder *core)
 
     // Auxiliary data sync word
     uint32_t sync = bits_get(&core->bits, 32);
-    enforce2(sync == SYNC_WORD_REV1AUX, "Invalid auxiliary data sync word");
+    if (sync != SYNC_WORD_REV1AUX) {
+        core_err("Invalid auxiliary data sync word");
+        return -DCADEC_ENOSYNC;
+    }
 
     // Auxiliary decode time stamp flag
     if (bits_get1(&core->bits)) {
@@ -1873,8 +2024,10 @@ static int parse_aux_data(struct core_decoder *core)
     if (core->prim_dmix_embedded) {
         // Auxiliary primary channel downmix type
         core->prim_dmix_type = bits_get(&core->bits, 3);
-        enforce(core->prim_dmix_type < DMIX_TYPE_COUNT,
-                "Invalid primary channel set downmix type");
+        if (core->prim_dmix_type >= DMIX_TYPE_COUNT) {
+            core_err("Invalid primary channel set downmix type");
+            return -DCADEC_EBADDATA;
+        }
 
         // Size of downmix coefficients matrix
         int m = dmix_primary_nch[core->prim_dmix_type];
@@ -1887,8 +2040,10 @@ static int parse_aux_data(struct core_decoder *core)
             int sign = (code >> 8) - 1; code &= 0xff;
             if (code) {
                 unsigned int index = code - 1;
-                enforce(index < dca_countof(dmix_table),
-                        "Invalid downmix coefficient index");
+                if (index >= dca_countof(dmix_table)) {
+                    core_err("Invalid downmix coefficient index");
+                    return -DCADEC_EBADDATA;
+                }
                 *coeff_ptr++ = (dmix_table[index] ^ sign) - sign;
             } else {
                 *coeff_ptr++ = 0;
@@ -1959,7 +2114,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
             }
 
             if (!core->xch_pos) {
-                DCA_DEBUG("XCH sync word not found");
+                core_warn("XCH sync word not found");
                 if (flags & DCADEC_FLAG_STRICT)
                     return -DCADEC_ENOSYNC;
                 status = DCADEC_WCOREEXTFAILED;
@@ -1983,7 +2138,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
             }
 
             if (!core->x96_pos) {
-                DCA_DEBUG("X96 sync word not found");
+                core_warn("X96 sync word not found");
                 if (flags & DCADEC_FLAG_STRICT)
                     return -DCADEC_ENOSYNC;
                 status = DCADEC_WCOREEXTFAILED;
@@ -2010,7 +2165,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
             }
 
             if (!core->xxch_pos) {
-                DCA_DEBUG("XXCH sync word not found");
+                core_warn("XXCH sync word not found");
                 if (flags & DCADEC_FLAG_STRICT)
                     return -DCADEC_ENOSYNC;
                 status = DCADEC_WCOREEXTFAILED;

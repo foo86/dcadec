@@ -151,6 +151,14 @@
 #define DCADEC_MATRIX_ENCODING_HEADPHONE    2
 /**@}*/
 
+/**@{*/
+#define DCADEC_LOG_ERROR    0
+#define DCADEC_LOG_WARNING  1
+#define DCADEC_LOG_INFO     2
+#define DCADEC_LOG_VERBOSE  3
+#define DCADEC_LOG_DEBUG    4
+/**@}*/
+
 /**
  * Size in bytes of empty padding that must be present after the end of input
  * buffer. libdcadec may overread the input buffer up to this number of bytes.
@@ -185,6 +193,9 @@ struct dcadec_exss_info {
     int spkr_mask;          /**< Speaker activity mask, zero if unavailable */
     int matrix_encoding;    /**< Matrix encoding type */
 };
+
+typedef void (*dcadec_log_cb)(int level, const char *file, int line,
+                              const char *message, void *cbarg);
 
 /**
  * Parse DTS packet. Packet data must be already converted into 16-bit
@@ -314,6 +325,21 @@ DCADEC_API struct dcadec_context *dcadec_context_create(int flags);
  * @param dca   Pointer to decoder context.
  */
 DCADEC_API void dcadec_context_destroy(struct dcadec_context *dca);
+
+/**
+ * Set or clear logging callback for decoder context.
+ *
+ * @param dca       Pointer to decoder context.
+ *
+ * @param log_cb    Pointer to logging callback function. Pass NULL to disable
+ *                  logging.
+ *
+ * @param log_cbarg Opaque pointer that will be passed through to callback
+ *                  function.
+ */
+DCADEC_API void dcadec_context_set_log_cb(struct dcadec_context *dca,
+                                          dcadec_log_cb log_cb,
+                                          void *log_cbarg);
 
 /**
  * Convert negative libdcadec error code or positive warning code into string.

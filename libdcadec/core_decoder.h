@@ -32,6 +32,9 @@
 
 #define MAX_SUBBANDS_X96        64
 
+#define core_err(msg)   dca_log(ERROR, core, msg)
+#define core_warn(msg)  dca_log(WARNING, core, msg)
+
 struct core_decoder;
 struct exss_asset;
 struct dcadec_core_info;
@@ -65,6 +68,9 @@ struct x96_decoder {
 
 struct core_decoder {
     struct bitstream    bits;
+
+    dcadec_log_cb   log_cb;
+    void            *log_cbarg;
 
     bool    normal_frame;
     int     deficit_samples;

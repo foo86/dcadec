@@ -71,7 +71,10 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
             int sign = (code >> 8) - 1; code &= 0xff;
             if (code > 0) {
                 unsigned int index = code - 1;
-                enforce(index >= 40 && index < dca_countof(dmix_table), "Invalid downmix scale index");
+                if (index < 40 || index >= dca_countof(dmix_table)) {
+                    xll_err("Invalid downmix scale index");
+                    return -DCADEC_EBADDATA;
+                }
                 int scale = dmix_table[index];
                 scale_inv = dmix_table_inv[index - 40];
                 chs->dmix_scale_cur[i] = (scale ^ sign) - sign;
@@ -88,7 +91,10 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
             int sign = (code >> 8) - 1; code &= 0xff;
             if (code > 0) {
                 unsigned int index = code - 1;
-                enforce(index < dca_countof(dmix_table), "Invalid downmix coefficient index");
+                if (index >= dca_countof(dmix_table)) {
+                    xll_err("Invalid downmix coefficient index");
+                    return -DCADEC_EBADDATA;
+                }
                 int coeff = dmix_table[index];
                 if (!chs->primary_chset)
                     // Multiply by |InvDmixScale| to get |UndoDmixScale|
@@ -119,7 +125,10 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
 
     // Number of channels in the channel set
     chs->nchannels = bits_get(&xll->bits, 4) + 1;
-    require(chs->nchannels <= XLL_MAX_CHANNELS, "Too many channels");
+    if (chs->nchannels > XLL_MAX_CHANNELS) {
+        xll_err("Unsupported number of channels");
+        return -DCADEC_ENOSUP;
+    }
 
     // Residual type
     chs->residual_encode = bits_get(&xll->bits, chs->nchannels);
@@ -132,14 +141,20 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
 
     // Original sampling frequency
     chs->freq = exss_sample_rates[bits_get(&xll->bits, 4)];
-    require(chs->freq <= 192000, "Too high sampling frequency");
+    if (chs->freq > 192000) {
+        xll_err("Unsupported sampling frequency");
+        return -DCADEC_ENOSUP;
+    }
 
     // Sampling frequency modifier
     chs->interpolate = bits_get(&xll->bits, 2);
 
     // Which replacement set this channel set is member of
     chs->replace_set_index = bits_get(&xll->bits, 2);
-    require(chs->replace_set_index == 0, "Replacement sets are not supported");
+    if (chs->replace_set_index) {
+        xll_err("Replacement sets are not supported");
+        return -DCADEC_ENOSUP;
+    }
 
     // Default replacement set flag
     if (chs->replace_set_index)
@@ -158,8 +173,10 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         // Downmix type
         if (chs->dmix_coeffs_present && chs->primary_chset) {
             chs->dmix_type = bits_get(&xll->bits, 3);
-            enforce(chs->dmix_type < DMIX_TYPE_COUNT,
-                    "Invalid primary channel set downmix type");
+            if (chs->dmix_type >= DMIX_TYPE_COUNT) {
+                xll_err("Invalid primary channel set downmix type");
+                return -DCADEC_EBADDATA;
+            }
         }
 
         // Whether the channel set is part of a hierarchy
@@ -174,7 +191,10 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         if (chs->ch_mask_enabled) {
             // Channel mask for set
             chs->ch_mask = bits_get(&xll->bits, xll->ch_mask_nbits);
-            enforce(dca_popcount(chs->ch_mask) == chs->nchannels, "Invalid channel mask");
+            if (dca_popcount(chs->ch_mask) != chs->nchannels) {
+                xll_err("Invalid channel mask");
+                return -DCADEC_EBADDATA;
+            }
         } else {
             chs->ch_mask = 0;
             // Angular speaker position table
@@ -235,8 +255,10 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
     else
         chs->nfreqbands = 1;
 
-    // Extra frequency bands are not supported
-    require(chs->nfreqbands <= XLL_MAX_BANDS, "Too many frequency bands");
+    if (chs->nfreqbands > XLL_MAX_BANDS) {
+        xll_err("Extra frequency bands are not supported");
+        return -DCADEC_ENOSUP;
+    }
 
     // Clamp the sampling frequency to 96 kHz. The rest of the code will use
     // the number of bands to determine maximum frequency.
@@ -259,7 +281,10 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
             // Original channel order
             for (i = 0; i < chs->nchannels; i++) {
                 chs->orig_order[band][i] = bits_get(&xll->bits, ch_nbits[chs->nchannels - 1]);
-                enforce(chs->orig_order[band][i] < chs->nchannels, "Invalid original channel order");
+                if (chs->orig_order[band][i] >= chs->nchannels) {
+                    xll_err("Invalid original channel order");
+                    return -DCADEC_EBADDATA;
+                }
             }
             // Pairwise channel coefficients
             for (i = 0; i < chs->nchannels / 2; i++) {
@@ -282,8 +307,10 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
             if (chs->adapt_pred_order[band][i] > chs->highest_pred_order[band])
                 chs->highest_pred_order[band] = chs->adapt_pred_order[band][i];
         }
-        enforce(chs->highest_pred_order[band] <= xll->nsegsamples,
-                "Invalid adaptive predicition order");
+        if (chs->highest_pred_order[band] > xll->nsegsamples) {
+            xll_err("Invalid adaptive predicition order");
+            return -DCADEC_EBADDATA;
+        }
 
         // Fixed predictor order
         for (i = 0; i < chs->nchannels; i++) {
@@ -297,7 +324,10 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         for (i = 0; i < chs->nchannels; i++) {
             for (j = 0; j < chs->adapt_pred_order[band][i]; j++) {
                 k = bits_get_signed_linear(&xll->bits, 8);
-                enforce(k > -128, "Invalid reflection coefficient index");
+                if (k == -128) {
+                    xll_err("Invalid reflection coefficient index");
+                    return -DCADEC_EBADDATA;
+                }
                 if (k < 0)
                     chs->adapt_refl_coeff[band][i][j] = -(int)refl_coeff_table[-k];
                 else
@@ -319,11 +349,13 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
                 chs->lsb_section_size[band] += 2;
 
             // Number of bits to represent the samples in LSB part
-            int tmp = 0;
-            for (i = 0; i < chs->nchannels; i++)
-                tmp |= (chs->nscalablelsbs[band][i] = bits_get(&xll->bits, 4));
-            enforce(!tmp || chs->lsb_section_size[band],
-                    "LSB section missing with non-zero LSB width");
+            for (i = 0; i < chs->nchannels; i++) {
+                chs->nscalablelsbs[band][i] = bits_get(&xll->bits, 4);
+                if (chs->nscalablelsbs[band][i] && !chs->lsb_section_size[band]) {
+                    xll_err("LSB section missing with non-zero LSB width");
+                    return -DCADEC_EBADDATA;
+                }
+            }
         } else {
             chs->lsb_section_size[band] = 0;
             for (i = 0; i < chs->nchannels; i++)
@@ -511,7 +543,10 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
                 // Extract the locations of isolated samples and flag by -1
                 for (j = 0; j < nisosamples; j++) {
                     int loc = bits_get(&xll->bits, xll->nsegsamples_log2);
-                    enforce(loc < nsamples_part_b, "Invalid isolated sample location");
+                    if (loc >= nsamples_part_b) {
+                        xll_err("Invalid isolated sample location");
+                        return -DCADEC_EBADDATA;
+                    }
                     part_b[loc] = -1;
                 }
 
@@ -544,8 +579,10 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
 
     // Start unpacking LSB portion of the segment
     if (chs->lsb_section_size[band]) {
-        enforce(chs->lsb_section_size[band] <= band_data_nbytes,
-                "Invalid LSB section size");
+        if (chs->lsb_section_size[band] > band_data_nbytes) {
+            xll_err("Invalid LSB section size");
+            return -DCADEC_EBADDATA;
+        }
 
         // Skip to the start of LSB portion
         if ((ret = bits_seek(&xll->bits, band_data_end -
@@ -798,7 +835,10 @@ static int parse_common_header(struct xll_decoder *xll)
 
     // Version number
     int stream_ver = bits_get(&xll->bits, 4) + 1;
-    require(stream_ver == 1, "Unsupported XLL stream version");
+    if (stream_ver > 1) {
+        xll_err("Unsupported stream version");
+        return -DCADEC_ENOSUP;
+    }
 
     // Lossless frame header length
     size_t header_size = bits_get(&xll->bits, 8) + 1;
@@ -812,7 +852,10 @@ static int parse_common_header(struct xll_decoder *xll)
 
     // Number of bytes in a lossless frame
     xll->frame_size = bits_get(&xll->bits, frame_size_nbits);
-    enforce(xll->frame_size < XLL_PBR_SIZE, "Invalid XLL frame size");
+    if (xll->frame_size >= XLL_PBR_SIZE) {
+        xll_err("Invalid frame size");
+        return -DCADEC_EBADDATA;
+    }
     xll->frame_size++;
 
     // Number of channels sets per frame
@@ -821,20 +864,32 @@ static int parse_common_header(struct xll_decoder *xll)
     // Number of segments per frame
     int nframesegs_log2 = bits_get(&xll->bits, 4);
     xll->nframesegs = 1 << nframesegs_log2;
-    enforce(xll->nframesegs <= 1024, "Too many segments per XLL frame");
+    if (xll->nframesegs > 1024) {
+        xll_err("Too many segments per frame");
+        return -DCADEC_EBADDATA;
+    }
 
     // Samples in segment per one frequency band for the first channel set
     // Maximum value is 256 for sampling frequencies <= 48 kHz
     // Maximum value is 512 for sampling frequencies > 48 kHz
     xll->nsegsamples_log2 = bits_get(&xll->bits, 4);
-    enforce(xll->nsegsamples_log2, "Too few samples per XLL segment");
+    if (!xll->nsegsamples_log2) {
+        xll_err("Too few samples per segment");
+        return -DCADEC_EBADDATA;
+    }
     xll->nsegsamples = 1 << xll->nsegsamples_log2;
-    enforce(xll->nsegsamples <= 512, "Too many samples per XLL segment");
+    if (xll->nsegsamples > 512) {
+        xll_err("Too many samples per segment");
+        return -DCADEC_EBADDATA;
+    }
 
     // Samples in frame per one frequency band for the first channel set
     xll->nframesamples_log2 = xll->nsegsamples_log2 + nframesegs_log2;
     xll->nframesamples = 1 << xll->nframesamples_log2;
-    enforce(xll->nframesamples <= 65536, "Too many samples per XLL frame");
+    if (xll->nframesamples > 65536) {
+        xll_err("Too many samples per frame");
+        return -DCADEC_EBADDATA;
+    }
 
     // Number of bits used to read segment size
     xll->seg_size_nbits = bits_get(&xll->bits, 5) + 1;
@@ -918,7 +973,10 @@ static int parse_navi_table(struct xll_decoder *xll)
                 size_t size = 0;
                 if (chs->nfreqbands > band) {
                     size = bits_get(&xll->bits, xll->seg_size_nbits);
-                    enforce(size < xll->frame_size, "Invalid NAVI size");
+                    if (size >= xll->frame_size) {
+                        xll_err("Invalid NAVI size");
+                        return -DCADEC_EBADDATA;
+                    }
                     size++;
                 }
                 *navi_ptr++ = size;
@@ -927,7 +985,10 @@ static int parse_navi_table(struct xll_decoder *xll)
         }
     }
 
-    enforce(navi_size <= xll->frame_size, "Invalid NAVI size");
+    if (navi_size > xll->frame_size) {
+        xll_err("Invalid NAVI size");
+        return -DCADEC_EBADDATA;
+    }
 
     // Byte align
     // CRC16

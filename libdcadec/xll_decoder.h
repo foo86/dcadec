@@ -38,6 +38,9 @@
     for (struct xll_chset *(chs) = (xll)->chset; \
          (chs) != &(xll)->chset[(xll)->nactivechsets]; (chs)++)
 
+#define xll_err(msg)        dca_log(ERROR, xll, msg)
+#define xll_verbose(msg)    dca_log(VERBOSE, xll, msg)
+
 struct xll_decoder;
 struct exss_asset;
 
@@ -106,6 +109,9 @@ struct xll_chset {
 
 struct xll_decoder {
     struct bitstream    bits;
+
+    dcadec_log_cb   log_cb;
+    void            *log_cbarg;
 
     int     flags;
 
