@@ -264,7 +264,12 @@ DCADEC_API void dcadec_context_free_exss_info(struct dcadec_exss_info *info);
  *                          This can be different from encoded profile since
  *                          certain extensions may be not decoded.
  *
- * @return                  0 on success, negative error code on failure.
+ * @return                  0 or positive value on success, negative error code
+ *                          on failure. Return value of 0 indicates that no
+ *                          errors affecting audio integrity were detected.
+ *                          When profile indicates Master Audio, positive return
+ *                          value indicates that audio has not been losslessly
+ *                          reconstructed for at least some part of this frame.
  */
 DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
                                      int *nsamples, int *channel_mask,

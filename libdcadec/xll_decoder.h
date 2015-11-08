@@ -125,6 +125,8 @@ struct xll_decoder {
     int     nchannels;
     int     nactivechsets;
 
+    int     nfailedsegs;
+
     int     hd_stream_id;
 
     uint8_t     *pbr_buffer;

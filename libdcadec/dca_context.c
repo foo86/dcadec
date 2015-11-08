@@ -32,11 +32,13 @@
 struct dcadec_context {
     int flags;
     int packet;
+    int status;
 
     struct core_decoder *core;
     struct exss_parser *exss;
     struct xll_decoder *xll;
 
+    bool has_residual_encoded;
     bool core_residual_valid;
 
     int *dmix_sample_buffer;
@@ -121,28 +123,46 @@ static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dc
     return nchannels;
 }
 
-static void clip_samples(struct dcadec_context *dca, int nchannels)
+static int clip_vector(int *samples, int nsamples, int bits_per_sample)
+{
+    int limit = 1 << (bits_per_sample - 1);
+    int mask = ~((1 << bits_per_sample) - 1);
+    int nclipped = 0;
+
+    while (nsamples-- > 0) {
+        if ((*samples + limit) & mask) {
+            *samples = (*samples >> 31) ^ (limit - 1);
+            nclipped++;
+        }
+        samples++;
+    }
+
+    return nclipped;
+}
+
+static int clip_samples(struct dcadec_context *dca, int nchannels)
 {
     int nsamples = dca->nframesamples;
+    int nclipped = 0;
 
     if (dca->flags & DCADEC_FLAG_DONT_CLIP)
-        return;
+        return 0;
 
     switch (dca->bits_per_sample) {
     case 24:
         for (int ch = 0; ch < nchannels; ch++)
-            for (int n = 0; n < nsamples; n++)
-                dca->samples[ch][n] = clip23(dca->samples[ch][n]);
+            nclipped += clip_vector(dca->samples[ch], nsamples, 24);
         break;
     case 16:
         for (int ch = 0; ch < nchannels; ch++)
-            for (int n = 0; n < nsamples; n++)
-                dca->samples[ch][n] = clip15(dca->samples[ch][n]);
+            nclipped += clip_vector(dca->samples[ch], nsamples, 16);
         break;
     default:
         assert(0);
         break;
     }
+
+    return nclipped;
 }
 
 static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
@@ -421,7 +441,7 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
         return -DCADEC_EINVAL;
 
     // Validate channel sets
-    bool residual = false;
+    dca->has_residual_encoded = false;
     for_each_active_chset(xll, c) {
         // Reject multiple primary channel sets
         if (c->primary_chset && c != p)
@@ -452,19 +472,18 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
         if (c->interpolate)
             return -DCADEC_ENOSUP;
 
-        residual |= c->residual_encode != (1 << c->nchannels) - 1;
+        dca->has_residual_encoded |= c->residual_encode != (1 << c->nchannels) - 1;
     }
 
     // Verify that core is compatible if there are residual encoded channel sets
-    if (residual) {
-        struct core_decoder *core = dca->core;
+    if (dca->has_residual_encoded) {
         if (!(dca->packet & DCADEC_PACKET_CORE))
             return -DCADEC_EINVAL;
-        if (p->freq != core->sample_rate &&
-            p->freq != core->sample_rate * 2)
+        if (p->freq != dca->core->sample_rate &&
+            p->freq != dca->core->sample_rate * 2)
             return -DCADEC_ENOSUP;
-        if (xll->nframesamples != core->npcmblocks * NUM_PCMBLOCK_SAMPLES &&
-            xll->nframesamples != core->npcmblocks * NUM_PCMBLOCK_SAMPLES * 2)
+        if (xll->nframesamples != dca->core->npcmblocks * NUM_PCMBLOCK_SAMPLES &&
+            xll->nframesamples != dca->core->npcmblocks * NUM_PCMBLOCK_SAMPLES * 2)
             return -DCADEC_EINVAL;
     }
 
@@ -588,6 +607,10 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     struct xll_decoder *xll = dca->xll;
     struct xll_chset *p = &xll->chset[0];
     int ret;
+
+    // Status indicating if this frame has not been decoded losslessly
+    int status = (dca->has_residual_encoded && !dca->core_residual_valid)
+        || (dca->packet & DCADEC_PACKET_RECOVERY) || xll->nfailedsegs > 0;
 
     // Filter core frame if present
     if (dca->packet & DCADEC_PACKET_CORE)
@@ -723,10 +746,10 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     dca->bits_per_sample = p->storage_bit_res;
     dca->profile = DCADEC_PROFILE_HD_MA;
 
-    // Perform clipping
-    clip_samples(dca, ret);
+    // Perform clipping. Audio is not lossless if clipping is detected.
+    status |= clip_samples(dca, ret) > 0 && !(dca->flags & DCADEC_FLAG_KEEP_DMIX_MASK);
 
-    return 0;
+    return status;
 }
 
 DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, size_t size)
@@ -882,6 +905,7 @@ DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
         } else {
             return -DCADEC_EINVAL;
         }
+        dca->status = ret;
         dca->packet |= DCADEC_PACKET_FILTERED;
     }
 
@@ -897,7 +921,7 @@ DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
         *bits_per_sample = dca->bits_per_sample;
     if (profile)
         *profile = dca->profile;
-    return 0;
+    return dca->status;
 }
 
 DCADEC_API void dcadec_context_clear(struct dcadec_context *dca)

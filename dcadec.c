@@ -316,6 +316,7 @@ int main(int argc, char **argv)
     uint64_t npcmsamples = UINT64_MAX;
     uint64_t nclippedsamples = 0;
     uint64_t nskippedframes = 0;
+    uint64_t nlossyframes = 0;
 
     if (!parse_only && !no_strip) {
         struct dcadec_stream_info *info = dcadec_stream_get_info(stream);
@@ -361,6 +362,9 @@ int main(int argc, char **argv)
                 ndelayframes--;
                 goto next_packet;
             }
+
+            if (ret > 0)
+                nlossyframes++;
 
             if ((uint64_t)nsamples > npcmsamples)
                 nsamples = (int)npcmsamples;
@@ -420,6 +424,8 @@ next_packet:
             fprintf(stderr, "*** %" PRIu64 " samples clipped ***\n", nclippedsamples);
         if (nskippedframes)
             fprintf(stderr, "*** %" PRIu64 " frames skipped ***\n", nskippedframes);
+        if (nlossyframes > 1)
+            fprintf(stderr, "*** %" PRIu64 " frames possibly not lossless ***\n", nlossyframes);
     }
 
     dcadec_waveout_close(waveout);

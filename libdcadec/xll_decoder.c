@@ -932,6 +932,8 @@ static int parse_band_data(struct xll_decoder *xll)
             return ret;
     }
 
+    xll->nfailedsegs = 0;
+
     size_t navi_pos = xll->bits.index;
     size_t *navi_ptr = xll->navi;
     for (int band = 0; band < xll->nfreqbands; band++) {
@@ -945,6 +947,7 @@ static int parse_band_data(struct xll_decoder *xll)
                         // Zero band data and advance to next segment
                         chs_clear_band_data(chs, band, seg);
                         xll->bits.index = navi_pos;
+                        xll->nfailedsegs++;
                     }
                 }
                 navi_ptr++;
