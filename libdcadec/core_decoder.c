@@ -1919,6 +1919,8 @@ static int parse_aux_data(struct core_decoder *core)
 
 static int parse_optional_info(struct core_decoder *core, int flags)
 {
+    int status = 0;
+
     // Time code stamp
     if (core->ts_present)
         bits_skip(&core->bits, 32);
@@ -1929,6 +1931,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
         if ((ret = parse_aux_data(core)) < 0) {
             if (flags & DCADEC_FLAG_STRICT)
                 return ret;
+            status = DCADEC_WCOREAUXFAILED;
             core->prim_dmix_embedded = false;
         }
     } else {
@@ -1966,8 +1969,12 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 }
             }
 
-            if (flags & DCADEC_FLAG_STRICT)
-                enforce2(core->xch_pos, "XCH sync word not found");
+            if (!core->xch_pos) {
+                DCA_DEBUG("XCH sync word not found");
+                if (flags & DCADEC_FLAG_STRICT)
+                    return -DCADEC_ENOSYNC;
+                status = DCADEC_WCOREEXTFAILED;
+            }
             break;
 
         case EXT_AUDIO_X96:
@@ -1986,8 +1993,12 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 }
             }
 
-            if (flags & DCADEC_FLAG_STRICT)
-                enforce2(core->x96_pos, "X96 sync word not found");
+            if (!core->x96_pos) {
+                DCA_DEBUG("X96 sync word not found");
+                if (flags & DCADEC_FLAG_STRICT)
+                    return -DCADEC_ENOSYNC;
+                status = DCADEC_WCOREEXTFAILED;
+            }
             break;
 
         case EXT_AUDIO_XXCH:
@@ -2009,13 +2020,17 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 }
             }
 
-            if (flags & DCADEC_FLAG_STRICT)
-                enforce2(core->xxch_pos, "XXCH sync word not found");
+            if (!core->xxch_pos) {
+                DCA_DEBUG("XXCH sync word not found");
+                if (flags & DCADEC_FLAG_STRICT)
+                    return -DCADEC_ENOSYNC;
+                status = DCADEC_WCOREEXTFAILED;
+            }
             break;
         }
     }
 
-    return 0;
+    return status;
 }
 
 int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
@@ -2037,7 +2052,7 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
         bits_skip(&core->bits, 32);
     }
 
-    int ret;
+    int status = 0, ret;
     if ((ret = parse_frame_header(core)) < 0)
         return ret;
     if ((ret = alloc_sample_buffer(core)) < 0)
@@ -2046,17 +2061,19 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
         return ret;
     if ((ret = parse_optional_info(core, flags)) < 0)
         return ret;
+    if (ret > 0)
+        status = ret;
     if (core->frame_size > size)
         core->frame_size = size;
     if ((ret = bits_seek(&core->bits, core->frame_size * 8)) < 0)
         return ret;
-    return 0;
+    return status;
 }
 
 int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
                     int flags, struct exss_asset *asset)
 {
-    int ret;
+    int status = 0, ret;
 
     (void)size;
 
@@ -2069,6 +2086,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
                 if (flags & DCADEC_FLAG_STRICT)
                     return ret;
                 revert_to_base_chset(core);
+                status = DCADEC_WCOREEXTFAILED;
             } else {
                 core->ext_audio_mask |= EXSS_XXCH;
             }
@@ -2079,6 +2097,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
                 if (flags & DCADEC_FLAG_STRICT)
                     return ret;
                 revert_to_base_chset(core);
+                status = DCADEC_WCOREEXTFAILED;
             } else {
                 core->ext_audio_mask |= CSS_XXCH;
             }
@@ -2088,6 +2107,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
                 if (flags & DCADEC_FLAG_STRICT)
                     return ret;
                 revert_to_base_chset(core);
+                status = DCADEC_WCOREEXTFAILED;
             } else {
                 core->ext_audio_mask |= CSS_XCH;
             }
@@ -2102,6 +2122,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
         if ((ret = parse_x96_frame_exss(core->x96_decoder, flags)) < 0) {
             if (flags & DCADEC_FLAG_STRICT)
                 return ret;
+            status = DCADEC_WCOREEXTFAILED;
         } else {
             core->ext_audio_mask |= EXSS_X96;
         }
@@ -2112,6 +2133,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
         if ((ret = parse_x96_frame(core->x96_decoder)) < 0) {
             if (flags & DCADEC_FLAG_STRICT)
                 return ret;
+            status = DCADEC_WCOREEXTFAILED;
         } else {
             core->ext_audio_mask |= CSS_X96;
         }
@@ -2123,12 +2145,13 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
         if ((ret = parse_xbr_frame(core, flags)) < 0) {
             if (flags & DCADEC_FLAG_STRICT)
                 return ret;
+            status = DCADEC_WCOREEXTFAILED;
         } else {
             core->ext_audio_mask |= EXSS_XBR;
         }
     }
 
-    return 0;
+    return status;
 }
 
 void core_clear(struct core_decoder *core)

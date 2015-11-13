@@ -83,6 +83,18 @@
 /**@}*/
 
 /**@{*/
+#define DCADEC_WCOREAUXFAILED   1   /**< Failed to parse core auxiliary data */
+#define DCADEC_WCOREEXTFAILED   2   /**< Failed to parse core extension */
+#define DCADEC_WEXSSFAILED      3   /**< Failed to parse EXSS */
+#define DCADEC_WXLLFAILED       4   /**< Failed to parse XLL */
+#define DCADEC_WXLLSYNCERR      5   /**< XLL synchronization error */
+#define DCADEC_WXLLBANDERR      6   /**< XLL frequency band error */
+#define DCADEC_WXLLCONFERR      7   /**< XLL configuration error */
+#define DCADEC_WXLLCLIPPED      8   /**< Clipping detected in XLL output */
+#define DCADEC_WXLLLOSSY        9   /**< XLL output not lossless */
+/**@}*/
+
+/**@{*/
 /** Decode DTS core only without extensions */
 #define DCADEC_FLAG_CORE_ONLY           0x01
 
@@ -187,7 +199,8 @@ struct dcadec_exss_info {
  *
  * @param size  Size in bytes of packet data. Size should not include padding.
  *
- * @return      0 on success, negative error code on failure.
+ * @return      0 or positive warning code on success, negative error code on
+ *              failure.
  */
 DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, size_t size);
 
@@ -264,12 +277,13 @@ DCADEC_API void dcadec_context_free_exss_info(struct dcadec_exss_info *info);
  *                          This can be different from encoded profile since
  *                          certain extensions may be not decoded.
  *
- * @return                  0 or positive value on success, negative error code
- *                          on failure. Return value of 0 indicates that no
- *                          errors affecting audio integrity were detected.
- *                          When profile indicates Master Audio, positive return
- *                          value indicates that audio has not been losslessly
- *                          reconstructed for at least some part of this frame.
+ * @return                  0 or positive warning code on success, negative
+ *                          error code on failure. Return value of 0 indicates
+ *                          that no errors affecting audio integrity were
+ *                          detected. When profile indicates Master Audio,
+ *                          positive return value indicates that audio has not
+ *                          been losslessly reconstructed for at least some part
+ *                          of this frame.
  */
 DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
                                      int *nsamples, int *channel_mask,
@@ -302,11 +316,11 @@ DCADEC_API struct dcadec_context *dcadec_context_create(int flags);
 DCADEC_API void dcadec_context_destroy(struct dcadec_context *dca);
 
 /**
- * Convert negative libdcadec error code into string.
+ * Convert negative libdcadec error code or positive warning code into string.
  *
- * @param errnum    Error code returned by libdcadec function.
+ * @param errnum    Error or warning code returned by libdcadec function.
  *
- * @return          Constant string describing error code.
+ * @return          Constant string describing error or warning code.
  */
 DCADEC_API const char *dcadec_strerror(int errnum);
 

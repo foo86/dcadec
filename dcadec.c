@@ -279,6 +279,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (ret > 0)
+        fprintf(stderr, "WARNING: %s at frame 0\n", dcadec_strerror(ret));
+
     if (!quiet)
         print_info(context, optind + 1 >= argc ? stdout : stderr);
 
@@ -311,6 +314,7 @@ int main(int argc, char **argv)
 
     uint32_t ndelayframes = 0;
     uint64_t npcmsamples = UINT64_MAX;
+    uint64_t ntotalframes = 0;
     uint64_t nskippedframes = 0;
     uint64_t nlossyframes = 0;
 
@@ -359,8 +363,11 @@ int main(int argc, char **argv)
                 goto next_packet;
             }
 
-            if (ret > 0)
+            if (ret > 0) {
+                if (ntotalframes)
+                    fprintf(stderr, "WARNING: %s at frame %" PRIu64 "\n", dcadec_strerror(ret), ntotalframes);
                 nlossyframes++;
+            }
 
             if ((uint64_t)nsamples > npcmsamples)
                 nsamples = (int)npcmsamples;
@@ -381,6 +388,8 @@ int main(int argc, char **argv)
         }
 
 next_packet:
+        ntotalframes++;
+
         if ((ret = dcadec_stream_read(stream, &packet, &size)) < 0) {
             fprintf(stderr, "Error reading packet: %s\n", dcadec_strerror(ret));
             break;
@@ -406,6 +415,9 @@ next_packet:
                 goto next_packet;
             }
         }
+
+        if (ret > 0)
+            fprintf(stderr, "WARNING: %s at frame %" PRIu64 "\n", dcadec_strerror(ret), ntotalframes);
     }
 
     if (!quiet) {

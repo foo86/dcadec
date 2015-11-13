@@ -606,11 +606,12 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
 {
     struct xll_decoder *xll = dca->xll;
     struct xll_chset *p = &xll->chset[0];
-    int ret;
+    int status = 0, ret;
 
     // Status indicating if this frame has not been decoded losslessly
-    int status = (dca->has_residual_encoded && !dca->core_residual_valid)
-        || (dca->packet & DCADEC_PACKET_RECOVERY) || xll->nfailedsegs > 0;
+    if ((dca->has_residual_encoded && !dca->core_residual_valid)
+        || (dca->packet & DCADEC_PACKET_RECOVERY) || xll->nfailedsegs > 0)
+        status = DCADEC_WXLLLOSSY;
 
     // Filter core frame if present
     if (dca->packet & DCADEC_PACKET_CORE)
@@ -747,14 +748,15 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     dca->profile = DCADEC_PROFILE_HD_MA;
 
     // Perform clipping. Audio is not lossless if clipping is detected.
-    status |= clip_samples(dca, ret) > 0 && !(dca->flags & DCADEC_FLAG_KEEP_DMIX_MASK);
+    if (clip_samples(dca, ret) > 0 && !(dca->flags & DCADEC_FLAG_KEEP_DMIX_MASK))
+        status = DCA_MAX(status, DCADEC_WXLLCLIPPED);
 
     return status;
 }
 
 DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, size_t size)
 {
-    int ret;
+    int status = 0, ret;
 
     if (!dca || !data || size < 4 || ((uintptr_t)data & 3))
         return -DCADEC_EINVAL;
@@ -770,6 +772,8 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
 
         if ((ret = core_parse(dca->core, data, size, dca->flags, NULL)) < 0)
             return ret;
+        if (ret > status)
+            status = ret;
 
         dca->packet |= DCADEC_PACKET_CORE;
 
@@ -790,6 +794,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
         if ((ret = exss_parse(dca->exss, data, size)) < 0) {
             if (dca->flags & DCADEC_FLAG_STRICT)
                 return ret;
+            status = DCADEC_WEXSSFAILED;
         } else {
             dca->packet |= DCADEC_PACKET_EXSS;
         }
@@ -807,6 +812,8 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
 
             if ((ret = core_parse(dca->core, data, size, dca->flags, asset)) < 0)
                 return ret;
+            if (ret > status)
+                status = ret;
 
             dca->packet |= DCADEC_PACKET_CORE;
         }
@@ -823,12 +830,18 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
                 // Conceal XLL synchronization error
                 if (ret == -DCADEC_ENOSYNC &&
                     (prev_packet & DCADEC_PACKET_XLL) &&
-                    (dca->packet & DCADEC_PACKET_CORE))
+                    (dca->packet & DCADEC_PACKET_CORE)) {
                     dca->packet |= DCADEC_PACKET_XLL | DCADEC_PACKET_RECOVERY;
-                else if (dca->flags & DCADEC_FLAG_STRICT)
-                    return ret;
+                    status = DCADEC_WXLLSYNCERR;
+                } else {
+                    if (dca->flags & DCADEC_FLAG_STRICT)
+                        return ret;
+                    status = DCADEC_WXLLFAILED;
+                }
             } else {
                 dca->packet |= DCADEC_PACKET_XLL;
+                if (dca->xll->nfailedsegs)
+                    status = DCADEC_WXLLBANDERR;
             }
         }
     }
@@ -843,9 +856,11 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
             asset = &dca->exss->assets[0];
         if ((ret = core_parse_exss(dca->core, data, size, dca->flags, asset)) < 0)
             return ret;
+        if (ret > status)
+            status = ret;
     }
 
-    return 0;
+    return status;
 }
 
 DCADEC_API struct dcadec_core_info *dcadec_context_get_core_info(struct dcadec_context *dca)
@@ -895,6 +910,7 @@ DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
                     return ret;
                 if ((ret = filter_core_frame(dca)) < 0)
                     return ret;
+                ret = DCADEC_WXLLCONFERR;
             } else {
                 if ((ret = filter_hd_ma_frame(dca)) < 0)
                     return ret;
@@ -961,14 +977,33 @@ DCADEC_API const char *dcadec_strerror(int errnum)
         "PCM output parameters changed"
     };
 
-    if (errnum >= 0)
-        return "No error";
+    static const char * const warnings[] = {
+        "Failed to parse core auxiliary data",
+        "Failed to parse core extension",
+        "Failed to parse EXSS",
+        "Failed to parse XLL",
+        "XLL synchronization error",
+        "XLL frequency band error",
+        "XLL configuration error",
+        "Clipping detected in XLL output",
+        "XLL output not lossless"
+    };
 
-    unsigned int err = -errnum - 1;
-    if (err < dca_countof(errors))
-        return errors[err];
-    else
-        return "Unspecified error";
+    if (errnum < 0) {
+        unsigned int err = -errnum - 1;
+        if (err < dca_countof(errors))
+            return errors[err];
+        else
+            return "Unspecified error";
+    } else if (errnum > 0) {
+        unsigned int warn = errnum - 1;
+        if (warn < dca_countof(warnings))
+            return warnings[warn];
+        else
+            return "Unspecified warning";
+    } else {
+        return "No error";
+    }
 }
 
 DCADEC_API unsigned int dcadec_version(void)
