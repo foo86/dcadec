@@ -1275,7 +1275,7 @@ static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xb
     return 0;
 }
 
-static int parse_xbr_frame(struct core_decoder *core, int flags)
+static int parse_xbr_frame(struct core_decoder *core)
 {
     int     xbr_frame_size[4];
     int     xbr_nchannels[4];
@@ -1306,20 +1306,15 @@ static int parse_xbr_frame(struct core_decoder *core, int flags)
     bool xbr_transition_mode = bits_get1(&core->bits);
 
     // Channel set headers
-    int xbr_base_ch = 0;
-    for (int i = 0; i < xbr_nchsets; i++) {
+    for (int i = 0, ch2 = 0; i < xbr_nchsets; i++) {
         xbr_nchannels[i] = bits_get(&core->bits, 3) + 1;
         int xbr_band_nbits = bits_get(&core->bits, 2) + 5;
-        for (int ch = 0; ch < xbr_nchannels[i]; ch++) {
-            xbr_nsubbands[xbr_base_ch + ch] = bits_get(&core->bits, xbr_band_nbits) + 1;
-            enforce(xbr_nsubbands[xbr_base_ch + ch] <= MAX_SUBBANDS,
+        for (int ch1 = 0; ch1 < xbr_nchannels[i]; ch1++, ch2++) {
+            xbr_nsubbands[ch2] = bits_get(&core->bits, xbr_band_nbits) + 1;
+            enforce(xbr_nsubbands[ch2] <= MAX_SUBBANDS,
                     "Invalid number of active XBR subbands");
         }
-        xbr_base_ch += xbr_nchannels[i];
     }
-
-    if (flags & DCADEC_FLAG_STRICT)
-        require(xbr_base_ch <= MAX_CHANNELS, "Too many XBR channels");
 
     // Reserved
     // Byte align
@@ -1328,7 +1323,7 @@ static int parse_xbr_frame(struct core_decoder *core, int flags)
         return ret;
 
     // Channel set data
-    xbr_base_ch = 0;
+    int xbr_base_ch = 0;
     for (int i = 0; i < xbr_nchsets; i++) {
         header_pos = core->bits.index;
 
@@ -1762,7 +1757,7 @@ static int parse_x96_frame(struct x96_decoder *x96)
     return bits_seek(&core->bits, core->frame_size * 8);
 }
 
-static int parse_x96_frame_exss(struct x96_decoder *x96, int flags)
+static int parse_x96_frame_exss(struct x96_decoder *x96)
 {
     size_t  x96_frame_size[4];
     int     x96_nchannels[4];
@@ -1797,14 +1792,8 @@ static int parse_x96_frame_exss(struct x96_decoder *x96, int flags)
         x96_frame_size[i] = bits_get(&core->bits, 12) + 1;
 
     // Number of channels in channel set
-    int x96_base_ch = 0;
-    for (int i = 0; i < x96_nchsets; i++) {
+    for (int i = 0; i < x96_nchsets; i++)
         x96_nchannels[i] = bits_get(&core->bits, 3) + 1;
-        x96_base_ch += x96_nchannels[i];
-    }
-
-    if (flags & DCADEC_FLAG_STRICT)
-        require(x96_base_ch <= MAX_CHANNELS, "Too many X96 channels");
 
     // Reserved
     // Byte align
@@ -1816,7 +1805,7 @@ static int parse_x96_frame_exss(struct x96_decoder *x96, int flags)
         return ret;
 
     // Channel set data
-    x96_base_ch = 0;
+    int x96_base_ch = 0;
     for (int i = 0; i < x96_nchsets; i++) {
         header_pos = core->bits.index;
 
@@ -2119,7 +2108,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
         bits_init(&core->bits, data + asset->x96_offset, asset->x96_size);
         if ((ret = alloc_x96_decoder(core)) < 0)
             return ret;
-        if ((ret = parse_x96_frame_exss(core->x96_decoder, flags)) < 0) {
+        if ((ret = parse_x96_frame_exss(core->x96_decoder)) < 0) {
             if (flags & DCADEC_FLAG_STRICT)
                 return ret;
             status = DCADEC_WCOREEXTFAILED;
@@ -2142,7 +2131,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
     // Parse XBR
     if (asset && (asset->extension_mask & EXSS_XBR)) {
         bits_init(&core->bits, data + asset->xbr_offset, asset->xbr_size);
-        if ((ret = parse_xbr_frame(core, flags)) < 0) {
+        if ((ret = parse_xbr_frame(core)) < 0) {
             if (flags & DCADEC_FLAG_STRICT)
                 return ret;
             status = DCADEC_WCOREEXTFAILED;
