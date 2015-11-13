@@ -249,9 +249,10 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
         header_size = bits_get(&core->bits, 7) + 1;
 
         // Check CRC
-        if (core->xxch_crc_present)
-            if ((ret = bits_check_crc(&core->bits, header_pos, header_pos + header_size * 8)) < 0)
-                return ret;
+        if (core->xxch_crc_present && (ret = bits_check_crc(&core->bits, header_pos, header_pos + header_size * 8)) < 0) {
+            core_err("Invalid XXCH channel set header checksum");
+            return ret;
+        }
 
         // Number of channels in a channel set
         n = bits_get(&core->bits, 3) + 1;
@@ -391,8 +392,10 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
         // Reserved
         // Byte align
         // CRC16 of channel set header
-        if ((ret = bits_seek(&core->bits, header_pos + header_size * 8)) < 0)
+        if ((ret = bits_seek(&core->bits, header_pos + header_size * 8)) < 0) {
+            core_err("Read past end of XXCH channel set header");
             return ret;
+        }
     } else {
         // Audio header CRC check word
         if (core->crc_present)
@@ -669,8 +672,10 @@ static inline int extract_audio(struct core_decoder *core, int *audio,
         memset(audio, 0, NUM_SUBBAND_SAMPLES * sizeof(*audio));
         break;
     case HUFFMAN_CODE:
-        if ((ret = bits_get_signed_vlc_array(&core->bits, audio, NUM_SUBBAND_SAMPLES, huff)) < 0)
+        if ((ret = bits_get_signed_vlc_array(&core->bits, audio, NUM_SUBBAND_SAMPLES, huff)) < 0) {
+            core_err("Failed to decode huffman code");
             return ret;
+        }
         break;
     case BLOCK_CODE:
         if ((ret = parse_block_code(core, audio + 0, abits)) < 0)
@@ -1202,8 +1207,10 @@ static int parse_xxch_frame(struct core_decoder *core)
 
     // Check XXCH frame header CRC
     int ret;
-    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_end)) < 0)
+    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_end)) < 0) {
+        core_err("Invalid XXCH frame header checksum");
         return ret;
+    }
 
     // CRC presence flag for channel set header
     core->xxch_crc_present = bits_get1(&core->bits);
@@ -1245,14 +1252,18 @@ static int parse_xxch_frame(struct core_decoder *core)
     // Reserved
     // Byte align
     // CRC16 of XXCH frame header
-    if ((ret = bits_seek(&core->bits, header_end)) < 0)
+    if ((ret = bits_seek(&core->bits, header_end)) < 0) {
+        core_err("Read past end of XXCH frame header");
         return ret;
+    }
 
     // Parse XXCH channel set 0
     if ((ret = parse_frame_data(core, HEADER_XXCH, core->nchannels)) < 0)
         return ret;
 
-    return bits_seek(&core->bits, header_end + xxch_frame_size * 8);
+    if ((ret = bits_seek(&core->bits, header_end + xxch_frame_size * 8)) < 0)
+        core_err("Read past end of XXCH channel set");
+    return ret;
 }
 
 static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xbr_nchannels,
@@ -1403,8 +1414,10 @@ static int parse_xbr_frame(struct core_decoder *core)
 
     // Check XBR frame header CRC
     int ret;
-    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_end)) < 0)
+    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_end)) < 0) {
+        core_err("Invalid XBR frame header checksum");
         return ret;
+    }
 
     // Number of channel sets
     int xbr_nchsets = bits_get(&core->bits, 2) + 1;
@@ -1432,8 +1445,10 @@ static int parse_xbr_frame(struct core_decoder *core)
     // Reserved
     // Byte align
     // CRC16 of XBR frame header
-    if ((ret = bits_seek(&core->bits, header_end)) < 0)
+    if ((ret = bits_seek(&core->bits, header_end)) < 0) {
+        core_err("Read past end of XBR frame header");
         return ret;
+    }
 
     // Channel set data
     int xbr_base_ch = 0;
@@ -1453,8 +1468,10 @@ static int parse_xbr_frame(struct core_decoder *core)
 
         xbr_base_ch += xbr_nchannels[i];
 
-        if ((ret = bits_seek(&core->bits, header_pos + xbr_frame_size[i] * 8)) < 0)
+        if ((ret = bits_seek(&core->bits, header_pos + xbr_frame_size[i] * 8)) < 0) {
+            core_err("Read past end of XBR channel set");
             return ret;
+        }
     }
 
     return 0;
@@ -1765,9 +1782,10 @@ static int parse_x96_coding_header(struct x96_decoder *x96, bool exss, int xch_b
         header_size = bits_get(&core->bits, 7) + 1;
 
         // Check CRC
-        if (x96->crc_present)
-            if ((ret = bits_check_crc(&core->bits, header_pos, header_pos + header_size * 8)) < 0)
-                return ret;
+        if (x96->crc_present && (ret = bits_check_crc(&core->bits, header_pos, header_pos + header_size * 8)) < 0) {
+            core_err("Invalid X96 channel set header checksum");
+            return ret;
+        }
     }
 
     // High resolution flag
@@ -1826,8 +1844,10 @@ static int parse_x96_coding_header(struct x96_decoder *x96, bool exss, int xch_b
         // Reserved
         // Byte align
         // CRC16 of channel set header
-        if ((ret = bits_seek(&core->bits, header_pos + header_size * 8)) < 0)
+        if ((ret = bits_seek(&core->bits, header_pos + header_size * 8)) < 0) {
+            core_err("Read past end of X96 channel set header");
             return ret;
+        }
     } else {
         if (core->crc_present)
             bits_skip(&core->bits, 16);
@@ -1919,8 +1939,10 @@ static int parse_x96_frame_exss(struct x96_decoder *x96)
 
     // Check X96 frame header CRC
     int ret;
-    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_end)) < 0)
+    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_end)) < 0) {
+        core_err("Invalid X96 frame header checksum");
         return ret;
+    }
 
     // Revision number
     x96->rev_no = bits_get(&core->bits, 4);
@@ -1946,8 +1968,10 @@ static int parse_x96_frame_exss(struct x96_decoder *x96)
     // Reserved
     // Byte align
     // CRC16 of X96 frame header
-    if ((ret = bits_seek(&core->bits, header_end)) < 0)
+    if ((ret = bits_seek(&core->bits, header_end)) < 0) {
+        core_err("Read past end of X96 frame header");
         return ret;
+    }
 
     if ((ret = alloc_x96_sample_buffer(x96)) < 0)
         return ret;
@@ -1965,8 +1989,10 @@ static int parse_x96_frame_exss(struct x96_decoder *x96)
 
         x96_base_ch += x96_nchannels[i];
 
-        if ((ret = bits_seek(&core->bits, header_pos + x96_frame_size[i] * 8)) < 0)
+        if ((ret = bits_seek(&core->bits, header_pos + x96_frame_size[i] * 8)) < 0) {
+            core_err("Read past end of X96 channel set");
             return ret;
+        }
     }
 
     return 0;
@@ -2058,7 +2084,10 @@ static int parse_aux_data(struct core_decoder *core)
     bits_skip(&core->bits, 16);
 
     // Check CRC
-    return bits_check_crc(&core->bits, aux_pos + 32, core->bits.index);
+    int ret;
+    if ((ret = bits_check_crc(&core->bits, aux_pos + 32, core->bits.index)) < 0)
+        core_err("Invalid auxiliary data checksum");
+    return ret;
 }
 
 static int parse_optional_info(struct core_decoder *core, int flags)

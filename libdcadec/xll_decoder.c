@@ -120,8 +120,10 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
     size_t header_size = bits_get(&xll->bits, 10) + 1;
 
     // Check CRC
-    if ((ret = bits_check_crc(&xll->bits, header_pos, header_pos + header_size * 8)) < 0)
+    if ((ret = bits_check_crc(&xll->bits, header_pos, header_pos + header_size * 8)) < 0) {
+        xll_err("Invalid sub-header checksum");
         return ret;
+    }
 
     // Number of channels in the channel set
     chs->nchannels = bits_get(&xll->bits, 4) + 1;
@@ -376,7 +378,9 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
     // Reserved
     // Byte align
     // CRC16 of channel set sub-header
-    return bits_seek(&xll->bits, header_pos + header_size * 8);
+    if ((ret = bits_seek(&xll->bits, header_pos + header_size * 8)) < 0)
+        xll_err("Read past end of sub-header");
+    return ret;
 }
 
 static int chs_alloc_msb_band_data(struct xll_chset *chs)
@@ -586,8 +590,10 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
 
         // Skip to the start of LSB portion
         if ((ret = bits_seek(&xll->bits, band_data_end -
-                             chs->lsb_section_size[band] * 8)) < 0)
+                             chs->lsb_section_size[band] * 8)) < 0) {
+            xll_err("Read past end of band data");
             return ret;
+        }
 
         // Unpack all LSB parts of residuals of this segment
         for (i = 0; i < chs->nchannels; i++) {
@@ -602,7 +608,9 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
     }
 
     // Skip to the end of band data
-    return bits_seek(&xll->bits, band_data_end);
+    if ((ret = bits_seek(&xll->bits, band_data_end)) < 0)
+        xll_err("Read past end of band data");
+    return ret;
 }
 
 static void chs_clear_band_data(struct xll_chset *chs, int band, int seg)
@@ -830,8 +838,10 @@ static int parse_common_header(struct xll_decoder *xll)
     int ret;
 
     // XLL extension sync word
-    if (bits_get(&xll->bits, 32) != SYNC_WORD_XLL)
+    if (bits_get(&xll->bits, 32) != SYNC_WORD_XLL) {
+        xll_verbose("Invalid sync word");
         return -DCADEC_ENOSYNC;
+    }
 
     // Version number
     int stream_ver = bits_get(&xll->bits, 4) + 1;
@@ -844,8 +854,10 @@ static int parse_common_header(struct xll_decoder *xll)
     size_t header_size = bits_get(&xll->bits, 8) + 1;
 
     // Check CRC
-    if ((ret = bits_check_crc(&xll->bits, 32, header_size * 8)) < 0)
+    if ((ret = bits_check_crc(&xll->bits, 32, header_size * 8)) < 0) {
+        xll_err("Invalid common header checksum");
         return ret;
+    }
 
     // Number of bits used to read frame size
     int frame_size_nbits = bits_get(&xll->bits, 5) + 1;
@@ -916,7 +928,9 @@ static int parse_common_header(struct xll_decoder *xll)
     // Reserved
     // Byte align
     // Header CRC16 protection
-    return bits_seek(&xll->bits, header_size * 8);
+    if ((ret = bits_seek(&xll->bits, header_size * 8)) < 0)
+        xll_err("Read past end of common header");
+    return ret;
 }
 
 static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
@@ -994,7 +1008,12 @@ static int parse_navi_table(struct xll_decoder *xll)
     // CRC16
     bits_align1(&xll->bits);
     bits_skip(&xll->bits, 16);
-    return bits_check_crc(&xll->bits, navi_pos, xll->bits.index);
+
+    // Check CRC
+    int ret;
+    if ((ret = bits_check_crc(&xll->bits, navi_pos, xll->bits.index)) < 0)
+        xll_err("Invalid NAVI checksum");
+    return ret;
 }
 
 static int parse_band_data(struct xll_decoder *xll)
@@ -1047,9 +1066,8 @@ static int parse_frame(struct xll_decoder *xll, uint8_t *data, size_t size, stru
     if ((ret = parse_band_data(xll)) < 0)
         return ret;
     if ((ret = bits_seek(&xll->bits, xll->frame_size * 8)) < 0)
-        return ret;
-
-    return 0;
+        xll_err("Read past end of frame");
+    return ret;
 }
 
 static void clear_pbr(struct xll_decoder *xll)
@@ -1062,8 +1080,10 @@ static void clear_pbr(struct xll_decoder *xll)
 
 static int copy_to_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, int delay)
 {
-    if (size > XLL_PBR_SIZE)
+    if (size > XLL_PBR_SIZE) {
+        xll_err("PBR smoothing buffer overflow");
         return -DCADEC_EINVAL;
+    }
     if (!(xll->pbr_buffer = ta_zalloc_size(xll, XLL_PBR_SIZE + DCADEC_BUFFER_PADDING)))
         return -DCADEC_ENOMEM;
     memcpy(xll->pbr_buffer, data, size);
@@ -1079,8 +1099,10 @@ static int parse_frame_no_pbr(struct xll_decoder *xll, uint8_t *data, size_t siz
     // If XLL packet data didn't start with a sync word, we must have jumped
     // right into the middle of PBR smoothing period
     if (ret == -DCADEC_ENOSYNC && asset->xll_sync_present) {
-        if (asset->xll_sync_offset > size)
+        if (asset->xll_sync_offset > size) {
+            xll_err("Invalid sync word offset");
             return -DCADEC_EINVAL;
+        }
 
         // Skip to the next sync word in this packet
         data += asset->xll_sync_offset;
@@ -1120,6 +1142,7 @@ static int parse_frame_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, 
     assert(xll->pbr_length <= XLL_PBR_SIZE);
 
     if (size > XLL_PBR_SIZE - xll->pbr_length) {
+        xll_err("PBR smoothing buffer overflow");
         ret = -DCADEC_EINVAL;
         goto fail;
     }
@@ -1128,9 +1151,12 @@ static int parse_frame_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, 
     xll->pbr_length += size;
 
     // Respect decoding delay after synchronization error
-    if (xll->pbr_delay > 0)
-        if (--xll->pbr_delay > 0)
+    if (xll->pbr_delay > 0) {
+        if (--xll->pbr_delay > 0) {
+            xll_verbose("Waiting until decoding delay expires");
             return -DCADEC_ENOSYNC;
+        }
+    }
 
     if ((ret = parse_frame(xll, xll->pbr_buffer, xll->pbr_length, asset)) < 0)
         goto fail;

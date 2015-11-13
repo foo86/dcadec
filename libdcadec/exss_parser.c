@@ -70,7 +70,7 @@ static void parse_lbr_parameters(struct exss_asset *asset)
 static int parse_descriptor(struct exss_asset *asset)
 {
     struct exss_parser *exss = asset->parser;
-    int i, j;
+    int i, j, ret;
 
     size_t descr_pos = exss->bits.index;
 
@@ -300,7 +300,9 @@ static int parse_descriptor(struct exss_asset *asset)
     // Revision 2 DRC metadata
     // Reserved
     // Zero pad
-    return bits_seek(&exss->bits, descr_pos + descr_size * 8);
+    if ((ret = bits_seek(&exss->bits, descr_pos + descr_size * 8)) < 0)
+        exss_err("Read past end of asset descriptor");
+    return ret;
 }
 
 static int set_exss_offsets(struct exss_asset *asset)
@@ -381,8 +383,10 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
     size_t header_size = bits_get(&exss->bits, 8 + 4 * wide_hdr) + 1;
 
     // Check CRC
-    if ((ret = bits_check_crc(&exss->bits, 32 + 8, header_size * 8)) < 0)
+    if ((ret = bits_check_crc(&exss->bits, 32 + 8, header_size * 8)) < 0) {
+        exss_err("Invalid header checksum");
         return ret;
+    }
 
     exss->exss_size_nbits = 16 + 4 * wide_hdr;
 
@@ -448,8 +452,10 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
     }
 
     // Reject unsupported features for now
-    if (exss->exss_index > 0 || exss->npresents != 1 || exss->nassets != 1)
+    if (exss->exss_index > 0 || exss->npresents != 1 || exss->nassets != 1) {
+        exss_err("Multiple sub-streams, audio presentations and/or assets are not supported");
         return -DCADEC_ENOSUP;
+    }
 
     // Reallocate assets
     if (ta_zalloc_fast(exss, &exss->assets, exss->nassets, sizeof(struct exss_asset)) < 0)
@@ -472,8 +478,10 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
         exss->assets[i].parser = exss;
         if ((ret = parse_descriptor(&exss->assets[i])) < 0)
             return ret;
-        if ((ret = set_exss_offsets(&exss->assets[i])) < 0)
+        if ((ret = set_exss_offsets(&exss->assets[i])) < 0) {
+            exss_err("Invalid extension size in asset descriptor");
             return ret;
+        }
     }
 
     // Backward compatible core present
@@ -482,7 +490,9 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
     // Reserved
     // Byte align
     // CRC16 of extension substream header
-    return bits_seek(&exss->bits, header_size * 8);
+    if ((ret = bits_seek(&exss->bits, header_size * 8)) < 0)
+        exss_err("Read past end of header");
+    return ret;
 }
 
 struct dcadec_exss_info *exss_get_info(struct exss_parser *exss)
