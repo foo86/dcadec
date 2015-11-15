@@ -818,6 +818,7 @@ static int parse_common_header(struct xll_decoder *xll)
     // Maximum value is 256 for sampling frequencies <= 48 kHz
     // Maximum value is 512 for sampling frequencies > 48 kHz
     xll->nsegsamples_log2 = bits_get(&xll->bits, 4);
+    enforce(xll->nsegsamples_log2, "Too few samples per XLL segment");
     xll->nsegsamples = 1 << xll->nsegsamples_log2;
     enforce(xll->nsegsamples <= 512, "Too many samples per XLL segment");
 
