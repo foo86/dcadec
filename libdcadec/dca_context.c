@@ -323,103 +323,115 @@ struct downmix {
     int *deci_history[XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
 };
 
-static void undo_down_mix(struct xll_chset *c, struct downmix *dmix)
+static void undo_down_mix_band(struct xll_chset *c, struct downmix *dmix, int band)
 {
     struct xll_decoder *xll = c->decoder;
     int nsamples = xll->nframesamples;
+    int nsamples_log2 = xll->nframesamples_log2;
 
+    if (!c->band_dmix_embedded[band])
+        return;
+
+    for (int i = 0; i < c->dmix_m; i++) {
+        for (int j = 0; j < c->nchannels; j++) {
+            int coeff_cur = c->dmix_coeff_cur[i * c->nchannels + j];
+            int coeff_pre = c->dmix_coeff_pre[i * c->nchannels + j];
+            int delta = coeff_cur - coeff_pre;
+
+            // Undo downmix of channel samples
+            int *src = c->msb_sample_buffer[band][j];
+            int *dst = dmix->samples[band][i];
+
+            if (delta) {
+                // Downmix coefficient interpolation
+                int ramp = 1 << (nsamples_log2 - 1);
+                for (int k = 0; k < nsamples; k++, ramp += delta)
+                    dst[k] -= mul15(src[k], coeff_pre + (ramp >> nsamples_log2));
+            } else if (coeff_cur) {
+                for (int k = 0; k < nsamples; k++)
+                    dst[k] -= mul15(src[k], coeff_cur);
+            }
+
+            // Undo downmix of decimator history
+            if (band == XLL_BAND_1 && coeff_pre)
+                for (int k = 1; k < XLL_DECI_HISTORY; k++)
+                    dmix->deci_history[i][k] -=
+                        mul15(c->deci_history[j][k], coeff_pre);
+        }
+    }
+}
+
+static void undo_down_mix(struct xll_chset *c, struct downmix *dmix)
+{
     // Pre-scale by next channel set in hierarchy
     struct xll_chset *o = find_next_hier_dmix_chset(c);
     if (o) {
-        int *coeff_ptr = c->dmix_coeff;
+        int *coeff_ptr = c->dmix_coeff_cur;
         for (int i = 0; i < c->dmix_m; i++) {
-            int scale_inv = o->dmix_scale_inv[i];
+            int scale_inv = o->dmix_scale_inv_cur[i];
             for (int j = 0; j < c->nchannels; j++) {
                 int coeff = mul16(*coeff_ptr, scale_inv);
-                *coeff_ptr++ = mul15(coeff, o->dmix_scale[c->dmix_m + j]);
+                *coeff_ptr++ = mul15(coeff, o->dmix_scale_cur[c->dmix_m + j]);
             }
         }
     }
 
-    // Undo downmix of preceding channels in frequency band 0
-    int *coeff_ptr = c->dmix_coeff;
+    // Undo downmix of preceding channels in all frequency bands
+    undo_down_mix_band(c, dmix, XLL_BAND_0);
+    if (c->nfreqbands > 1)
+        undo_down_mix_band(c, dmix, XLL_BAND_1);
+}
+
+static void scale_down_mix_band(struct xll_chset *c, struct downmix *dmix, int band)
+{
+    struct xll_decoder *xll = c->decoder;
+    int nsamples = xll->nframesamples;
+    int nsamples_log2 = xll->nframesamples_log2;
+
+    if (!c->band_dmix_embedded[band])
+        return;
+
     for (int i = 0; i < c->dmix_m; i++) {
-        for (int j = 0; j < c->nchannels; j++) {
-            int coeff = *coeff_ptr++;
-            if (coeff) {
-                int *src = c->msb_sample_buffer[XLL_BAND_0][j];
-                int *dst = dmix->samples[XLL_BAND_0][i];
-                for (int k = 0; k < nsamples; k++)
-                    dst[k] -= mul15(src[k], coeff);
-            }
-        }
-    }
+        int scale_cur = c->dmix_scale_cur[i];
+        int scale_pre = c->dmix_scale_pre[i];
+        int delta = scale_cur - scale_pre;
 
-    // Undo downmix of preceding channels in frequency band 1
-    if (c->nfreqbands > 1 && c->band_dmix_embedded[XLL_BAND_1]) {
-        int *coeff_ptr = c->dmix_coeff;
-        for (int i = 0; i < c->dmix_m; i++) {
-            for (int j = 0; j < c->nchannels; j++) {
-                int coeff = *coeff_ptr++;
-                if (coeff) {
-                    // Undo downmix of channel samples
-                    int *src = c->msb_sample_buffer[XLL_BAND_1][j];
-                    int *dst = dmix->samples[XLL_BAND_1][i];
-                    for (int k = 0; k < nsamples; k++)
-                        dst[k] -= mul15(src[k], coeff);
+        // Scale down channel samples
+        int *buf = dmix->samples[band][i];
 
-                    // Undo downmix of decimator history
-                    src = c->deci_history[j];
-                    dst = dmix->deci_history[i];
-                    for (int k = 1; k < XLL_DECI_HISTORY; k++)
-                        dst[k] -= mul15(src[k], coeff);
-                }
-            }
+        if (delta) {
+            // Scaling coefficient interpolation
+            int ramp = 1 << (nsamples_log2 - 1);
+            for (int k = 0; k < nsamples; k++, ramp += delta)
+                buf[k] = mul15(buf[k], scale_pre + (ramp >> nsamples_log2));
+        } else if (scale_cur != (1 << 15)) {
+            for (int k = 0; k < nsamples; k++)
+                buf[k] = mul15(buf[k], scale_cur);
         }
+
+        // Scale down decimator history
+        if (band == XLL_BAND_1 && scale_pre != (1 << 15))
+            for (int k = 1; k < XLL_DECI_HISTORY; k++)
+                dmix->deci_history[i][k] =
+                    mul15(dmix->deci_history[i][k], scale_pre);
     }
 }
 
 static void scale_down_mix(struct xll_chset *c, struct downmix *dmix)
 {
-    struct xll_decoder *xll = c->decoder;
-    int nsamples = xll->nframesamples;
-
     // Pre-scale by next channel set in hierarchy
     struct xll_chset *o = find_next_hier_dmix_chset(c);
     if (o) {
         for (int i = 0; i < c->dmix_m; i++) {
-            int scale = o->dmix_scale[i];
-            c->dmix_scale[i] = mul15(c->dmix_scale[i], scale);
+            int scale = o->dmix_scale_cur[i];
+            c->dmix_scale_cur[i] = mul15(c->dmix_scale_cur[i], scale);
         }
     }
 
-    // Scale down preceding channels in frequency band 0
-    for (int i = 0; i < c->dmix_m; i++) {
-        int scale = c->dmix_scale[i];
-        if (scale != (1 << 15)) {
-            int *buf = dmix->samples[XLL_BAND_0][i];
-            for (int k = 0; k < nsamples; k++)
-                buf[k] = mul15(buf[k], scale);
-        }
-    }
-
-    // Scale down preceding channels in frequency band 1
-    if (c->nfreqbands > 1 && c->band_dmix_embedded[XLL_BAND_1]) {
-        for (int i = 0; i < c->dmix_m; i++) {
-            int scale = c->dmix_scale[i];
-            if (scale != (1 << 15)) {
-                // Scale down channel samples
-                int *buf = dmix->samples[XLL_BAND_1][i];
-                for (int k = 0; k < nsamples; k++)
-                    buf[k] = mul15(buf[k], scale);
-
-                // Scale down decimator history
-                buf = dmix->deci_history[i];
-                for (int k = 1; k < XLL_DECI_HISTORY; k++)
-                    buf[k] = mul15(buf[k], scale);
-            }
-        }
-    }
+    // Scale down preceding channels in all frequency bands
+    scale_down_mix_band(c, dmix, XLL_BAND_0);
+    if (c->nfreqbands > 1)
+        scale_down_mix_band(c, dmix, XLL_BAND_1);
 }
 
 static int validate_hd_ma_frame(struct dcadec_context *dca)
@@ -554,6 +566,7 @@ static int combine_residual_core_frame(struct dcadec_context *dca,
     struct core_decoder *core = dca->core;
     struct xll_decoder *xll = dca->xll;
     int nsamples = xll->nframesamples;
+    int nsamples_log2 = xll->nframesamples_log2;
 
     if (c->freq != core->output_rate)
         return -DCADEC_ENOSUP;
@@ -589,9 +602,21 @@ static int combine_residual_core_frame(struct dcadec_context *dca,
         int *src = core->output_samples[core_spkr];
         if (o) {
             // Undo embedded core downmix pre-scaling
-            int scale_inv = o->dmix_scale_inv[c->dmix_m + ch];
-            for (int n = 0; n < nsamples; n++)
-                dst[n] += clip23((mul16(src[n], scale_inv) + round) >> shift);
+            int scale_inv_cur = o->dmix_scale_inv_cur[c->dmix_m + ch];
+            int scale_inv_pre = o->dmix_scale_inv_pre[c->dmix_m + ch];
+            int delta = scale_inv_cur - scale_inv_pre;
+
+            if (delta) {
+                // Scaling coefficient interpolation
+                int ramp = 1 << (nsamples_log2 - 1);
+                for (int n = 0; n < nsamples; n++, ramp += delta) {
+                    int scale_inv = scale_inv_pre + (ramp >> nsamples_log2);
+                    dst[n] += clip23((mul16(src[n], scale_inv) + round) >> shift);
+                }
+            } else {
+                for (int n = 0; n < nsamples; n++)
+                    dst[n] += clip23((mul16(src[n], scale_inv_cur) + round) >> shift);
+            }
         } else {
             // No downmix scaling
             for (int n = 0; n < nsamples; n++)
@@ -723,7 +748,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     if (dca->flags & DCADEC_FLAG_KEEP_DMIX_2CH) {
         int *coeff = NULL;
         if (p->dmix_embedded && p->dmix_type == DMIX_TYPE_LoRo)
-            coeff = p->dmix_coeff;
+            coeff = p->dmix_coeff_cur;
         if ((ret = down_mix_prim_chset(dca, spkr_map, xll->nframesamples,
                                        &ch_mask, coeff)) < 0)
             return ret;
@@ -741,6 +766,10 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             for (int n = 0; n < nsamples; n++)
                 dca->samples[ch][n] *= 1 << shift;
     }
+
+    // Flip buffers and mark downmix coefficients valid for the next frame
+    xll->dmix_buffer_parity ^= true;
+    xll->dmix_buffer_valid = true;
 
     dca->nframesamples = xll->nframesamples;
     dca->sample_rate = p->freq;

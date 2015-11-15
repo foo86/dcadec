@@ -30,7 +30,7 @@
 static int parse_dmix_coeffs(struct xll_chset *chs)
 {
     struct xll_decoder *xll = chs->decoder;
-    int m, n;
+    int m, n, ret;
 
     if (chs->primary_chset) {
         m = dmix_primary_nch[chs->dmix_type];
@@ -40,19 +40,27 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
         n = chs->nchannels + 2; // Two extra columns for scales
     }
 
-    // Reallocate downmix coefficients matrix
-    if (ta_zalloc_fast(xll->chset, &chs->dmix_coeff, m * n, sizeof(int)) < 0)
+    // Reallocate downmix coefficients buffer
+    if ((ret = ta_zalloc_fast(xll->chset, &chs->dmix_coeff, m * n * 2, sizeof(int))) < 0)
         return -DCADEC_ENOMEM;
 
+    bool valid = xll->dmix_buffer_valid && !ret;
+
+    // Setup buffer pointers for current and previous frame
+    chs->dmix_coeff_cur = chs->dmix_coeff + m * n * xll->dmix_buffer_parity;
+    chs->dmix_coeff_pre = chs->dmix_coeff + m * n * (xll->dmix_buffer_parity ^ valid);
+
     if (chs->primary_chset) {
-        chs->dmix_scale = NULL;
-        chs->dmix_scale_inv = NULL;
+        chs->dmix_scale_cur = chs->dmix_scale_pre = NULL;
+        chs->dmix_scale_inv_cur = chs->dmix_scale_inv_pre = NULL;
     } else {
-        chs->dmix_scale = chs->dmix_coeff + m * chs->nchannels;
-        chs->dmix_scale_inv = chs->dmix_coeff + m * (chs->nchannels + 1);
+        chs->dmix_scale_cur = chs->dmix_coeff_cur + m * chs->nchannels;
+        chs->dmix_scale_pre = chs->dmix_coeff_pre + m * chs->nchannels;
+        chs->dmix_scale_inv_cur = chs->dmix_coeff_cur + m * (chs->nchannels + 1);
+        chs->dmix_scale_inv_pre = chs->dmix_coeff_pre + m * (chs->nchannels + 1);
     }
 
-    int *coeff_ptr = chs->dmix_coeff;
+    int *coeff_ptr = chs->dmix_coeff_cur;
     for (int i = 0; i < m; i++) {
         int scale_inv = 0;
 
@@ -66,11 +74,11 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
                 enforce(index >= 40 && index < dca_countof(dmix_table), "Invalid downmix scale index");
                 int scale = dmix_table[index];
                 scale_inv = dmix_table_inv[index - 40];
-                chs->dmix_scale[i] = (scale ^ sign) - sign;
-                chs->dmix_scale_inv[i] = (scale_inv ^ sign) - sign;
+                chs->dmix_scale_cur[i] = (scale ^ sign) - sign;
+                chs->dmix_scale_inv_cur[i] = (scale_inv ^ sign) - sign;
             } else {
-                chs->dmix_scale[i] = 0;
-                chs->dmix_scale_inv[i] = 0;
+                chs->dmix_scale_cur[i] = 0;
+                chs->dmix_scale_inv_cur[i] = 0;
             }
         }
 
@@ -811,7 +819,8 @@ static int parse_common_header(struct xll_decoder *xll)
     xll->nchsets = bits_get(&xll->bits, 4) + 1;
 
     // Number of segments per frame
-    xll->nframesegs = 1 << bits_get(&xll->bits, 4);
+    int nframesegs_log2 = bits_get(&xll->bits, 4);
+    xll->nframesegs = 1 << nframesegs_log2;
     enforce(xll->nframesegs <= 1024, "Too many segments per XLL frame");
 
     // Samples in segment per one frequency band for the first channel set
@@ -823,7 +832,8 @@ static int parse_common_header(struct xll_decoder *xll)
     enforce(xll->nsegsamples <= 512, "Too many samples per XLL segment");
 
     // Samples in frame per one frequency band for the first channel set
-    xll->nframesamples = xll->nframesegs * xll->nsegsamples;
+    xll->nframesamples_log2 = xll->nsegsamples_log2 + nframesegs_log2;
+    xll->nframesamples = 1 << xll->nframesamples_log2;
     enforce(xll->nframesamples <= 65536, "Too many samples per XLL frame");
 
     // Number of bits used to read segment size
@@ -883,6 +893,9 @@ static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
         xll->nactivechsets = (xll->chset->nchannels < 5 && xll->nchsets > 1) ? 2 : 1;
     else
         xll->nactivechsets = xll->nchsets;
+
+    // Mark downmix coefficients invalid until filtering
+    xll->dmix_buffer_valid = false;
 
     return 0;
 }
@@ -978,6 +991,14 @@ static int parse_frame(struct xll_decoder *xll, uint8_t *data, size_t size, stru
     return 0;
 }
 
+static void clear_pbr(struct xll_decoder *xll)
+{
+    ta_free(xll->pbr_buffer);
+    xll->pbr_buffer = NULL;
+    xll->pbr_length = 0;
+    xll->pbr_delay = 0;
+}
+
 static int copy_to_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, int delay)
 {
     if (size > XLL_PBR_SIZE)
@@ -1060,7 +1081,7 @@ static int parse_frame_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, 
 
     if (xll->frame_size == xll->pbr_length) {
         // End of PBR smoothing period
-        xll_clear(xll);
+        clear_pbr(xll);
     } else {
         xll->pbr_length -= xll->frame_size;
         memmove(xll->pbr_buffer, xll->pbr_buffer + xll->frame_size, xll->pbr_length);
@@ -1071,7 +1092,7 @@ static int parse_frame_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, 
 fail:
     // For now, throw out all PBR state on failure.
     // Perhaps we can be smarter and try to at least resync.
-    xll_clear(xll);
+    clear_pbr(xll);
     return ret;
 }
 
@@ -1092,15 +1113,16 @@ int xll_parse(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_a
     else
         ret = parse_frame_no_pbr(xll, data, size, asset);
 
+    if (ret < 0)
+        xll->dmix_buffer_valid = false;
+
     return ret;
 }
 
 void xll_clear(struct xll_decoder *xll)
 {
     if (xll) {
-        ta_free(xll->pbr_buffer);
-        xll->pbr_buffer = NULL;
-        xll->pbr_length = 0;
-        xll->pbr_delay = 0;
+        clear_pbr(xll);
+        xll->dmix_buffer_valid = false;
     }
 }

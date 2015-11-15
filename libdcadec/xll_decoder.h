@@ -59,8 +59,12 @@ struct xll_chset {
     bool    hier_chset;
     int     dmix_m;
     int     *dmix_coeff;
-    int     *dmix_scale;
-    int     *dmix_scale_inv;
+    int     *dmix_coeff_cur;
+    int     *dmix_coeff_pre;
+    int     *dmix_scale_cur;
+    int     *dmix_scale_pre;
+    int     *dmix_scale_inv_cur;
+    int     *dmix_scale_inv_pre;
     bool    ch_mask_enabled;
     int     ch_mask;
 
@@ -110,6 +114,7 @@ struct xll_decoder {
     int     nframesegs;
     int     nsegsamples_log2;
     int     nsegsamples;
+    int     nframesamples_log2;
     int     nframesamples;
     int     seg_size_nbits;
     int     band_crc_present;
@@ -128,6 +133,9 @@ struct xll_decoder {
     int     nfailedsegs;
 
     int     hd_stream_id;
+
+    bool    dmix_buffer_parity;
+    bool    dmix_buffer_valid;
 
     uint8_t     *pbr_buffer;
     size_t      pbr_length;
