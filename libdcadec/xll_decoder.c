@@ -44,11 +44,14 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
     if ((ret = ta_zalloc_fast(xll->chset, &chs->dmix_coeff, m * n * 2, sizeof(int))) < 0)
         return -DCADEC_ENOMEM;
 
-    bool valid = xll->dmix_buffer_valid && !ret;
+    bool valid = chs->dmix_coeffs_valid && !ret;
+
+    // Mark downmix coefficients invalid until filtering
+    chs->dmix_coeffs_valid = false;
 
     // Setup buffer pointers for current and previous frame
-    chs->dmix_coeff_cur = chs->dmix_coeff + m * n * xll->dmix_buffer_parity;
-    chs->dmix_coeff_pre = chs->dmix_coeff + m * n * (xll->dmix_buffer_parity ^ valid);
+    chs->dmix_coeff_cur = chs->dmix_coeff + m * n * chs->dmix_coeffs_parity;
+    chs->dmix_coeff_pre = chs->dmix_coeff + m * n * (chs->dmix_coeffs_parity ^ valid);
 
     if (chs->primary_chset) {
         chs->dmix_scale_cur = chs->dmix_scale_pre = NULL;
@@ -963,9 +966,6 @@ static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
     else
         xll->nactivechsets = xll->nchsets;
 
-    // Mark downmix coefficients invalid until filtering
-    xll->dmix_buffer_valid = false;
-
     return 0;
 }
 
@@ -1183,6 +1183,13 @@ fail:
     return ret;
 }
 
+static void clear_chs(struct xll_decoder *xll)
+{
+    if (xll->chset)
+        for_each_chset(xll, chs)
+            chs->dmix_coeffs_valid = false;
+}
+
 int xll_parse(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
 {
     int ret;
@@ -1201,7 +1208,7 @@ int xll_parse(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_a
         ret = parse_frame_no_pbr(xll, data, size, asset);
 
     if (ret < 0)
-        xll->dmix_buffer_valid = false;
+        clear_chs(xll);
 
     return ret;
 }
@@ -1210,6 +1217,6 @@ void xll_clear(struct xll_decoder *xll)
 {
     if (xll) {
         clear_pbr(xll);
-        xll->dmix_buffer_valid = false;
+        clear_chs(xll);
     }
 }

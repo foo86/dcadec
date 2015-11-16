@@ -337,6 +337,10 @@ static void prepare_down_mix(struct xll_chset *c)
             }
         }
     }
+
+    // Flip buffers and mark downmix coefficients valid for the next frame
+    c->dmix_coeffs_parity ^= true;
+    c->dmix_coeffs_valid = true;
 }
 
 struct downmix {
@@ -757,10 +761,6 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             for (int n = 0; n < nsamples; n++)
                 dca->samples[ch][n] *= 1 << shift;
     }
-
-    // Flip buffers and mark downmix coefficients valid for the next frame
-    xll->dmix_buffer_parity ^= true;
-    xll->dmix_buffer_valid = true;
 
     dca->nframesamples = xll->nframesamples;
     dca->sample_rate = p->freq;
