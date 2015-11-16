@@ -388,8 +388,7 @@ int main(int argc, char **argv)
             }
 
             if (ret > 0) {
-                if (ntotalframes)
-                    fprintf(stderr, "WARNING: %s at frame %" PRIu64 "\n", dcadec_strerror(ret), ntotalframes);
+                fprintf(stderr, "WARNING: %s at frame %" PRIu64 "\n", dcadec_strerror(ret), ntotalframes);
                 nlossyframes++;
             }
 
@@ -453,8 +452,8 @@ next_packet:
             fprintf(stderr, "Completed.\n");
         if (nskippedframes)
             fprintf(stderr, "*** %" PRIu64 " frames skipped ***\n", nskippedframes);
-        if (nlossyframes > 1)
-            fprintf(stderr, "*** %" PRIu64 " frames possibly not lossless ***\n", nlossyframes);
+        if (nlossyframes)
+            fprintf(stderr, "*** %" PRIu64 " frames not lossless ***\n", nlossyframes);
     }
 
     dcadec_waveout_close(waveout);

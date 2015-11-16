@@ -547,7 +547,7 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
 
     // Force lossy downmixed output if this is the first core frame since
     // the last time history was cleared, or XLL decoder is recovering from sync loss
-    if ((dca->core_residual_valid == false && xll->nchsets > 1) ||
+    if ((dca->has_residual_encoded && !dca->core_residual_valid && xll->nchsets > 1) ||
         (dca->packet & DCADEC_PACKET_RECOVERY)) {
         for_each_chset(xll, c) {
             if (c < &xll->chset[xll->nactivechsets])
@@ -637,8 +637,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     int status = 0, ret;
 
     // Status indicating if this frame has not been decoded losslessly
-    if ((dca->has_residual_encoded && !dca->core_residual_valid)
-        || (dca->packet & DCADEC_PACKET_RECOVERY) || xll->nfailedsegs > 0)
+    if ((dca->packet & DCADEC_PACKET_RECOVERY) || xll->nfailedsegs > 0)
         status = DCADEC_WXLLLOSSY;
 
     // Filter core frame if present
