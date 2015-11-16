@@ -321,12 +321,30 @@ static struct xll_chset *find_next_hier_dmix_chset(struct xll_chset *c)
     return NULL;
 }
 
+static void prepare_down_mix(struct xll_chset *c)
+{
+    // Pre-scale by next channel set in hierarchy
+    struct xll_chset *o = find_next_hier_dmix_chset(c);
+    if (o) {
+        int *coeff_ptr = c->dmix_coeff_cur;
+        for (int i = 0; i < c->dmix_m; i++) {
+            int scale = o->dmix_scale_cur[i];
+            int scale_inv = o->dmix_scale_inv_cur[i];
+            c->dmix_scale_cur[i] = mul15(c->dmix_scale_cur[i], scale);
+            for (int j = 0; j < c->nchannels; j++) {
+                int coeff = mul16(*coeff_ptr, scale_inv);
+                *coeff_ptr++ = mul15(coeff, o->dmix_scale_cur[c->dmix_m + j]);
+            }
+        }
+    }
+}
+
 struct downmix {
     int *samples[XLL_MAX_BANDS][XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
     int *deci_history[XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
 };
 
-static void undo_down_mix_band(struct xll_chset *c, struct downmix *dmix, int band)
+static void undo_down_mix(struct xll_chset *c, struct downmix *dmix, int band)
 {
     struct xll_decoder *xll = c->decoder;
     int nsamples = xll->nframesamples;
@@ -364,28 +382,7 @@ static void undo_down_mix_band(struct xll_chset *c, struct downmix *dmix, int ba
     }
 }
 
-static void undo_down_mix(struct xll_chset *c, struct downmix *dmix)
-{
-    // Pre-scale by next channel set in hierarchy
-    struct xll_chset *o = find_next_hier_dmix_chset(c);
-    if (o) {
-        int *coeff_ptr = c->dmix_coeff_cur;
-        for (int i = 0; i < c->dmix_m; i++) {
-            int scale_inv = o->dmix_scale_inv_cur[i];
-            for (int j = 0; j < c->nchannels; j++) {
-                int coeff = mul16(*coeff_ptr, scale_inv);
-                *coeff_ptr++ = mul15(coeff, o->dmix_scale_cur[c->dmix_m + j]);
-            }
-        }
-    }
-
-    // Undo downmix of preceding channels in all frequency bands
-    undo_down_mix_band(c, dmix, XLL_BAND_0);
-    if (c->nfreqbands > 1)
-        undo_down_mix_band(c, dmix, XLL_BAND_1);
-}
-
-static void scale_down_mix_band(struct xll_chset *c, struct downmix *dmix, int band)
+static void scale_down_mix(struct xll_chset *c, struct downmix *dmix, int band)
 {
     struct xll_decoder *xll = c->decoder;
     int nsamples = xll->nframesamples;
@@ -418,23 +415,6 @@ static void scale_down_mix_band(struct xll_chset *c, struct downmix *dmix, int b
                 dmix->deci_history[i][k] =
                     mul15(dmix->deci_history[i][k], scale_pre);
     }
-}
-
-static void scale_down_mix(struct xll_chset *c, struct downmix *dmix)
-{
-    // Pre-scale by next channel set in hierarchy
-    struct xll_chset *o = find_next_hier_dmix_chset(c);
-    if (o) {
-        for (int i = 0; i < c->dmix_m; i++) {
-            int scale = o->dmix_scale_cur[i];
-            c->dmix_scale_cur[i] = mul15(c->dmix_scale_cur[i], scale);
-        }
-    }
-
-    // Scale down preceding channels in all frequency bands
-    scale_down_mix_band(c, dmix, XLL_BAND_0);
-    if (c->nfreqbands > 1)
-        scale_down_mix_band(c, dmix, XLL_BAND_1);
 }
 
 static int validate_hd_ma_frame(struct dcadec_context *dca)
@@ -689,13 +669,22 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         // Walk through downmix embedded channel sets
         for (struct xll_chset *o = find_first_hier_dmix_chset(xll);
              o != NULL; o = find_next_hier_dmix_chset(o)) {
+            prepare_down_mix(o);
+
             if (o->dmix_m > nchannels)
                 o->dmix_m = nchannels;
             if (o->dmix_m == nchannels) {
-                scale_down_mix(o, &dmix);
+                // Scale down preceding channels in all frequency bands
+                scale_down_mix(o, &dmix, XLL_BAND_0);
+                if (o->nfreqbands > 1)
+                    scale_down_mix(o, &dmix, XLL_BAND_1);
                 break;
             }
-            undo_down_mix(o, &dmix);
+
+            // Undo downmix of preceding channels in all frequency bands
+            undo_down_mix(o, &dmix, XLL_BAND_0);
+            if (o->nfreqbands > 1)
+                undo_down_mix(o, &dmix, XLL_BAND_1);
         }
     }
 
