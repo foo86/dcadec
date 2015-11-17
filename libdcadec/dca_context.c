@@ -339,8 +339,8 @@ static void prepare_down_mix(struct xll_chset *c)
     }
 
     // Flip buffers and mark downmix coefficients valid for the next frame
+    c->dmix_coeffs_signature = XLL_DMIX_SIGNATURE(c);
     c->dmix_coeffs_parity ^= true;
-    c->dmix_coeffs_valid = true;
 }
 
 struct downmix {

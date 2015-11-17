@@ -30,6 +30,10 @@
 #define XLL_BAND_0  0
 #define XLL_BAND_1  1
 
+#define XLL_DMIX_SIGNATURE(chs) \
+    ((chs)->nchannels | ((chs)->dmix_m << 4) | ((chs)->primary_chset << 12) \
+     | ((chs)->dmix_embedded << 13) | ((chs)->hier_chset << 14) | ((chs)->dmix_type << 15))
+
 #define for_each_chset(xll, chs) \
     for (struct xll_chset *(chs) = (xll)->chset; \
          (chs) != &(xll)->chset[(xll)->nchsets]; (chs)++)
@@ -68,8 +72,8 @@ struct xll_chset {
     int     *dmix_scale_pre;
     int     *dmix_scale_inv_cur;
     int     *dmix_scale_inv_pre;
+    int     dmix_coeffs_signature;
     bool    dmix_coeffs_parity;
-    bool    dmix_coeffs_valid;
     bool    ch_mask_enabled;
     int     ch_mask;
 

@@ -30,7 +30,7 @@
 static int parse_dmix_coeffs(struct xll_chset *chs)
 {
     struct xll_decoder *xll = chs->decoder;
-    int m, n, ret;
+    int m, n;
 
     if (chs->primary_chset) {
         m = dmix_primary_nch[chs->dmix_type];
@@ -41,15 +41,11 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
     }
 
     // Reallocate downmix coefficients buffer
-    if ((ret = ta_zalloc_fast(xll->chset, &chs->dmix_coeff, m * n * 2, sizeof(int))) < 0)
+    if (ta_zalloc_fast(xll->chset, &chs->dmix_coeff, m * n * 2, sizeof(int)) < 0)
         return -DCADEC_ENOMEM;
 
-    bool valid = chs->dmix_coeffs_valid && !ret;
-
-    // Mark downmix coefficients invalid until filtering
-    chs->dmix_coeffs_valid = false;
-
     // Setup buffer pointers for current and previous frame
+    bool valid = (chs->dmix_coeffs_signature == XLL_DMIX_SIGNATURE(chs));
     chs->dmix_coeff_cur = chs->dmix_coeff + m * n * chs->dmix_coeffs_parity;
     chs->dmix_coeff_pre = chs->dmix_coeff + m * n * (chs->dmix_coeffs_parity ^ valid);
 
@@ -253,6 +249,9 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
             }
         }
     }
+
+    // Mark downmix coefficients invalid until filtering
+    chs->dmix_coeffs_signature = 0;
 
     if (chs->freq > 96000)
         // Extra frequency bands flag
@@ -1185,9 +1184,12 @@ fail:
 
 static void clear_chs(struct xll_decoder *xll)
 {
-    if (xll->chset)
-        for_each_chset(xll, chs)
-            chs->dmix_coeffs_valid = false;
+    if (xll->chset) {
+        for_each_chset(xll, chs) {
+            chs->dmix_coeffs_signature = 0;
+            chs->dmix_coeffs_parity = false;
+        }
+    }
 }
 
 int xll_parse(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
