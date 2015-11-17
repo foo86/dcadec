@@ -247,12 +247,14 @@ static int filter_core_frame(struct dcadec_context *dca)
 {
     struct core_decoder *core = dca->core;
 
-    dca->core_residual_valid = false;
-
     // Filter core frame
     int ret;
-    if ((ret = core_filter(core, dca->flags)) < 0)
+    if ((ret = core_filter(core, dca->flags)) < 0) {
+        dca->core_residual_valid = false;
         return ret;
+    }
+
+    dca->core_residual_valid = !!(dca->flags & DCADEC_FLAG_CORE_BIT_EXACT);
 
     // Downmix core channels to Lo/Ro
     if (dca->flags & DCADEC_FLAG_KEEP_DMIX_2CH) {
@@ -526,8 +528,10 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
 
     // Filter core frame
     int ret;
-    if ((ret = core_filter(core, flags)) < 0)
+    if ((ret = core_filter(core, flags)) < 0) {
+        dca->core_residual_valid = false;
         return ret;
+    }
 
     // Force lossy downmixed output if this is the first core frame since
     // the last time history was cleared, or XLL decoder is recovering from sync loss
@@ -822,8 +826,10 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
     if (DCA_MEM32NE(data) == DCA_32BE_C(SYNC_WORD_CORE)) {
         if ((ret = alloc_core_decoder(dca)) < 0)
             return ret;
-        if ((ret = core_parse(dca->core, data, size, dca->flags, NULL)) < 0)
+        if ((ret = core_parse(dca->core, data, size, dca->flags, NULL)) < 0) {
+            dca->core_residual_valid = false;
             return ret;
+        }
         if (ret > status)
             status = ret;
 
@@ -859,8 +865,10 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
         if (!(dca->packet & DCADEC_PACKET_CORE) && (asset->extension_mask & EXSS_CORE)) {
             if ((ret = alloc_core_decoder(dca)) < 0)
                 return ret;
-            if ((ret = core_parse(dca->core, data, size, dca->flags, asset)) < 0)
+            if ((ret = core_parse(dca->core, data, size, dca->flags, asset)) < 0) {
+                dca->core_residual_valid = false;
                 return ret;
+            }
             if (ret > status)
                 status = ret;
 
