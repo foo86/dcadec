@@ -42,8 +42,11 @@
     for (struct xll_chset *(chs) = (xll)->chset; \
          (chs) != &(xll)->chset[(xll)->nactivechsets]; (chs)++)
 
-#define xll_err(msg)        dca_log(ERROR, xll, msg)
-#define xll_verbose(msg)    dca_log(VERBOSE, xll, msg)
+#define xll_err(...)        dca_log(ERROR, xll, __VA_ARGS__)
+#define xll_verbose(...)    dca_log(VERBOSE, xll, __VA_ARGS__)
+
+#define xll_err_once(...)     dca_log_once(ERROR, xll, err_shown, __VA_ARGS__)
+#define xll_warn_once(...)    dca_log_once(WARNING, xll, warn_shown, __VA_ARGS__)
 
 struct xll_decoder;
 struct exss_asset;
@@ -118,6 +121,8 @@ struct xll_decoder {
 
     dcadec_log_cb   log_cb;
     void            *log_cbarg;
+    bool    err_shown;
+    bool    warn_shown;
 
     int     flags;
 

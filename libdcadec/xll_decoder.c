@@ -127,7 +127,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
     // Number of channels in the channel set
     chs->nchannels = bits_get(&xll->bits, 4) + 1;
     if (chs->nchannels > XLL_MAX_CHANNELS) {
-        xll_err("Unsupported number of channels");
+        xll_err_once("Unsupported number of channels (%d)", chs->nchannels);
         return -DCADEC_ENOSUP;
     }
 
@@ -143,7 +143,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
     // Original sampling frequency
     chs->freq = exss_sample_rates[bits_get(&xll->bits, 4)];
     if (chs->freq > 192000) {
-        xll_err("Unsupported sampling frequency");
+        xll_err_once("Unsupported sampling frequency");
         return -DCADEC_ENOSUP;
     }
 
@@ -153,7 +153,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
     // Which replacement set this channel set is member of
     chs->replace_set_index = bits_get(&xll->bits, 2);
     if (chs->replace_set_index) {
-        xll_err("Replacement sets are not supported");
+        xll_err_once("Replacement sets are not supported");
         return -DCADEC_ENOSUP;
     }
 
@@ -215,6 +215,8 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
 
         // Mapping coeffs present flag
         if (bits_get1(&xll->bits)) {
+            xll_warn_once("Stream with speaker mapping coefficients");
+
             // Number of bits used to pack each
             // channel-to-speaker mapping coefficient
             int nchspkrcoefbits = 6 + 2 * bits_get(&xll->bits, 3);
@@ -260,7 +262,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         chs->nfreqbands = 1;
 
     if (chs->nfreqbands > XLL_MAX_BANDS) {
-        xll_err("Extra frequency bands are not supported");
+        xll_err_once("Extra frequency bands are not supported");
         return -DCADEC_ENOSUP;
     }
 
@@ -848,7 +850,7 @@ static int parse_common_header(struct xll_decoder *xll)
     // Version number
     int stream_ver = bits_get(&xll->bits, 4) + 1;
     if (stream_ver > 1) {
-        xll_err("Unsupported stream version");
+        xll_err_once("Unsupported stream version (%d)", stream_ver);
         return -DCADEC_ENOSUP;
     }
 
@@ -874,6 +876,8 @@ static int parse_common_header(struct xll_decoder *xll)
 
     // Number of channels sets per frame
     xll->nchsets = bits_get(&xll->bits, 4) + 1;
+    if (xll->nchsets > 3)
+        xll_warn_once("Stream with %d channel sets", xll->nchsets);
 
     // Number of segments per frame
     int nframesegs_log2 = bits_get(&xll->bits, 4);
@@ -914,6 +918,8 @@ static int parse_common_header(struct xll_decoder *xll)
     // 2 - CRC16 placed at the end of MSB0 and LSB0
     // 3 - CRC16 placed at the end of MSB0 and LSB0 and other frequency bands
     xll->band_crc_present = bits_get(&xll->bits, 2);
+    if (xll->band_crc_present)
+        xll_warn_once("Stream with band CRC present (%d)", xll->band_crc_present);
 
     // MSB/LSB split flag
     xll->scalable_lsbs = bits_get1(&xll->bits);
@@ -926,6 +932,8 @@ static int parse_common_header(struct xll_decoder *xll)
         xll->fixed_lsb_width = bits_get(&xll->bits, 4);
     else
         xll->fixed_lsb_width = 0;
+    if (xll->fixed_lsb_width)
+        xll_warn_once("Stream with fixed LSB width (%d)", xll->fixed_lsb_width);
 
     // Reserved
     // Byte align
@@ -1152,7 +1160,7 @@ static int parse_frame_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, 
     // Respect decoding delay after synchronization error
     if (xll->pbr_delay > 0) {
         if (--xll->pbr_delay > 0) {
-            xll_verbose("Waiting until decoding delay expires");
+            xll_verbose("Waiting until decoding delay expires (%d)", xll->pbr_delay);
             return -DCADEC_ENOSYNC;
         }
     }

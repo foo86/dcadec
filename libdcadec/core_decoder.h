@@ -32,8 +32,11 @@
 
 #define MAX_SUBBANDS_X96        64
 
-#define core_err(msg)   dca_log(ERROR, core, msg)
-#define core_warn(msg)  dca_log(WARNING, core, msg)
+#define core_err(...)   dca_log(ERROR, core, __VA_ARGS__)
+#define core_warn(...)  dca_log(WARNING, core, __VA_ARGS__)
+
+#define core_err_once(...)     dca_log_once(ERROR, core, err_shown, __VA_ARGS__)
+#define core_warn_once(...)    dca_log_once(WARNING, core, warn_shown, __VA_ARGS__)
 
 struct core_decoder;
 struct exss_asset;
@@ -71,6 +74,8 @@ struct core_decoder {
 
     dcadec_log_cb   log_cb;
     void            *log_cbarg;
+    bool    err_shown;
+    bool    warn_shown;
 
     bool    normal_frame;
     int     deficit_samples;

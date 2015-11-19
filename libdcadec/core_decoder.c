@@ -122,7 +122,7 @@ static int parse_frame_header(struct core_decoder *core)
     // Audio channel arrangement
     core->audio_mode = bits_get(&core->bits, 6);
     if (core->audio_mode >= AMODE_COUNT) {
-        core_err("Unsupported audio channel arrangement");
+        core_err("Unsupported audio channel arrangement (%d)", core->audio_mode);
         return -DCADEC_ENOSUP;
     }
 
@@ -224,7 +224,8 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
         // Number of primary audio channels
         core->nchannels = bits_get(&core->bits, 3) + 1;
         if (core->nchannels != audio_mode_nch[core->audio_mode]) {
-            core_err("Invalid number of primary audio channels");
+            core_err("Invalid number of primary audio channels (%d) for audio "
+                     "channel arrangement (%d)", core->nchannels, core->audio_mode);
             return -DCADEC_EBADDATA;
         }
         assert(core->nchannels <= MAX_CHANNELS - 2);
@@ -257,7 +258,7 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
         // Number of channels in a channel set
         n = bits_get(&core->bits, 3) + 1;
         if (n > 2) {
-            core_err("Unsupported number of XXCH channels");
+            core_err_once("Unsupported number of XXCH channels (%d)", n);
             return -DCADEC_ENOSUP;
         }
         core->nchannels = audio_mode_nch[core->audio_mode] + n;
@@ -268,12 +269,13 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
         core->xxch_spkr_mask = mask << SPEAKER_Cs;
 
         if (dca_popcount(core->xxch_spkr_mask) != n) {
-            core_err("Invalid XXCH speaker layout mask");
+            core_err("Invalid XXCH speaker layout mask (%#x)", core->xxch_spkr_mask);
             return -DCADEC_EBADDATA;
         }
 
         if (core->xxch_core_mask & core->xxch_spkr_mask) {
-            core_err("XXCH speaker layout mask overlaps with core");
+            core_err("XXCH speaker layout mask (%#x) overlaps with core (%#x)",
+                     core->xxch_spkr_mask, core->xxch_core_mask);
             return -DCADEC_EBADDATA;
         }
 
@@ -1218,14 +1220,14 @@ static int parse_xxch_frame(struct core_decoder *core)
     // Number of bits for loudspeaker mask
     core->xxch_mask_nbits = bits_get(&core->bits, 5) + 1;
     if (core->xxch_mask_nbits <= SPEAKER_Cs) {
-        core_err("Invalid number of bits for XXCH speaker mask");
+        core_err("Invalid number of bits for XXCH speaker mask (%d)", core->xxch_mask_nbits);
         return -DCADEC_EBADDATA;
     }
 
     // Number of channel sets
     int xxch_nchsets = bits_get(&core->bits, 2) + 1;
     if (xxch_nchsets > 1) {
-        core_err("Unsupported number of XXCH channel sets");
+        core_err_once("Unsupported number of XXCH channel sets (%d)", xxch_nchsets);
         return -DCADEC_ENOSUP;
     }
 
@@ -1245,7 +1247,8 @@ static int parse_xxch_frame(struct core_decoder *core)
         mask = (mask & ~SPEAKER_MASK_Rs) | SPEAKER_MASK_Rss;
 
     if (mask != core->xxch_core_mask) {
-        core_err("Invalid XXCH core speaker activity mask");
+        core_err("XXCH core speaker activity mask (%#x) disagrees "
+                 "with core (%#x)", core->xxch_core_mask, mask);
         return -DCADEC_EBADDATA;
     }
 
@@ -1436,7 +1439,7 @@ static int parse_xbr_frame(struct core_decoder *core)
         for (int ch1 = 0; ch1 < xbr_nchannels[i]; ch1++, ch2++) {
             xbr_nsubbands[ch2] = bits_get(&core->bits, xbr_band_nbits) + 1;
             if (xbr_nsubbands[ch2] > MAX_SUBBANDS) {
-                core_err("Invalid number of active XBR subbands");
+                core_err("Invalid number of active XBR subbands (%d)", xbr_nsubbands[ch2]);
                 return -DCADEC_EBADDATA;
             }
         }
@@ -1795,7 +1798,7 @@ static int parse_x96_coding_header(struct x96_decoder *x96, bool exss, int xch_b
     if (x96->rev_no < 8) {
         x96->subband_start = bits_get(&core->bits, 5);
         if (x96->subband_start > 27) {
-            core_err("Invalid X96 subband start index");
+            core_err("Invalid X96 subband start index (%d)", x96->subband_start);
             return -DCADEC_EBADDATA;
         }
     } else {
@@ -1806,7 +1809,7 @@ static int parse_x96_coding_header(struct x96_decoder *x96, bool exss, int xch_b
     for (ch = xch_base; ch < x96->nchannels; ch++) {
         x96->nsubbands[ch] = bits_get(&core->bits, 6) + 1;
         if (x96->nsubbands[ch] < MAX_SUBBANDS) {
-            core_err("Invalid X96 subband activity count");
+            core_err("Invalid X96 subband activity count (%d)", x96->nsubbands[ch]);
             return -DCADEC_EBADDATA;
         }
     }
@@ -1901,7 +1904,7 @@ static int parse_x96_frame(struct x96_decoder *x96)
     // Revision number
     x96->rev_no = bits_get(&core->bits, 4);
     if (x96->rev_no < 1 || x96->rev_no > 8) {
-        core_err("Unsupported X96 revision");
+        core_err_once("Unsupported X96 revision (%d)", x96->rev_no);
         return -DCADEC_ENOSUP;
     }
 
@@ -1947,7 +1950,7 @@ static int parse_x96_frame_exss(struct x96_decoder *x96)
     // Revision number
     x96->rev_no = bits_get(&core->bits, 4);
     if (x96->rev_no < 1 || x96->rev_no > 8) {
-        core_err("Unsupported X96 revision");
+        core_err_once("Unsupported X96 revision (%d)", x96->rev_no);
         return -DCADEC_ENOSUP;
     }
 
@@ -2031,7 +2034,7 @@ static int parse_aux_data(struct core_decoder *core)
     // Auxiliary data sync word
     uint32_t sync = bits_get(&core->bits, 32);
     if (sync != SYNC_WORD_REV1AUX) {
-        core_err("Invalid auxiliary data sync word");
+        core_err("Invalid auxiliary data sync word (%#x)", sync);
         return -DCADEC_ENOSYNC;
     }
 
@@ -2236,8 +2239,13 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
         return ret;
     if (ret > 0)
         status = ret;
-    if (core->frame_size > size)
+
+    // Workaround for DTS in WAV
+    if (core->frame_size > size) {
+        core_warn_once("Stream with excessive core frame size");
         core->frame_size = size;
+    }
+
     if ((ret = bits_seek(&core->bits, core->frame_size * 8)) < 0)
         return ret;
     return status;

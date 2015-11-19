@@ -165,10 +165,27 @@ static inline uint32_t DCA_MEM32NE(const void *data)
     return res;
 }
 
-#define dca_log(lvl, obj, msg) \
+void dca_format_log(dcadec_log_cb cb, void *cbarg, int level,
+                    const char *file, int line, const char *fmt, ...)
+#ifdef __GNUC__
+    __attribute__((format(printf, 6, 7)))
+#endif
+;
+
+#define dca_log(lvl, obj, ...) \
     do { \
         if (obj->log_cb) \
-            obj->log_cb(DCADEC_LOG_##lvl, __FILE__, __LINE__, msg, obj->log_cbarg); \
+            dca_format_log(obj->log_cb, obj->log_cbarg, DCADEC_LOG_##lvl, \
+                           __FILE__, __LINE__, __VA_ARGS__); \
+    } while (0)
+
+#define dca_log_once(lvl, obj, flag, ...) \
+    do { \
+        if (obj->log_cb && !obj->flag) { \
+            dca_format_log(obj->log_cb, obj->log_cbarg, DCADEC_LOG_##lvl, \
+                           __FILE__, __LINE__, __VA_ARGS__); \
+            obj->flag = true; \
+        } \
     } while (0)
 
 #define DCADEC_FLAG_KEEP_DMIX_MASK  \

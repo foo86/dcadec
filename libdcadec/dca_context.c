@@ -82,6 +82,19 @@ static const uint8_t dca2wav_wide[] = {
 #define DCADEC_LAYOUT_7POINT1_WIDE  \
     (DCADEC_LAYOUT_7POINT0_WIDE | SPEAKER_MASK_LFE1)
 
+void dca_format_log(dcadec_log_cb cb, void *cbarg, int level,
+                    const char *file, int line, const char *fmt, ...)
+{
+    char buffer[1024];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(buffer, sizeof(buffer), fmt, ap);
+    va_end(ap);
+
+    cb(level, file, line, buffer, cbarg);
+}
+
 static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dca_mask)
 {
     int nchannels = 0;
@@ -429,63 +442,93 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
     struct xll_chset *p = &xll->chset[0];
 
     // Validate the first (primary) channel set
-    if (!p->primary_chset)
+    if (!p->primary_chset) {
+        xll_err_once("The first channel set must be primary");
         return -DCADEC_ENOSUP;
+    }
 
-    if (!p->ch_mask_enabled && p->nchannels != 2)
+    if (!p->ch_mask_enabled && p->nchannels != 2) {
+        xll_err_once("Unsupported number of channels with channel mask "
+                     "disabled for primary channel set (%d)", p->nchannels);
         return -DCADEC_ENOSUP;
+    }
 
-    if (p->storage_bit_res != 16 && p->storage_bit_res != 24)
+    if (p->storage_bit_res != 16 && p->storage_bit_res != 24) {
+        xll_err_once("Unsupported storage bit resolution for "
+                     "primary channel set (%d)", p->storage_bit_res);
         return -DCADEC_ENOSUP;
+    }
 
-    if (p->pcm_bit_res > p->storage_bit_res)
+    if (p->pcm_bit_res > p->storage_bit_res) {
+        xll_err("Invalid PCM bit resolution for primary channel set (%d > %d)",
+                p->pcm_bit_res, p->storage_bit_res);
         return -DCADEC_EINVAL;
+    }
 
     // Validate channel sets
     dca->has_residual_encoded = false;
     for_each_active_chset(xll, c) {
-        // Reject multiple primary channel sets
-        if (c->primary_chset && c != p)
+        if (c->primary_chset && c != p) {
+            xll_err_once("Multiple primary channel sets are not supported");
             return -DCADEC_ENOSUP;
+        }
 
-        // Reject non-primary channel sets w/o channel mask
-        if (!c->ch_mask_enabled && c != p)
+        if (!c->ch_mask_enabled && c != p) {
+            xll_err_once("Secondary channel sets with channel mask disabled "
+                         "are not supported");
             return -DCADEC_ENOSUP;
+        }
 
-        // Reject parallel downmix
-        if (!c->primary_chset && c->dmix_embedded && !c->hier_chset)
+        if (!c->primary_chset && c->dmix_embedded && !c->hier_chset) {
+            xll_err_once("Channel sets with embedded parallel downmix "
+                         "are not supported");
             return -DCADEC_ENOSUP;
+        }
 
-        // For now, PCM characteristics of all channel sets must be the same
-        if (c->freq != p->freq)
+        if (c->freq != p->freq || c->pcm_bit_res != p->pcm_bit_res
+            || c->storage_bit_res != p->storage_bit_res
+            || c->nfreqbands != p->nfreqbands) {
+            xll_err_once("Channel sets with different audio "
+                         "characteristics are not supported");
             return -DCADEC_ENOSUP;
+        }
 
-        if (c->pcm_bit_res != p->pcm_bit_res)
+        if (c->interpolate) {
+            xll_err_once("Channel sets with sampling frequency modifier "
+                         "are not supported");
             return -DCADEC_ENOSUP;
-
-        if (c->storage_bit_res != p->storage_bit_res)
-            return -DCADEC_ENOSUP;
-
-        if (c->nfreqbands != p->nfreqbands)
-            return -DCADEC_ENOSUP;
-
-        // Reject sampling frequency modifier
-        if (c->interpolate)
-            return -DCADEC_ENOSUP;
+        }
 
         dca->has_residual_encoded |= c->residual_encode != (1 << c->nchannels) - 1;
     }
 
     // Verify that core is compatible if there are residual encoded channel sets
     if (dca->has_residual_encoded) {
-        if (!(dca->packet & DCADEC_PACKET_CORE))
+        if (!(dca->packet & DCADEC_PACKET_CORE)) {
+            xll_err("Residual encoded channels are present without core");
             return -DCADEC_EINVAL;
-        if (p->freq != dca->core->sample_rate &&
-            p->freq != dca->core->sample_rate * 2)
+        }
+
+        int rate = dca->core->sample_rate;
+        int nsamples = dca->core->npcmblocks * NUM_PCMBLOCK_SAMPLES;
+
+        // Double sampling frequency if needed
+        if (p->freq == 96000 && rate == 48000) {
+            rate *= 2;
+            nsamples *= 2;
+        }
+
+        if (p->freq != rate) {
+            xll_err_once("Sample rate mismatch between core (%d) and XLL (%d)",
+                         rate, p->freq);
             return -DCADEC_ENOSUP;
-        if (xll->nframesamples != dca->core->npcmblocks * NUM_PCMBLOCK_SAMPLES &&
-            xll->nframesamples != dca->core->npcmblocks * NUM_PCMBLOCK_SAMPLES * 2)
+        }
+
+        if (xll->nframesamples != nsamples) {
+            xll_err("Number of samples per frame mismatch between core (%d) "
+                    "and XLL (%d)", nsamples, xll->nframesamples);
             return -DCADEC_EINVAL;
+        }
     }
 
     return 0;
@@ -560,7 +603,7 @@ static int combine_residual_core_frame(struct dcadec_context *dca,
     int nsamples_log2 = xll->nframesamples_log2;
 
     if (c->freq != core->output_rate)
-        return -DCADEC_ENOSUP;
+        return -DCADEC_EINVAL;
 
     if (nsamples != core->npcmsamples)
         return -DCADEC_EINVAL;
@@ -715,7 +758,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         if (p->nchannels == 2)
             p->ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
         else
-            return -DCADEC_ENOSUP;
+            return -DCADEC_EINVAL;
     }
 
     // Build the output speaker map

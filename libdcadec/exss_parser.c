@@ -453,7 +453,8 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
 
     // Reject unsupported features for now
     if (exss->exss_index > 0 || exss->npresents != 1 || exss->nassets != 1) {
-        exss_err("Multiple sub-streams, audio presentations and/or assets are not supported");
+        exss_err_once("Multiple sub-streams, audio presentations "
+                      "and/or assets are not supported");
         return -DCADEC_ENOSUP;
     }
 

@@ -21,7 +21,9 @@
 
 #include "bitstream.h"
 
-#define exss_err(msg)   dca_log(ERROR, exss, msg)
+#define exss_err(...)   dca_log(ERROR, exss, __VA_ARGS__)
+
+#define exss_err_once(...)  dca_log_once(ERROR, exss, err_shown, __VA_ARGS__)
 
 struct exss_parser;
 
@@ -74,6 +76,7 @@ struct exss_parser {
 
     dcadec_log_cb   log_cb;
     void            *log_cbarg;
+    bool    err_shown;
 
     int     exss_index;
     int     exss_size_nbits;
