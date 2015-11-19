@@ -2411,8 +2411,6 @@ struct dcadec_exss_info *core_get_info_exss(struct core_decoder *core)
     else
         info->profile = DCADEC_PROFILE_DS;
 
-    info->embedded_stereo = (core->prim_dmix_embedded &&
-                             core->prim_dmix_type == DMIX_TYPE_LoRo);
     info->embedded_6ch = !!(core->ext_audio_mask & (CSS_XXCH | CSS_XCH));
     info->spkr_mask = make_spkr_pair_mask(core->ch_mask);
 
