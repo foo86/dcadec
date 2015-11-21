@@ -315,13 +315,9 @@ static int map_spkr_to_core_spkr(struct core_decoder *core, int spkr)
     return -1;
 }
 
-static struct xll_chset *find_first_hier_dmix_chset(struct xll_decoder *xll)
+static bool is_hier_dmix_chset(struct xll_chset *c)
 {
-    for_each_chset(xll, c)
-        if (!c->primary_chset && c->dmix_embedded && c->hier_chset)
-            return c;
-
-    return NULL;
+    return !c->primary_chset && c->dmix_embedded && c->hier_chset;
 }
 
 static struct xll_chset *find_next_hier_dmix_chset(struct xll_chset *c)
@@ -330,32 +326,25 @@ static struct xll_chset *find_next_hier_dmix_chset(struct xll_chset *c)
 
     if (c->hier_chset)
         while (++c < &xll->chset[xll->nchsets])
-            if (!c->primary_chset && c->dmix_embedded && c->hier_chset)
+            if (is_hier_dmix_chset(c))
                 return c;
 
     return NULL;
 }
 
-static void prepare_down_mix(struct xll_chset *c)
+static void prescale_down_mix(struct xll_chset *c, struct xll_chset *o)
 {
-    // Pre-scale by next channel set in hierarchy
-    struct xll_chset *o = find_next_hier_dmix_chset(c);
-    if (o) {
-        int *coeff_ptr = c->dmix_coeff_cur;
-        for (int i = 0; i < c->dmix_m; i++) {
-            int scale = o->dmix_scale_cur[i];
-            int scale_inv = o->dmix_scale_inv_cur[i];
-            c->dmix_scale_cur[i] = mul15(c->dmix_scale_cur[i], scale);
-            for (int j = 0; j < c->nchannels; j++) {
-                int coeff = mul16(*coeff_ptr, scale_inv);
-                *coeff_ptr++ = mul15(coeff, o->dmix_scale_cur[c->dmix_m + j]);
-            }
+    int *coeff_ptr = c->dmix_coeff_cur;
+    for (int i = 0; i < c->dmix_m; i++) {
+        int scale = o->dmix_scale_cur[i];
+        int scale_inv = o->dmix_scale_inv_cur[i];
+        c->dmix_scale_cur[i] = mul15(c->dmix_scale_cur[i], scale);
+        c->dmix_scale_inv_cur[i] = mul16(c->dmix_scale_inv_cur[i], scale_inv);
+        for (int j = 0; j < c->nchannels; j++) {
+            int coeff = mul16(*coeff_ptr, scale_inv);
+            *coeff_ptr++ = mul15(coeff, o->dmix_scale_cur[c->dmix_m + j]);
         }
     }
-
-    // Flip buffers and mark downmix coefficients valid for the next frame
-    c->dmix_coeffs_signature = XLL_DMIX_SIGNATURE(c);
-    c->dmix_coeffs_parity ^= true;
 }
 
 struct downmix {
@@ -676,6 +665,20 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         if ((ret = filter_residual_core_frame(dca)) < 0)
             return ret;
 
+    // Prepare downmixing coefficients for all channel sets
+    for_each_chset_reverse(xll, c) {
+        // Pre-scale by next channel set in hierarchy
+        if (is_hier_dmix_chset(c)) {
+            struct xll_chset *o = find_next_hier_dmix_chset(c);
+            if (o)
+                prescale_down_mix(c, o);
+        }
+
+        // Flip buffers and mark downmix coefficients valid for the next frame
+        c->dmix_coeffs_signature = XLL_DMIX_SIGNATURE(c);
+        c->dmix_coeffs_parity ^= true;
+    }
+
     // Process frequency band 0 for active channel sets
     for_each_active_chset(xll, c) {
         xll_filter_band_data(c, XLL_BAND_0);
@@ -722,9 +725,9 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         }
 
         // Walk through downmix embedded channel sets
-        for (struct xll_chset *o = find_first_hier_dmix_chset(xll);
-             o != NULL; o = find_next_hier_dmix_chset(o)) {
-            prepare_down_mix(o);
+        for_each_chset(xll, o) {
+            if (!is_hier_dmix_chset(o))
+                continue;
 
             if (o->dmix_m > nchannels)
                 o->dmix_m = nchannels;

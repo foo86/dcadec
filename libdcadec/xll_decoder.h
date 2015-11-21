@@ -38,6 +38,10 @@
     for (struct xll_chset *(chs) = (xll)->chset; \
          (chs) != &(xll)->chset[(xll)->nchsets]; (chs)++)
 
+#define for_each_chset_reverse(xll, chs) \
+    for (struct xll_chset *(chs) = &(xll)->chset[(xll)->nchsets - 1]; \
+         (chs) >= (xll)->chset; (chs)--)
+
 #define for_each_active_chset(xll, chs) \
     for (struct xll_chset *(chs) = (xll)->chset; \
          (chs) != &(xll)->chset[(xll)->nactivechsets]; (chs)++)
