@@ -359,8 +359,8 @@ static void prepare_down_mix(struct xll_chset *c)
 }
 
 struct downmix {
-    int *samples[XLL_MAX_BANDS][XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
-    int *deci_history[XLL_MAX_CHSETS * XLL_MAX_CHANNELS];
+    int *samples[XLL_MAX_BANDS][SPEAKER_COUNT];
+    int *deci_history[SPEAKER_COUNT];
 };
 
 static void undo_down_mix(struct xll_chset *c, struct downmix *dmix, int band)
@@ -705,15 +705,19 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
 
         // Build channel vectors for all active channel sets
         for_each_active_chset(xll, c) {
-            if (c->hier_chset) {
-                for (int ch = 0; ch < c->nchannels; ch++) {
-                    dmix.samples[XLL_BAND_0][nchannels] =
-                        c->msb_sample_buffer[XLL_BAND_0][ch];
-                    dmix.samples[XLL_BAND_1][nchannels] =
-                        c->msb_sample_buffer[XLL_BAND_1][ch];
-                    dmix.deci_history[nchannels] = c->deci_history[ch];
-                    nchannels++;
-                }
+            if (!c->hier_chset)
+                continue;
+
+            if (nchannels + c->nchannels > SPEAKER_COUNT)
+                return -DCADEC_EINVAL;
+
+            for (int ch = 0; ch < c->nchannels; ch++) {
+                dmix.samples[XLL_BAND_0][nchannels] =
+                    c->msb_sample_buffer[XLL_BAND_0][ch];
+                dmix.samples[XLL_BAND_1][nchannels] =
+                    c->msb_sample_buffer[XLL_BAND_1][ch];
+                dmix.deci_history[nchannels] = c->deci_history[ch];
+                nchannels++;
             }
         }
 
