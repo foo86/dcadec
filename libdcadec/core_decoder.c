@@ -93,11 +93,11 @@ static const uint8_t audio_mode_ch_mask[AMODE_COUNT] = {
 static int parse_frame_header(struct core_decoder *core)
 {
     // Frame type
-    core->normal_frame = bits_get1(&core->bits);
+    bool normal_frame = bits_get1(&core->bits);
 
     // Deficit sample count
-    core->deficit_samples = bits_get(&core->bits, 5) + 1;
-    if (core->deficit_samples < 32 && core->normal_frame) {
+    int deficit_samples = bits_get(&core->bits, 5) + 1;
+    if (deficit_samples < NUM_PCMBLOCK_SAMPLES && normal_frame) {
         core_err("Invalid deficit sample count");
         return -DCADEC_EBADDATA;
     }

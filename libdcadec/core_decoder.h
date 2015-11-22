@@ -77,8 +77,6 @@ struct core_decoder {
     bool    err_shown;
     bool    warn_shown;
 
-    bool    normal_frame;
-    int     deficit_samples;
     bool    crc_present;
     int     npcmblocks;
     size_t  frame_size;
