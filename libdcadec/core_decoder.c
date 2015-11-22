@@ -107,9 +107,9 @@ static int parse_frame_header(struct core_decoder *core)
 
     // Number of PCM sample blocks
     core->npcmblocks = bits_get(&core->bits, 7) + 1;
-    if (core->npcmblocks < 8) {
-        core_err("Invalid number of PCM sample blocks");
-        return -DCADEC_EBADDATA;
+    if (core->npcmblocks & (NUM_SUBBAND_SAMPLES - 1)) {
+        core_err("Invalid number of PCM sample blocks (%d)", core->npcmblocks);
+        return (core->npcmblocks < 6 || normal_frame) ? -DCADEC_EBADDATA : -DCADEC_ENOSUP;
     }
 
     // Primary frame byte size
