@@ -2116,9 +2116,10 @@ static int parse_optional_info(struct core_decoder *core, int flags)
 
     // Core extensions
     if (core->ext_audio_present && !(flags & DCADEC_FLAG_CORE_ONLY)) {
-        size_t buf_size = (core->bits.total + 31) / 32;
-        size_t sync_pos = (core->bits.index + 31) / 32;
-        size_t last_pos = DCA_MIN(core->frame_size / 4, buf_size);
+        size_t sync_pos = DCA_MIN(core->frame_size / 4, core->bits.total / 32);
+        size_t last_pos = core->bits.index / 32;
+
+        assert(last_pos);
 
         // Search for extension sync words aligned on 4-byte boundary
         switch (core->ext_audio_type) {
@@ -2131,7 +2132,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
             // compatibility with legacy bitstreams. Minimum XCH frame size is
             // 96 bytes. AMODE and PCHS are further checked to reduce
             // probability of alias sync detection.
-            for (; sync_pos < last_pos; sync_pos++) {
+            for (; sync_pos >= last_pos; sync_pos--) {
                 if (core->bits.data[sync_pos] == DCA_32BE_C(SYNC_WORD_XCH)) {
                     core->bits.index = (sync_pos + 1) * 32;
                     size_t frame_size = bits_get(&core->bits, 10) + 1;
@@ -2157,7 +2158,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
             // The distance between X96 sync word and end of the core frame
             // must be equal to X96 frame size. Minimum X96 frame size is 96
             // bytes.
-            for (; sync_pos < last_pos; sync_pos++) {
+            for (; sync_pos >= last_pos; sync_pos--) {
                 if (core->bits.data[sync_pos] == DCA_32BE_C(SYNC_WORD_X96)) {
                     core->bits.index = (sync_pos + 1) * 32;
                     size_t frame_size = bits_get(&core->bits, 12) + 1;
@@ -2183,7 +2184,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
 
             // XXCH frame header CRC must be valid. Minimum XXCH frame header
             // size is 11 bytes.
-            for (; sync_pos < last_pos; sync_pos++) {
+            for (; sync_pos >= last_pos; sync_pos--) {
                 if (core->bits.data[sync_pos] == DCA_32BE_C(SYNC_WORD_XXCH)) {
                     core->bits.index = (sync_pos + 1) * 32;
                     size_t hdr_size = bits_get(&core->bits, 6) + 1;
