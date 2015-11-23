@@ -2204,6 +2204,11 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 status = DCADEC_WCOREEXTFAILED;
             }
             break;
+
+        default:
+            core_warn_once("Stream with unknown extended audio type (%d)",
+                           core->ext_audio_type);
+            break;
         }
     }
 
