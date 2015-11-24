@@ -2218,11 +2218,8 @@ static int parse_optional_info(struct core_decoder *core, int flags)
 int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
                int flags, struct exss_asset *asset)
 {
-    core->ext_audio_mask    = 0;
-
-    core->xch_pos   = 0;
-    core->xxch_pos  = 0;
-    core->x96_pos   = 0;
+    core->ext_audio_mask = 0;
+    core->xch_pos = core->xxch_pos = core->x96_pos = 0;
 
     if (asset) {
         bits_init(&core->bits, data + asset->core_offset, asset->core_size);
