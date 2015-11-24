@@ -2225,7 +2225,6 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
         bits_init(&core->bits, data + asset->core_offset, asset->core_size);
         if (bits_get(&core->bits, 32) != SYNC_WORD_CORE_EXSS)
             return -DCADEC_ENOSYNC;
-        size = asset->core_size;
     } else {
         bits_init(&core->bits, data, size);
         bits_skip(&core->bits, 32);
@@ -2244,7 +2243,7 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
         status = ret;
 
     // Workaround for DTS in WAV
-    if (core->frame_size > size) {
+    if (!asset && core->frame_size > size && core->frame_size < size + 4) {
         core_warn_once("Stream with excessive core frame size");
         core->frame_size = size;
     }
