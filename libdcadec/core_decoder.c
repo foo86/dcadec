@@ -1053,7 +1053,8 @@ int core_filter(struct core_decoder *core, int flags)
     // Filter LFE channel
     if (core->lfe_present) {
         // Select LFE DSP
-        interpolate_lfe_t interpolate;
+        interpolate_lfe_cb interpolate;
+
         if (flags & DCADEC_FLAG_CORE_BIT_EXACT)
             interpolate = interpolate_lfe_fixed_fir;
         else if (flags & DCADEC_FLAG_CORE_LFE_FIR)

@@ -24,19 +24,19 @@
 struct interpolator;
 struct idct_context;
 
-typedef void (*interpolate_lfe_t)(int *pcm_samples, int *lfe_samples,
-                                  int nsamples, bool dec_select,
-                                  bool synth_x96);
+typedef void (*interpolate_lfe_cb)(int *pcm_samples, int *lfe_samples,
+                                   int nsamples, bool dec_select,
+                                   bool synth_x96);
 
-typedef void (*interpolate_sub_t)(struct interpolator *dsp, int *pcm_samples,
-                                  int **subband_samples_lo,
-                                  int **subband_samples_hi,
-                                  int nsamples, bool perfect);
+typedef void (*interpolate_sub_cb)(struct interpolator *dsp, int *pcm_samples,
+                                   int **subband_samples_lo,
+                                   int **subband_samples_hi,
+                                   int nsamples, bool perfect);
 
 struct interpolator {
     struct idct_context *idct;
     void *history;
-    interpolate_sub_t interpolate;
+    interpolate_sub_cb interpolate;
 };
 
 struct interpolator *interpolator_create(struct idct_context *parent, int flags);
