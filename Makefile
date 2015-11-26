@@ -1,5 +1,9 @@
 VERSION = 0.0.0
 
+API_MAJOR = 0
+API_MINOR = 0
+API_PATCH = 0
+
 CFLAGS := -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall -Wextra -O3 -ffast-math -g -MMD $(CFLAGS)
 
 PREFIX ?= /usr/local
@@ -24,16 +28,19 @@ ifdef CONFIG_WINDOWS
     EXESUF ?= .exe
     DLLSUF ?= .dll
     LIBSUF ?= .a
-    LIBS ?=
 else
-    EXESUF ?=
     DLLSUF ?= .so
     LIBSUF ?= .a
     LIBS ?= -lm
+    ifdef CONFIG_SHARED
+        SONAMESUF ?= .$(API_MAJOR).$(API_MINOR).$(API_PATCH)
+        SONAMESUF_MAJOR ?= .$(API_MAJOR)
+        SONAME ?= libdcadec$(DLLSUF)$(SONAMESUF_MAJOR)
+    endif
 endif
 
 ifdef CONFIG_SHARED
-    OUT_LIB ?= libdcadec/libdcadec$(DLLSUF)
+    OUT_LIB ?= libdcadec/libdcadec$(DLLSUF)$(SONAMESUF)
 else
     OUT_LIB ?= libdcadec/libdcadec$(LIBSUF)
 endif
@@ -110,6 +117,11 @@ ifdef CONFIG_SHARED
         LDFLAGS_DLL += -Wl,--out-implib,$(IMP_LIB)
     else
         CFLAGS_DLL += -fPIC -fvisibility=hidden
+        ifdef SONAME
+            LDFLAGS_DLL += -Wl,-soname,$(SONAME)
+            EXTRA_LIB += libdcadec/libdcadec$(DLLSUF)
+            EXTRA_LIB += libdcadec/libdcadec$(DLLSUF)$(SONAMESUF_MAJOR)
+        endif
         IMP_LIB = -Llibdcadec -ldcadec
     endif
 
@@ -118,6 +130,10 @@ libdcadec/%.o: libdcadec/%.c
 
 $(OUT_LIB): $(OBJ_LIB)
 	$(CC) $(LDFLAGS_DLL) -o $@ $(OBJ_LIB) $(LIBS)
+ifdef SONAME
+	ln -sf $(@F) libdcadec/libdcadec$(DLLSUF)
+	ln -sf $(@F) libdcadec/libdcadec$(DLLSUF)$(SONAMESUF_MAJOR)
+endif
 
 $(OUT_DEC): $(OBJ_DEC) $(OUT_LIB)
 	$(CC) $(LDFLAGS) -o $@ $(OBJ_DEC) $(IMP_LIB) $(LIBS)
@@ -161,6 +177,9 @@ install-lib: $(OUT_LIB) dcadec.pc
 	install -m 644 $(OUT_LIB) $(DESTDIR)$(LIBDIR)
 	install -m 644 $(addprefix $(SRC_DIR)/, $(INC_LIB)) $(DESTDIR)$(INCLUDEDIR)/libdcadec
 	install -m 644 dcadec.pc $(DESTDIR)$(LIBDIR)/pkgconfig
+ifdef SONAME
+	ln -sf libdcadec$(DLLSUF)$(SONAMESUF) $(DESTDIR)$(LIBDIR)/libdcadec$(DLLSUF)
+endif
 
 install-dec: $(OUT_DEC)
 	install -d -m 755 $(DESTDIR)$(BINDIR)

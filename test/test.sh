@@ -7,6 +7,8 @@ if [ ! -f samples/README ] ; then
     exit 1
 fi
 
+export LD_LIBRARY_PATH=../libdcadec
+
 [ -z $SHA1SUM ] && command -v sha1sum > /dev/null && SHA1SUM=sha1sum
 [ -z $SHA1SUM ] && command -v shasum > /dev/null && SHA1SUM=shasum
 
