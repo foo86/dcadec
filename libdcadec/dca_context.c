@@ -1130,5 +1130,5 @@ DCADEC_API const char *dcadec_strerror(int errnum)
 
 DCADEC_API unsigned int dcadec_version(void)
 {
-    return DCADEC_VERSION;
+    return DCADEC_API_VERSION;
 }

@@ -29,20 +29,18 @@
     (((major) << 24) | ((minor) << 12) | (patch) | 0U)
 
 /**
- * Version of libdcadec. Major number gets bumped at each API change that
+ * Version of libdcadec API. Major number gets bumped at each API change that
  * breaks backward compatibility. Minor number gets bumped at each API change
  * that remains compatible. Patch is reserved for non-API related changes.
- *
- * THE LIBRARY IS NOT YET RELEASED, DON'T CHECK THESE NUMBERS YET.
  */
-#define DCADEC_VERSION_MAJOR 0
-#define DCADEC_VERSION_MINOR 0
-#define DCADEC_VERSION_PATCH 0
+#define DCADEC_API_VERSION_MAJOR    0
+#define DCADEC_API_VERSION_MINOR    0
+#define DCADEC_API_VERSION_PATCH    0
 
-#define DCADEC_VERSION  \
-    DCADEC_VERSION_CODE(DCADEC_VERSION_MAJOR, \
-                        DCADEC_VERSION_MINOR, \
-                        DCADEC_VERSION_PATCH)
+#define DCADEC_API_VERSION \
+    DCADEC_VERSION_CODE(DCADEC_API_VERSION_MAJOR, \
+                        DCADEC_API_VERSION_MINOR, \
+                        DCADEC_API_VERSION_PATCH)
 /**@}*/
 
 /**@{*/
@@ -354,9 +352,9 @@ DCADEC_API void dcadec_context_set_log_cb(struct dcadec_context *dca,
 DCADEC_API const char *dcadec_strerror(int errnum);
 
 /**
- * Get libdcadec version.
+ * Get libdcadec API version.
  *
- * @return  Version code of the currently running libdcadec.
+ * @return  API version code of the currently running libdcadec.
  */
 DCADEC_API unsigned int dcadec_version(void);
 
