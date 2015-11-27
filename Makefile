@@ -179,6 +179,7 @@ install-lib: $(OUT_LIB) dcadec.pc
 	install -m 644 dcadec.pc $(DESTDIR)$(LIBDIR)/pkgconfig
 ifdef SONAME
 	ln -sf libdcadec$(DLLSUF)$(SONAMESUF) $(DESTDIR)$(LIBDIR)/libdcadec$(DLLSUF)
+	ln -sf libdcadec$(DLLSUF)$(SONAMESUF) $(DESTDIR)$(LIBDIR)/libdcadec$(DLLSUF)$(SONAMESUF_MAJOR)
 endif
 
 install-dec: $(OUT_DEC)
