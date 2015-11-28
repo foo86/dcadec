@@ -2117,9 +2117,10 @@ static int parse_optional_info(struct core_decoder *core, int flags)
 
     // Core extensions
     if (core->ext_audio_present && !(flags & DCADEC_FLAG_CORE_ONLY)) {
-        size_t sync_pos = DCA_MIN(core->frame_size / 4, core->bits.total / 32);
+        size_t sync_pos = DCA_MIN(core->frame_size / 4, core->bits.total / 32) - 1;
         size_t last_pos = core->bits.index / 32;
 
+        assert(sync_pos != (size_t)-1);
         assert(last_pos);
 
         // Search for extension sync words aligned on 4-byte boundary
