@@ -349,6 +349,9 @@ DCADEC_API int dcadec_stream_read(struct dcadec_stream *stream, uint8_t **data, 
     uint32_t sync;
     int ret;
 
+    if (!stream || !data || !size)
+        return -DCADEC_EINVAL;
+
     // Loop until valid DTS core or standalone EXSS frame is read or EOF is
     // reached
     while (true) {
@@ -385,7 +388,7 @@ DCADEC_API int dcadec_stream_read(struct dcadec_stream *stream, uint8_t **data, 
 
 DCADEC_API int dcadec_stream_progress(struct dcadec_stream *stream)
 {
-    if (stream->stream_size > 0) {
+    if (stream && stream->stream_size > 0) {
         off_t pos = ftello(stream->fp);
         if (pos < stream->stream_start)
             return 0;
