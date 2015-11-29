@@ -79,7 +79,7 @@ DCADEC_API int dcadec_stream_read(struct dcadec_stream *stream, uint8_t **data, 
 DCADEC_API int dcadec_stream_progress(struct dcadec_stream *stream);
 
 /**
- * Get audio properties information from DTS-HD container. For raw DTS streams
+ * Get audio presentation information from DTS-HD container. For raw DTS streams
  * this function always fails.
  *
  * @param stream    Stream handle.
@@ -91,7 +91,7 @@ DCADEC_API int dcadec_stream_progress(struct dcadec_stream *stream);
 DCADEC_API struct dcadec_stream_info *dcadec_stream_get_info(struct dcadec_stream *stream);
 
 /**
- * Free audio properties information structure.
+ * Free audio presentation information structure.
  *
  * @param info  Pointer to information structure.
  */
