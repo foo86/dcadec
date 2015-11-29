@@ -45,7 +45,7 @@ struct idct_context {
     double dct_b[DCT_B_ROWS][DCT_B_COLS];
 
     double mod_a[MOD_A_SIZE];
-    double mod_b[MOD64_B_SIZE];
+    double mod_b[MOD_B_SIZE];
     double mod_c[MOD_C_SIZE];
 
     double mod64_a[MOD64_A_SIZE];
