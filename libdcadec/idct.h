@@ -19,19 +19,38 @@
 #ifndef IDCT_H
 #define IDCT_H
 
+#define DCT_A_ROWS      8
+#define DCT_A_COLS      8
+#define DCT_B_ROWS      8
+#define DCT_B_COLS      7
+
+#define MOD_A_SIZE      16
+#define MOD_B_SIZE      8
+#define MOD_C_SIZE      32
+#define MOD_A_HALF      (MOD_A_SIZE / 2)
+#define MOD_B_HALF      (MOD_B_SIZE / 2)
+#define MOD_C_HALF      (MOD_C_SIZE / 2)
+
+#define MOD64_A_SIZE    32
+#define MOD64_B_SIZE    16
+#define MOD64_C_SIZE    64
+#define MOD64_A_HALF    (MOD64_A_SIZE / 2)
+#define MOD64_B_HALF    (MOD64_B_SIZE / 2)
+#define MOD64_C_HALF    (MOD64_C_SIZE / 2)
+
 struct core_decoder;
 
 struct idct_context {
-    double dct_a[8][8];
-    double dct_b[8][7];
+    double dct_a[DCT_A_ROWS][DCT_A_COLS];
+    double dct_b[DCT_B_ROWS][DCT_B_COLS];
 
-    double mod_a[16];
-    double mod_b[ 8];
-    double mod_c[32];
+    double mod_a[MOD_A_SIZE];
+    double mod_b[MOD_B_SIZE];
+    double mod_c[MOD_C_SIZE];
 
-    double mod64_a[32];
-    double mod64_b[16];
-    double mod64_c[64];
+    double mod64_a[MOD64_A_SIZE];
+    double mod64_b[MOD64_B_SIZE];
+    double mod64_c[MOD64_C_SIZE];
 };
 
 struct idct_context *idct_init(struct core_decoder *parent);

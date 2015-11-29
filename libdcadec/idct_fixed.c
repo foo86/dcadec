@@ -50,7 +50,7 @@ static void dct_a(const int * restrict input, int * restrict output)
 {
     //  floor(sin((2 * i + 1) * (2 * (7 - j) + 1) * PI / 32) * (1 << 23) + 0.5), i = 2 * k
     // -floor(sin((2 * i + 1) * (2 * (7 - j) + 1) * PI / 32) * (1 << 23) + 0.5), i = 2 * k + 1
-    static const int cos_mod[8][8] = {
+    static const int cos_mod[DCT_A_ROWS][DCT_A_COLS] = {
          { 8348215,  8027397,  7398092,  6484482,  5321677,  3954362,  2435084,   822227 },
          { 8027397,  5321677,   822227, -3954362, -7398092, -8348215, -6484482, -2435084 },
          { 7398092,   822227, -6484482, -8027397, -2435084,  5321677,  8348215,  3954362 },
@@ -61,9 +61,9 @@ static void dct_a(const int * restrict input, int * restrict output)
          {  822227, -2435084,  3954362, -5321677,  6484482, -7398092,  8027397, -8348215 }
     };
 
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < DCT_A_ROWS; i++) {
         int64_t res = INT64_C(0);
-        for (int j = 0; j < 8; j++)
+        for (int j = 0; j < DCT_A_COLS; j++)
             res += (int64_t)cos_mod[i][j] * input[j];
         output[i] = norm23(res);
     }
@@ -72,7 +72,7 @@ static void dct_a(const int * restrict input, int * restrict output)
 static void dct_b(const int * restrict input, int * restrict output)
 {
     // floor(cos((2 * i + 1) * (j + 1) * PI / 16) * (1 << 23) + 0.5)
-    static const int cos_mod[8][7] = {
+    static const int cos_mod[DCT_B_ROWS][DCT_B_COLS] = {
         {  8227423,  7750063,  6974873,  5931642,  4660461,  3210181,  1636536 },
         {  6974873,  3210181, -1636536, -5931642, -8227423, -7750063, -4660461 },
         {  4660461, -3210181, -8227423, -5931642,  1636536,  7750063,  6974873 },
@@ -83,9 +83,9 @@ static void dct_b(const int * restrict input, int * restrict output)
         { -8227423,  7750063, -6974873,  5931642, -4660461,  3210181, -1636536 }
     };
 
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < DCT_B_ROWS; i++) {
         int64_t res = (int64_t)input[0] * (1 << 23);
-        for (int j = 0; j < 7; j++)
+        for (int j = 0; j < DCT_B_COLS; j++)
             res += (int64_t)cos_mod[i][j] * input[1 + j];
         output[i] = norm23(res);
     }
@@ -95,44 +95,43 @@ static void mod_a(const int * restrict input, int * restrict output)
 {
     //  floor(0.5 / cos((2 * (     i) + 1) * PI / 64) * (1 << 23) + 0.5), i = 0 ..  8
     // -floor(0.5 / sin((2 * (15 - i) + 1) * PI / 64) * (1 << 23) + 0.5), i = 8 .. 16
-    static const int cos_mod[16] = {
+    static const int cos_mod[MOD_A_SIZE] = {
           4199362,   4240198,   4323885,   4454708,
           4639772,   4890013,   5221943,   5660703,
          -6245623,  -7040975,  -8158494,  -9809974,
         -12450076, -17261920, -28585092, -85479984
     };
 
-    for (int i = 0; i < 8; i++)
-        output[i] = mul23(cos_mod[i], input[i] + input[8 + i]);
+    for (int i = 0; i < MOD_A_HALF; i++)
+        output[i] = mul23(cos_mod[i], input[i] + input[MOD_A_HALF + i]);
 
-    for (int i = 8, k = 7; i < 16; i++, k--)
-        output[i] = mul23(cos_mod[i], input[k] - input[8 + k]);
+    for (int i = MOD_A_HALF, k = MOD_A_HALF - 1; i < MOD_A_SIZE; i++, k--)
+        output[i] = mul23(cos_mod[i], input[k] - input[MOD_A_HALF + k]);
 }
 
 static void mod_b(int * restrict input, int * restrict output)
 {
     // floor(0.5 / cos((2 * (    i) + 1) * PI / 32) * (1 << 23) + 0.5), i = 0 .. 4
     // floor(0.5 / sin((2 * (7 - i) + 1) * PI / 32) * (1 << 23) + 0.5), i = 4 .. 8
-    static const int cos_mod[8] = {
+    static const int cos_mod[MOD_B_SIZE] = {
         4214598,  4383036,  4755871,  5425934,
         6611520,  8897610, 14448934, 42791536
     };
 
-    for (int i = 0; i < 8; i++)
-        input[8 + i] = mul23(cos_mod[i], input[8 + i]);
+    for (int i = 0; i < MOD_B_SIZE; i++) {
+        input[MOD_B_SIZE + i] = mul23(cos_mod[i], input[MOD_B_SIZE + i]);
+        output[i] = input[i] + input[MOD_B_SIZE + i];
+    }
 
-    for (int i = 0; i < 8; i++)
-        output[i] = input[i] + input[8 + i];
-
-    for (int i = 8, k = 7; i < 16; i++, k--)
-        output[i] = input[k] - input[8 + k];
+    for (int i = 0, k = MOD_B_SIZE - 1; i < MOD_B_SIZE; i++, k--)
+        output[MOD_B_SIZE + i] = input[k] - input[MOD_B_SIZE + k];
 }
 
 static void mod_c(const int * restrict input, int * restrict output)
 {
     //  floor(0.125 / cos((2 * (     i) + 1) * PI / 128) * (1 << 23) + 0.5), i =  0 .. 16
     // -floor(0.125 / sin((2 * (31 - i) + 1) * PI / 128) * (1 << 23) + 0.5), i = 16 .. 32
-    static const int cos_mod[32] = {
+    static const int cos_mod[MOD_C_SIZE] = {
          1048892,  1051425,   1056522,   1064244,
          1074689,  1087987,   1104313,   1123884,
          1146975,  1173922,   1205139,   1241133,
@@ -143,11 +142,11 @@ static void mod_c(const int * restrict input, int * restrict output)
         -6133390, -8566050, -14253820, -42727120
     };
 
-    for (int i = 0; i < 16; i++)
-        output[i] = mul23(cos_mod[i], input[i] + input[16 + i]);
+    for (int i = 0; i < MOD_C_HALF; i++)
+        output[i] = mul23(cos_mod[i], input[i] + input[MOD_C_HALF + i]);
 
-    for (int i = 16, k = 15; i < 32; i++, k--)
-        output[i] = mul23(cos_mod[i], input[k] - input[16 + k]);
+    for (int i = MOD_C_HALF, k = MOD_C_HALF - 1; i < MOD_C_SIZE; i++, k--)
+        output[i] = mul23(cos_mod[i], input[k] - input[MOD_C_HALF + k]);
 }
 
 static void clp_v(int *input, int len)
@@ -198,7 +197,7 @@ static void mod64_a(const int * restrict input, int * restrict output)
 {
     //  floor(0.5 / cos((2 * (     i) + 1) * PI / 128) * (1 << 23) + 0.5), i =  0 .. 16
     // -floor(0.5 / sin((2 * (31 - i) + 1) * PI / 128) * (1 << 23) + 0.5), i = 16 .. 32
-    static const int cos_mod[32] = {
+    static const int cos_mod[MOD64_A_SIZE] = {
           4195568,   4205700,   4226086,    4256977,
           4298755,   4351949,   4417251,    4495537,
           4587901,   4695690,   4820557,    4964534,
@@ -209,39 +208,38 @@ static void mod64_a(const int * restrict input, int * restrict output)
         -24533560, -34264200, -57015280, -170908480
     };
 
-    for (int i = 0; i < 16; i++)
-        output[i] = mul23(cos_mod[i], input[i] + input[16 + i]);
+    for (int i = 0; i < MOD64_A_HALF; i++)
+        output[i] = mul23(cos_mod[i], input[i] + input[MOD64_A_HALF + i]);
 
-    for (int i = 16, k = 15; i < 32; i++, k--)
-        output[i] = mul23(cos_mod[i], input[k] - input[16 + k]);
+    for (int i = MOD64_A_HALF, k = MOD64_A_HALF - 1; i < MOD64_A_SIZE; i++, k--)
+        output[i] = mul23(cos_mod[i], input[k] - input[MOD64_A_HALF + k]);
 }
 
 static void mod64_b(int * restrict input, int * restrict output)
 {
     // floor(0.5 / cos((2 * (     i) + 1) * PI / 64) * (1 << 23) + 0.5), i = 0 ..  8
     // floor(0.5 / sin((2 * (15 - i) + 1) * PI / 64) * (1 << 23) + 0.5), i = 8 .. 16
-    static const int cos_mod[16] = {
+    static const int cos_mod[MOD64_B_SIZE] = {
          4199362,  4240198,  4323885,  4454708,
          4639772,  4890013,  5221943,  5660703,
          6245623,  7040975,  8158494,  9809974,
         12450076, 17261920, 28585092, 85479984
     };
 
-    for (int i = 0; i < 16; i++)
-        input[16 + i] = mul23(cos_mod[i], input[16 + i]);
+    for (int i = 0; i < MOD64_B_SIZE; i++) {
+        input[MOD64_B_SIZE + i] = mul23(cos_mod[i], input[MOD64_B_SIZE + i]);
+        output[i] = input[i] + input[MOD64_B_SIZE + i];
+    }
 
-    for (int i = 0; i < 16; i++)
-        output[i] = input[i] + input[16 + i];
-
-    for (int i = 16, k = 15; i < 32; i++, k--)
-        output[i] = input[k] - input[16 + k];
+    for (int i = 0, k = MOD64_B_SIZE - 1; i < MOD64_B_SIZE; i++, k--)
+        output[MOD64_B_SIZE + i] = input[k] - input[MOD64_B_SIZE + k];
 }
 
 static void mod64_c(const int * restrict input, int * restrict output)
 {
     //  floor(0.125 / SQRT2 / cos((2 * (     i) + 1) * PI / 256) * (1 << 23) + 0.5), i =  0 .. 32
     // -floor(0.125 / SQRT2 / sin((2 * (63 - i) + 1) * PI / 256) * (1 << 23) + 0.5), i = 32 .. 64
-    static const int cos_mod[64] = {
+    static const int cos_mod[MOD64_C_SIZE] = {
           741511,    741958,    742853,    744199,
           746001,    748262,    750992,    754197,
           757888,    762077,    766777,    772003,
@@ -260,11 +258,11 @@ static void mod64_c(const int * restrict input, int * restrict output)
         -8641940, -12091426, -20144284, -60420720
     };
 
-    for (int i = 0; i < 32; i++)
-        output[i] = mul23(cos_mod[i], input[i] + input[32 + i]);
+    for (int i = 0; i < MOD64_C_HALF; i++)
+        output[i] = mul23(cos_mod[i], input[i] + input[MOD64_C_HALF + i]);
 
-    for (int i = 32, k = 31; i < 64; i++, k--)
-        output[i] = mul23(cos_mod[i], input[k] - input[32 + k]);
+    for (int i = MOD64_C_HALF, k = MOD64_C_HALF - 1; i < MOD64_C_SIZE; i++, k--)
+        output[i] = mul23(cos_mod[i], input[k] - input[MOD64_C_HALF + k]);
 }
 
 void idct_perform64_fixed(int * restrict input, int * restrict output)
