@@ -103,7 +103,7 @@ static char *make_spkr_mask_str(int mask)
         return "???";
 
     buf[0] = 0;
-    for (size_t i = 0; i < sizeof(spkr_pair_names)/sizeof(0[spkr_pair_names]); i++) {
+    for (size_t i = 0; i < sizeof(spkr_pair_names)/sizeof(spkr_pair_names[0]]); i++) {
         if (mask & (1 << i)) {
             if (buf[0])
                 strcat(buf, " ");
