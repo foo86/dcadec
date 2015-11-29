@@ -26,12 +26,14 @@
 #define MOD_A_SIZE      16
 #define MOD_A_HALF      8
 #define MOD_B_SIZE      8
+#define MOD_B_HALF      4
 #define MOD_B_DBL       16
 #define MOD_C_SIZE      32
 #define MOD_C_HALF      16
 #define MOD64_A_SIZE    32
 #define MOD64_A_HALF    16
 #define MOD64_B_SIZE    16
+#define MOD64_B_HALF    8
 #define MOD64_B_DBL     32
 #define MOD64_C_SIZE    64
 #define MOD64_C_HALF    32
