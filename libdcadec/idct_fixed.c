@@ -101,13 +101,12 @@ static void mod_a(const int * restrict input, int * restrict output)
          -6245623,  -7040975,  -8158494,  -9809974,
         -12450076, -17261920, -28585092, -85479984
     };
-    const int half_size = MOD_A_SIZE / 2;
 
-    for (int i = 0; i < half_size; i++)
-        output[i] = mul23(cos_mod[i], input[i] + input[half_size + i]);
+    for (int i = 0; i < MOD_A_HALF; i++)
+        output[i] = mul23(cos_mod[i], input[i] + input[MOD_A_HALF + i]);
 
-    for (int i = half_size, k = half_size - 1; i < MOD_A_SIZE; i++, k--)
-        output[i] = mul23(cos_mod[i], input[k] - input[half_size + k]);
+    for (int i = MOD_A_HALF, k = MOD_A_HALF - 1; i < MOD_A_SIZE; i++, k--)
+        output[i] = mul23(cos_mod[i], input[k] - input[MOD_A_HALF + k]);
 }
 
 static void mod_b(int * restrict input, int * restrict output)
@@ -124,7 +123,7 @@ static void mod_b(int * restrict input, int * restrict output)
         output[i] = input[i] + input[MOD_B_SIZE + i];
     }
 
-    for (int i = MOD_B_SIZE, k = MOD_B_SIZE - 1; i < 2 * MOD_B_SIZE; i++, k--)
+    for (int i = MOD_B_SIZE, k = MOD_B_SIZE - 1; i < MOD_B_DBL; i++, k--)
         output[i] = input[k] - input[MOD_B_SIZE + k];
 }
 
@@ -142,13 +141,12 @@ static void mod_c(const int * restrict input, int * restrict output)
         -2913561, -3342802,  -3931480,  -4785806,
         -6133390, -8566050, -14253820, -42727120
     };
-    const int half_size = MOD_C_SIZE / 2;
 
-    for (int i = 0; i < half_size; i++)
-        output[i] = mul23(cos_mod[i], input[i] + input[half_size + i]);
+    for (int i = 0; i < MOD_C_HALF; i++)
+        output[i] = mul23(cos_mod[i], input[i] + input[MOD_C_HALF + i]);
 
-    for (int i = half_size, k = half_size - 1; i < MOD_C_SIZE; i++, k--)
-        output[i] = mul23(cos_mod[i], input[k] - input[half_size + k]);
+    for (int i = MOD_C_HALF, k = MOD_C_HALF - 1; i < MOD_C_SIZE; i++, k--)
+        output[i] = mul23(cos_mod[i], input[k] - input[MOD_C_HALF + k]);
 }
 
 static void clp_v(int *input, int len)
@@ -209,13 +207,12 @@ static void mod64_a(const int * restrict input, int * restrict output)
         -11654242, -13371208, -15725922,  -19143224,
         -24533560, -34264200, -57015280, -170908480
     };
-    const int half_size = MOD64_A_SIZE / 2;
 
-    for (int i = 0; i < half_size; i++)
-        output[i] = mul23(cos_mod[i], input[i] + input[half_size + i]);
+    for (int i = 0; i < MOD64_A_HALF; i++)
+        output[i] = mul23(cos_mod[i], input[i] + input[MOD64_A_HALF + i]);
 
-    for (int i = half_size, k = half_size - 1; i < MOD64_A_SIZE; i++, k--)
-        output[i] = mul23(cos_mod[i], input[k] - input[half_size + k]);
+    for (int i = MOD64_A_HALF, k = MOD64_A_HALF - 1; i < MOD64_A_SIZE; i++, k--)
+        output[i] = mul23(cos_mod[i], input[k] - input[MOD64_A_HALF + k]);
 }
 
 static void mod64_b(int * restrict input, int * restrict output)
@@ -234,7 +231,7 @@ static void mod64_b(int * restrict input, int * restrict output)
         output[i] = input[i] + input[MOD64_B_SIZE + i];
     }
 
-    for (int i = MOD64_B_SIZE, k = MOD64_B_SIZE - 1; i < 2 * MOD64_B_SIZE; i++, k--)
+    for (int i = MOD64_B_SIZE, k = MOD64_B_SIZE - 1; i < MOD64_B_DBL; i++, k--)
         output[i] = input[k] - input[MOD64_B_SIZE + k];
 }
 
@@ -260,12 +257,12 @@ static void mod64_c(const int * restrict input, int * restrict output)
         -4050785,  -4667404,  -5509372,  -6726913,
         -8641940, -12091426, -20144284, -60420720
     };
-    const int half_size = MOD64_C_SIZE / 2;
 
-    for (int i = 0; i < half_size; i++)
-        output[i] = mul23(cos_mod[i], input[i] + input[half_size + i]);
-    for (int i = half_size, k = half_size - 1; i < MOD64_C_SIZE; i++, k--)
-        output[i] = mul23(cos_mod[i], input[k] - input[half_size + k]);
+    for (int i = 0; i < MOD64_C_HALF; i++)
+        output[i] = mul23(cos_mod[i], input[i] + input[MOD64_C_HALF + i]);
+
+    for (int i = MOD64_C_HALF, k = MOD64_C_HALF - 1; i < MOD64_C_SIZE; i++, k--)
+        output[i] = mul23(cos_mod[i], input[k] - input[MOD64_C_HALF + k]);
 }
 
 void idct_perform64_fixed(int * restrict input, int * restrict output)
