@@ -40,7 +40,7 @@
 #include "libdcadec/dca_context.h"
 #include "libdcadec/dca_waveout.h"
 
-static void print_help(char *name)
+static void print_help(const char *name)
 {
     fprintf(stderr,
 "Usage: %s [-26bcfhlmnPqSx] <input.dts> [output.wav]\n"
@@ -103,7 +103,7 @@ static char *make_spkr_mask_str(int mask)
         return "???";
 
     buf[0] = 0;
-    for (int i = 0; i < 16; i++) {
+    for (size_t i = 0; i < sizeof(spkr_pair_names)/sizeof(spkr_pair_names[0]); i++) {
         if (mask & (1 << i)) {
             if (buf[0])
                 strcat(buf, " ");
@@ -354,17 +354,10 @@ int main(int argc, char **argv)
     }
 
     if (!quiet) {
-        if (waveout) {
-            if (flags & DCADEC_FLAG_CORE_ONLY)
-                fprintf(stderr, "Decoding (core only)...\n");
-            else
-                fprintf(stderr, "Decoding...\n");
-        } else {
-            if (flags & DCADEC_FLAG_CORE_ONLY)
-                fprintf(stderr, "Parsing (core only)...\n");
-            else
-                fprintf(stderr, "Parsing...\n");
-        }
+        const bool core_only = (flags & DCADEC_FLAG_CORE_ONLY);
+        fprintf(stderr, "%s%s...\n",
+                waveout ? "Decoding" : "Parsing",
+                core_only ? " (core only)" : "");
     }
 
     while (!interrupted) {
