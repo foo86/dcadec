@@ -24,16 +24,25 @@
 #define DCT_B_ROWS      8
 #define DCT_B_COLS      7
 
-#define MOD_A_SIZE      16
-#define MOD_B_SIZE      8
-#define MOD_C_SIZE      32
+#define IDCT_SIZE       32
+#define IDCT_SIZE_2     (IDCT_SIZE / 2)
+#define IDCT_SIZE_4     (IDCT_SIZE / 4)
+
+#define MOD_A_SIZE      IDCT_SIZE_2
+#define MOD_B_SIZE      IDCT_SIZE_4
+#define MOD_C_SIZE      IDCT_SIZE
 #define MOD_A_HALF      (MOD_A_SIZE / 2)
 #define MOD_B_HALF      (MOD_B_SIZE / 2)
 #define MOD_C_HALF      (MOD_C_SIZE / 2)
 
-#define MOD64_A_SIZE    32
-#define MOD64_B_SIZE    16
-#define MOD64_C_SIZE    64
+#define IDCT64_SIZE     64
+#define IDCT64_SIZE_2   (IDCT64_SIZE / 2)
+#define IDCT64_SIZE_4   (IDCT64_SIZE / 4)
+#define IDCT64_SIZE_8   (IDCT64_SIZE / 8)
+
+#define MOD64_A_SIZE    IDCT64_SIZE_2
+#define MOD64_B_SIZE    IDCT64_SIZE_4
+#define MOD64_C_SIZE    IDCT64_SIZE
 #define MOD64_A_HALF    (MOD64_A_SIZE / 2)
 #define MOD64_B_HALF    (MOD64_B_SIZE / 2)
 #define MOD64_C_HALF    (MOD64_C_SIZE / 2)

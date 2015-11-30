@@ -162,21 +162,21 @@ static void mod_c(const struct idct_context * restrict idct,
 void idct_perform32_float(const struct idct_context * restrict idct,
                           double * restrict input, double * restrict output)
 {
-    sum_a(input, output +  0, 16);
-    sum_b(input, output + 16, 16);
+    sum_a(input, output + 0 * IDCT_SIZE_2, IDCT_SIZE_2);
+    sum_b(input, output + 1 * IDCT_SIZE_2, IDCT_SIZE_2);
 
-    sum_a(output +  0, input +  0, 8);
-    sum_b(output +  0, input +  8, 8);
-    sum_c(output + 16, input + 16, 8);
-    sum_d(output + 16, input + 24, 8);
+    sum_a(output + 0 * IDCT_SIZE_2, input + 0 * IDCT_SIZE_4, IDCT_SIZE_4);
+    sum_b(output + 0 * IDCT_SIZE_2, input + 1 * IDCT_SIZE_4, IDCT_SIZE_4);
+    sum_c(output + 1 * IDCT_SIZE_2, input + 2 * IDCT_SIZE_4, IDCT_SIZE_4);
+    sum_d(output + 1 * IDCT_SIZE_2, input + 3 * IDCT_SIZE_4, IDCT_SIZE_4);
 
-    dct_a(idct, input +  0, output +  0);
-    dct_b(idct, input +  8, output +  8);
-    dct_b(idct, input + 16, output + 16);
-    dct_b(idct, input + 24, output + 24);
+    dct_a(idct, input + 0 * IDCT_SIZE_4, output + 0 * IDCT_SIZE_4);
+    dct_b(idct, input + 1 * IDCT_SIZE_4, output + 1 * IDCT_SIZE_4);
+    dct_b(idct, input + 2 * IDCT_SIZE_4, output + 2 * IDCT_SIZE_4);
+    dct_b(idct, input + 3 * IDCT_SIZE_4, output + 3 * IDCT_SIZE_4);
 
-    mod_a(idct, output +  0, input +  0);
-    mod_b(idct, output + 16, input + 16);
+    mod_a(idct, output + 0 * IDCT_SIZE_2, input + 0 * IDCT_SIZE_2);
+    mod_b(idct, output + 1 * IDCT_SIZE_2, input + 1 * IDCT_SIZE_2);
 
     mod_c(idct, input, output);
 }
@@ -216,39 +216,39 @@ static void mod64_c(const struct idct_context * restrict idct,
 void idct_perform64_float(const struct idct_context * restrict idct,
                           double * restrict input, double * restrict output)
 {
-    sum_a(input, output +  0, 32);
-    sum_b(input, output + 32, 32);
+    sum_a(input, output + 0 * IDCT64_SIZE_2, IDCT64_SIZE_2);
+    sum_b(input, output + 1 * IDCT64_SIZE_2, IDCT64_SIZE_2);
 
-    sum_a(output +  0, input +  0, 16);
-    sum_b(output +  0, input + 16, 16);
-    sum_c(output + 32, input + 32, 16);
-    sum_d(output + 32, input + 48, 16);
+    sum_a(output + 0 * IDCT64_SIZE_2, input + 0 * IDCT64_SIZE_4, IDCT64_SIZE_4);
+    sum_b(output + 0 * IDCT64_SIZE_2, input + 1 * IDCT64_SIZE_4, IDCT64_SIZE_4);
+    sum_c(output + 1 * IDCT64_SIZE_2, input + 2 * IDCT64_SIZE_4, IDCT64_SIZE_4);
+    sum_d(output + 1 * IDCT64_SIZE_2, input + 3 * IDCT64_SIZE_4, IDCT64_SIZE_4);
 
-    sum_a(input +  0, output +  0, 8);
-    sum_b(input +  0, output +  8, 8);
-    sum_c(input + 16, output + 16, 8);
-    sum_d(input + 16, output + 24, 8);
-    sum_c(input + 32, output + 32, 8);
-    sum_d(input + 32, output + 40, 8);
-    sum_c(input + 48, output + 48, 8);
-    sum_d(input + 48, output + 56, 8);
+    sum_a(input + 0 * IDCT64_SIZE_4, output + 0 * IDCT64_SIZE_8, IDCT64_SIZE_8);
+    sum_b(input + 0 * IDCT64_SIZE_4, output + 1 * IDCT64_SIZE_8, IDCT64_SIZE_8);
+    sum_c(input + 1 * IDCT64_SIZE_4, output + 2 * IDCT64_SIZE_8, IDCT64_SIZE_8);
+    sum_d(input + 1 * IDCT64_SIZE_4, output + 3 * IDCT64_SIZE_8, IDCT64_SIZE_8);
+    sum_c(input + 2 * IDCT64_SIZE_4, output + 4 * IDCT64_SIZE_8, IDCT64_SIZE_8);
+    sum_d(input + 2 * IDCT64_SIZE_4, output + 5 * IDCT64_SIZE_8, IDCT64_SIZE_8);
+    sum_c(input + 3 * IDCT64_SIZE_4, output + 6 * IDCT64_SIZE_8, IDCT64_SIZE_8);
+    sum_d(input + 3 * IDCT64_SIZE_4, output + 7 * IDCT64_SIZE_8, IDCT64_SIZE_8);
 
-    dct_a(idct, output +  0, input +  0);
-    dct_b(idct, output +  8, input +  8);
-    dct_b(idct, output + 16, input + 16);
-    dct_b(idct, output + 24, input + 24);
-    dct_b(idct, output + 32, input + 32);
-    dct_b(idct, output + 40, input + 40);
-    dct_b(idct, output + 48, input + 48);
-    dct_b(idct, output + 56, input + 56);
+    dct_a(idct, output + 0 * IDCT64_SIZE_8, input + 0 * IDCT64_SIZE_8);
+    dct_b(idct, output + 1 * IDCT64_SIZE_8, input + 1 * IDCT64_SIZE_8);
+    dct_b(idct, output + 2 * IDCT64_SIZE_8, input + 2 * IDCT64_SIZE_8);
+    dct_b(idct, output + 3 * IDCT64_SIZE_8, input + 3 * IDCT64_SIZE_8);
+    dct_b(idct, output + 4 * IDCT64_SIZE_8, input + 4 * IDCT64_SIZE_8);
+    dct_b(idct, output + 5 * IDCT64_SIZE_8, input + 5 * IDCT64_SIZE_8);
+    dct_b(idct, output + 6 * IDCT64_SIZE_8, input + 6 * IDCT64_SIZE_8);
+    dct_b(idct, output + 7 * IDCT64_SIZE_8, input + 7 * IDCT64_SIZE_8);
 
-    mod_a(idct, input +  0, output +  0);
-    mod_b(idct, input + 16, output + 16);
-    mod_b(idct, input + 32, output + 32);
-    mod_b(idct, input + 48, output + 48);
+    mod_a(idct, input + 0 * IDCT64_SIZE_4, output + 0 * IDCT64_SIZE_4);
+    mod_b(idct, input + 1 * IDCT64_SIZE_4, output + 1 * IDCT64_SIZE_4);
+    mod_b(idct, input + 2 * IDCT64_SIZE_4, output + 2 * IDCT64_SIZE_4);
+    mod_b(idct, input + 3 * IDCT64_SIZE_4, output + 3 * IDCT64_SIZE_4);
 
-    mod64_a(idct, output +  0, input +  0);
-    mod64_b(idct, output + 32, input + 32);
+    mod64_a(idct, output + 0 * IDCT64_SIZE_2, input + 0 * IDCT64_SIZE_2);
+    mod64_b(idct, output + 1 * IDCT64_SIZE_2, input + 1 * IDCT64_SIZE_2);
 
     mod64_c(idct, input, output);
 }
