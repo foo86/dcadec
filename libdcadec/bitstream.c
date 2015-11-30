@@ -19,14 +19,6 @@
 #include "common.h"
 #include "bitstream.h"
 
-void bits_init(struct bitstream *bits, uint8_t *data, size_t size)
-{
-    assert(!((uintptr_t)data & 3));
-    bits->data = (uint32_t *)data;
-    bits->total = size << 3;
-    bits->index = 0;
-}
-
 static inline uint32_t bits_peek(struct bitstream *bits)
 {
     if (bits->index >= bits->total)
@@ -131,37 +123,6 @@ int bits_get_signed_vlc(struct bitstream *bits, const struct huffman *h)
 {
     int v = bits_get_unsigned_vlc(bits, h);
     return ((v >> 1) ^ ((v & 1) - 1)) + 1;
-}
-
-void bits_skip(struct bitstream *bits, int n)
-{
-    assert(n >= 0);
-    bits->index += n;
-}
-
-void bits_skip1(struct bitstream *bits)
-{
-    bits->index++;
-}
-
-int bits_seek(struct bitstream *bits, size_t n)
-{
-    if (n < bits->index || n > bits->total)
-        return -DCADEC_EBADREAD;
-    bits->index = n;
-    return 0;
-}
-
-size_t bits_align1(struct bitstream *bits)
-{
-    bits->index = DCA_ALIGN(bits->index, 8);
-    return bits->index;
-}
-
-size_t bits_align4(struct bitstream *bits)
-{
-    bits->index = DCA_ALIGN(bits->index, 32);
-    return bits->index;
 }
 
 static uint16_t crc16(const uint8_t *data, size_t size)
