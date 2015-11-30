@@ -167,10 +167,7 @@ static inline uint32_t DCA_MEM32NE(const void *data)
 
 void dca_format_log(dcadec_log_cb cb, void *cbarg, int level,
                     const char *file, int line, const char *fmt, ...)
-#ifdef __GNUC__
-    __attribute__((format(printf, 6, 7)))
-#endif
-;
+    __attribute__((format(printf, 6, 7)));
 
 #define dca_log(lvl, obj, ...) \
     do { \

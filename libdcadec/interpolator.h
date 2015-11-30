@@ -39,8 +39,9 @@ struct interpolator {
     interpolate_sub_cb interpolate;
 };
 
-struct interpolator *interpolator_create(struct idct_context *parent, int flags);
-void interpolator_clear(struct interpolator *dsp);
+struct interpolator *interpolator_create(struct idct_context *parent, int flags)
+    __attribute__((cold));
+void interpolator_clear(struct interpolator *dsp) __attribute__((cold));
 
 #define INTERPOLATE_LFE(x) \
     void interpolate_##x(int *pcm_samples, int *lfe_samples, \

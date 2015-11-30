@@ -165,8 +165,8 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
 int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
                     int flags, struct exss_asset *asset);
 int core_filter(struct core_decoder *core, int flags);
-void core_clear(struct core_decoder *core);
-struct dcadec_core_info *core_get_info(struct core_decoder *core);
-struct dcadec_exss_info *core_get_info_exss(struct core_decoder *core);
+void core_clear(struct core_decoder *core) __attribute__((cold));
+struct dcadec_core_info *core_get_info(struct core_decoder *core) __attribute__((cold));
+struct dcadec_exss_info *core_get_info_exss(struct core_decoder *core) __attribute__((cold));
 
 #endif

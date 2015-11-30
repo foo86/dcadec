@@ -31,6 +31,10 @@
 typedef __int64 off_t;
 #endif
 
+#ifndef __GNUC__
+#define __attribute__(x)
+#endif
+
 #define AT_LEAST_GCC(major, minor)  \
     (defined __GNUC__) && ((__GNUC__ > (major)) || (__GNUC__ == (major) && __GNUC_MINOR__ >= (minor)))
 

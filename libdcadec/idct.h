@@ -62,7 +62,7 @@ struct idct_context {
     double mod64_c[MOD64_C_SIZE];
 };
 
-struct idct_context *idct_init(struct core_decoder *parent);
+struct idct_context *idct_init(struct core_decoder *parent) __attribute__((cold));
 
 void idct_perform32_float(const struct idct_context * restrict idct,
                           double * restrict input, double * restrict output);

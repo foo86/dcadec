@@ -526,8 +526,9 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
 static void force_lossy_output(struct core_decoder *core, struct xll_chset *c)
 {
     // Clear all band data
-    for (int band = 0; band < c->nfreqbands; band++)
-        xll_clear_band_data(c, band);
+    xll_clear_band_data(c, XLL_BAND_0);
+    if (c->nfreqbands > 1)
+        xll_clear_band_data(c, XLL_BAND_1);
 
     // Clear decimator history and scalable LSBs
     memset(c->deci_history, 0, sizeof(c->deci_history));
