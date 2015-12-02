@@ -46,7 +46,7 @@ DCADEC_API int dcadec_frame_convert_bitstream(uint8_t *dst, size_t *dst_size,
     uint16_t *_dst = (uint16_t *)dst;
     size_t count;
 
-    if (!dst || !dst_size || !src || ((uintptr_t)_dst & 3))
+    if (!dst || !dst_size || !src || src_size < 4 || ((uintptr_t)_dst & 3))
         return -DCADEC_EINVAL;
 
     if ((uintptr_t)_src & 1)
@@ -105,7 +105,7 @@ DCADEC_API int dcadec_frame_parse_header(const uint8_t *data, size_t *size)
     size_t header_size, frame_size;
 
     if (!data || !size)
-        return DCADEC_EINVAL;
+        return -DCADEC_EINVAL;
 
     int ret;
     if ((ret = dcadec_frame_convert_bitstream(header, &header_size,
