@@ -63,6 +63,13 @@ enum ExtAudioType {
     EXT_AUDIO_XXCH  = 6
 };
 
+enum LFEFlag {
+    LFE_FLAG_NONE,
+    LFE_FLAG_128,
+    LFE_FLAG_64,
+    LFE_FLAG_INVALID
+};
+
 static const int8_t prm_ch_to_spkr_map[AMODE_COUNT][5] = {
     { SPEAKER_C,        -1,         -1,         -1,         -1 },
     { SPEAKER_L, SPEAKER_R,         -1,         -1,         -1 },
@@ -166,7 +173,7 @@ static int parse_frame_header(struct core_decoder *core)
 
     // Low frequency effects flag
     core->lfe_present = bits_get(&core->bits, 2);
-    if (core->lfe_present == 3) {
+    if (core->lfe_present == LFE_FLAG_INVALID) {
         core_err("Invalid low frequency effects flag");
         return -DCADEC_EBADDATA;
     }
@@ -1052,35 +1059,45 @@ int core_filter(struct core_decoder *core, int flags)
 
     // Filter LFE channel
     if (core->lfe_present) {
-        // Select LFE DSP
+        bool dec_select = (core->lfe_present == LFE_FLAG_128);
         interpolate_lfe_cb interpolate;
 
-        if (flags & DCADEC_FLAG_CORE_BIT_EXACT)
+        // Select LFE DSP
+        if (flags & DCADEC_FLAG_CORE_BIT_EXACT) {
+            if (dec_select) {
+                core_err("Fixed point mode doesn't support LFF=1");
+                return -DCADEC_EINVAL;
+            }
             interpolate = interpolate_lfe_fixed_fir;
-        else if (flags & DCADEC_FLAG_CORE_LFE_FIR)
-            interpolate = interpolate_lfe_float_fir;
-        else
+        } else if (flags & DCADEC_FLAG_CORE_LFE_FIR) {
+            if (dec_select)
+                interpolate = interpolate_lfe_float_fir_2x;
+            else
+                interpolate = interpolate_lfe_float_fir;
+        } else {
             interpolate = interpolate_lfe_float_iir;
+        }
+
+        // Offset output buffer for X96
+        int *samples = core->output_samples[SPEAKER_LFE1];
+        if (synth_x96)
+            samples += core->npcmsamples / 2;
 
         // Interpolation of LFE channel
-        interpolate(core->output_samples[SPEAKER_LFE1],
-                    core->lfe_samples,
-                    core->npcmblocks >> (3 - core->lfe_present),
-                    core->lfe_present == 1,
-                    synth_x96);
+        interpolate(samples, core->lfe_samples, core->npcmblocks, dec_select);
 
-        if (flags & DCADEC_FLAG_CORE_SYNTH_X96) {
+        if (synth_x96) {
             // Filter 96 kHz oversampled LFE PCM to attenuate high frequency
             // (47.6 - 48.0 kHz) components of interpolation image
             int history = core->output_history_lfe;
-            int *samples = core->output_samples[SPEAKER_LFE1];
-            int nsamples = core->npcmsamples;
-            for (int n = 0; n < nsamples; n += 2) {
+            int *samples2 = core->output_samples[SPEAKER_LFE1];
+            int nsamples = core->npcmsamples / 2;
+            for (int n = 0; n < nsamples; n++) {
                 int64_t res1 = INT64_C(2097471) * samples[n] + INT64_C(6291137) * history;
                 int64_t res2 = INT64_C(6291137) * samples[n] + INT64_C(2097471) * history;
                 history = samples[n];
-                samples[n    ] = clip23(norm23(res1));
-                samples[n + 1] = clip23(norm23(res2));
+                samples2[2 * n    ] = clip23(norm23(res1));
+                samples2[2 * n + 1] = clip23(norm23(res2));
             }
 
             // Update LFE PCM history

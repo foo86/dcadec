@@ -24,29 +24,40 @@
 
 INTERPOLATE_LFE(lfe_fixed_fir)
 {
+    (void)dec_select;
+    assert(!dec_select);
+
     // Select decimation factor
-    int dec_factor = 64 << dec_select;
+    int nlfesamples = npcmblocks >> 1;
 
     // Interpolation
-    for (int i = 0; i < nsamples; i++) {
-        // One decimated sample generates 64 or 128 interpolated ones
-        for (int j = 0; j < dec_factor; j++) {
+    for (int i = 0; i < nlfesamples; i++) {
+        int *src = lfe_samples + MAX_LFE_HISTORY + i;
+
+        // One decimated sample generates 64 interpolated ones
+        for (int j = 0; j < 32; j++) {
             // Clear accumulation
-            int64_t res = INT64_C(0);
+            int64_t res1 = INT64_C(0);
+            int64_t res2 = INT64_C(0);
 
             // Accumulate
-            for (int k = 0; k < 512 / dec_factor; k++)
-                res += (int64_t)lfe_fir_64[k * dec_factor + j] *
-                    lfe_samples[MAX_LFE_HISTORY + i - k];
+            for (int k = 0; k < 8; k++) {
+                res1 += (int64_t)lfe_fir_64[      j * 8 + k] * src[-k];
+                res2 += (int64_t)lfe_fir_64[255 - j * 8 - k] * src[-k];
+            }
 
             // Save interpolated samples
-            pcm_samples[(i * dec_factor + j) << synth_x96] = clip23(norm23(res));
+            pcm_samples[     j] = clip23(norm23(res1));
+            pcm_samples[32 + j] = clip23(norm23(res2));
         }
+
+        // Advance output pointer
+        pcm_samples += 64;
     }
 
     // Update history
-    for (int n = MAX_LFE_HISTORY - 1; n >= 0; n--)
-        lfe_samples[n] = lfe_samples[nsamples + n];
+    for (int n = MAX_LFE_HISTORY - 1; n >= MAX_LFE_HISTORY - 8; n--)
+        lfe_samples[n] = lfe_samples[nlfesamples + n];
 }
 
 INTERPOLATE_SUB(sub32_fixed)

@@ -25,8 +25,7 @@ struct interpolator;
 struct idct_context;
 
 typedef void (*interpolate_lfe_cb)(int *pcm_samples, int *lfe_samples,
-                                   int nsamples, bool dec_select,
-                                   bool synth_x96);
+                                   int npcmblocks, bool dec_select);
 
 typedef void (*interpolate_sub_cb)(struct interpolator *dsp, int *pcm_samples,
                                    int **subband_samples_lo,
@@ -45,8 +44,7 @@ void interpolator_clear(struct interpolator *dsp) __attribute__((cold));
 
 #define INTERPOLATE_LFE(x) \
     void interpolate_##x(int *pcm_samples, int *lfe_samples, \
-                         int nsamples, bool dec_select, \
-                         bool synth_x96)
+                         int npcmblocks, bool dec_select)
 
 #define INTERPOLATE_SUB(x) \
     void interpolate_##x(struct interpolator *dsp, int *pcm_samples, \
@@ -55,6 +53,7 @@ void interpolator_clear(struct interpolator *dsp) __attribute__((cold));
                          int nsamples, bool perfect)
 
 INTERPOLATE_LFE(lfe_float_fir);
+INTERPOLATE_LFE(lfe_float_fir_2x);
 INTERPOLATE_LFE(lfe_float_iir);
 INTERPOLATE_SUB(sub32_float);
 INTERPOLATE_SUB(sub64_float);
