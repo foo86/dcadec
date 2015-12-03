@@ -37,12 +37,12 @@ struct dcadec_context {
     int packet;
     int status;
 
+    bool has_residual_encoded;
+    bool core_residual_valid;
+
     struct core_decoder *core;
     struct exss_parser *exss;
     struct xll_decoder *xll;
-
-    bool has_residual_encoded;
-    bool core_residual_valid;
 
     int *dmix_sample_buffer;
 
