@@ -122,7 +122,7 @@ DCADEC_API int dcadec_frame_parse_header(const uint8_t *data, size_t *size)
             return -DCADEC_ENOSYNC;
         bits_skip1(&bits);
         int npcmblocks = bits_get(&bits, 7) + 1;
-        if (npcmblocks < 6)
+        if ((npcmblocks & 7) && (npcmblocks < 6 || normal_frame))
             return -DCADEC_ENOSYNC;
         frame_size = bits_get(&bits, 14) + 1;
         if (frame_size < 96)
@@ -137,11 +137,11 @@ DCADEC_API int dcadec_frame_parse_header(const uint8_t *data, size_t *size)
     case SYNC_WORD_EXSS: {
         bits_skip(&bits, 10);
         bool wide_hdr = bits_get1(&bits);
-        bits_skip(&bits, 8 + 4 * wide_hdr);
-        frame_size = bits_get(&bits, 16 + 4 * wide_hdr) + 1;
-        if (frame_size < DCADEC_FRAME_HEADER_SIZE)
+        header_size = bits_get(&bits, 8 + 4 * wide_hdr) + 1;
+        if ((header_size & 3) || header_size < DCADEC_FRAME_HEADER_SIZE)
             return -DCADEC_ENOSYNC;
-        if (frame_size & 3)
+        frame_size = bits_get(&bits, 16 + 4 * wide_hdr) + 1;
+        if ((frame_size & 3) || frame_size < header_size)
             return -DCADEC_ENOSYNC;
         *size = frame_size;
         return DCADEC_FRAME_TYPE_EXSS;
