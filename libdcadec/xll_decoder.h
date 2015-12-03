@@ -123,14 +123,19 @@ struct xll_chset {
 struct xll_decoder {
     struct bitstream    bits;
 
-    dcadec_log_cb   log_cb;
-    void            *log_cbarg;
-    bool    err_shown;
-    bool    warn_shown;
+    dcadec_log_cb       log_cb;
+    void                *log_cbarg;
 
-    int     flags;
+    struct xll_chset    *chset;
+
+    size_t  *navi;
+
+    uint8_t *pbr_buffer;
 
     size_t  frame_size;
+    size_t  pbr_length;
+
+    int     flags;
     int     nchsets;
     int     nframesegs;
     int     nsegsamples_log2;
@@ -139,25 +144,17 @@ struct xll_decoder {
     int     nframesamples;
     int     seg_size_nbits;
     int     band_crc_present;
-    bool    scalable_lsbs;
     int     ch_mask_nbits;
     int     fixed_lsb_width;
-
-    struct xll_chset    *chset;
-
-    size_t  *navi;
-
     int     nfreqbands;
     int     nchannels;
     int     nactivechsets;
-
     int     nfailedsegs;
-
     int     hd_stream_id;
-
-    uint8_t     *pbr_buffer;
-    size_t      pbr_length;
-    int         pbr_delay;
+    int     pbr_delay;
+    bool    err_shown;
+    bool    warn_shown;
+    bool    scalable_lsbs;
 };
 
 void xll_clear_band_data(struct xll_chset *chs, int band) __attribute__((cold));
