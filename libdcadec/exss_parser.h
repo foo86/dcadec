@@ -37,10 +37,6 @@ struct exss_asset {
     int     pcm_bit_res;
     int     max_sample_rate;
     int     nchannels_total;
-    bool    one_to_one_map_ch_to_spkr;
-    bool    embedded_stereo;
-    bool    embedded_6ch;
-    bool    spkr_mask_enabled;
     int     spkr_mask;
     int     representation_type;
 
@@ -64,11 +60,14 @@ struct exss_asset {
 
     size_t  xll_offset;
     size_t  xll_size;
-    bool    xll_sync_present;
-    int     xll_delay_nframes;
     size_t  xll_sync_offset;
-
+    int     xll_delay_nframes;
     int     hd_stream_id;
+    bool    xll_sync_present;
+    bool    one_to_one_map_ch_to_spkr;
+    bool    embedded_stereo;
+    bool    embedded_6ch;
+    bool    spkr_mask_enabled;
 };
 
 struct exss_parser {
@@ -76,20 +75,19 @@ struct exss_parser {
 
     dcadec_log_cb   log_cb;
     void            *log_cbarg;
-    bool    err_shown;
 
     int     exss_index;
     int     exss_size_nbits;
     size_t  exss_size;
 
-    bool    static_fields_present;
     int     npresents;
     int     nassets;
 
+    bool    err_shown;
+    bool    static_fields_present;
     bool    mix_metadata_enabled;
     int     nmixoutconfigs;
     int     nmixoutchs[4];
-
     struct exss_asset   *assets;
 };
 

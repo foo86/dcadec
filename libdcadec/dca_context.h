@@ -174,10 +174,10 @@ struct dcadec_core_info {
     int     lfe_present;    /**< LFE channel presence flag (can be 0, 1 or 2) */
     int     sample_rate;    /**< Core audio sample rate in Hz */
     int     source_pcm_res; /**< Source PCM resolution in bits */
-    bool    es_format;      /**< Extended surround (ES) mastering flag */
     int     bit_rate;       /**< Core stream bit rate in bytes per second,
                                  zero or negative if unavailable */
     int     npcmblocks;     /**< Number of audio sample blocks in a frame */
+    bool    es_format;      /**< Extended surround (ES) mastering flag */
     bool    ext_audio_present;  /**< Extended audio present */
     int     ext_audio_type;     /**< Extended audio type (only meaningful
                                      when ext_audio_present is true) */
