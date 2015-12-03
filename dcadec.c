@@ -43,7 +43,7 @@
 static void print_help(const char *name)
 {
     fprintf(stderr,
-"Usage: %s [-26bcfhlmnPqSx] <input.dts> [output.wav]\n"
+"Usage: %s [-26bcfhilmnPqSx] <input.dts> [output.wav]\n"
 "dcadec is a free DTS Coherent Acoustics decoder. Supported options:\n"
 "\n"
 "-2  Extract embedded 2.0 downmix if present, otherwise extract 5.1 downmix.\n"
@@ -58,6 +58,8 @@ static void print_help(const char *name)
 "-f  Use FIR filter for floating point DTS core LFE channel interpolation.\n"
 "\n"
 "-h  Show this help message.\n"
+"\n"
+"-i  Use IIR filter for floating point DTS core LFE channel interpolation.\n"
 "\n"
 "-l  Enable lenient decoding mode. Attempt to recover from errors by skipping\n"
 "    non-decodable parts of the stream.\n"
@@ -209,7 +211,7 @@ int main(int argc, char **argv)
     bool no_strip = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "26bcfhlmnPqSsx")) != -1) {
+    while ((opt = getopt(argc, argv, "26bcfhilmnPqSsx")) != -1) {
         switch (opt) {
         case '2':
             flags |= DCADEC_FLAG_KEEP_DMIX_2CH;
@@ -224,11 +226,16 @@ int main(int argc, char **argv)
             flags |= DCADEC_FLAG_CORE_ONLY;
             break;
         case 'f':
+            flags &= ~DCADEC_FLAG_CORE_LFE_IIR;
             flags |= DCADEC_FLAG_CORE_LFE_FIR;
             break;
         case 'h':
             print_help(argv[0]);
             return 0;
+        case 'i':
+            flags &= ~DCADEC_FLAG_CORE_LFE_FIR;
+            flags |= DCADEC_FLAG_CORE_LFE_IIR;
+            break;
         case 'l':
             flags &= ~DCADEC_FLAG_STRICT;
             break;

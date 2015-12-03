@@ -23,7 +23,7 @@ for i in samples/*.dtshd ; do
     ../dcadec -b -q $i decoded/dmix_0/$(basename $i .dtshd).wav
     ../dcadec -b -q -2 $i decoded/dmix_2/$(basename $i .dtshd).wav
     ../dcadec -b -q -6 $i decoded/dmix_6/$(basename $i .dtshd).wav
-    ../dcadec -m -q $i decoded/mono/$(basename $i .dtshd)_%s.wav
+    ../dcadec -i -m -q $i decoded/mono/$(basename $i .dtshd)_%s.wav
 done
 
 LOSSY="\

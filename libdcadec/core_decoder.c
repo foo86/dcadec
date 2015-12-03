@@ -1017,7 +1017,7 @@ int core_filter(struct core_decoder *core, int flags)
         }
     }
 
-    if (diff & (DCADEC_FLAG_CORE_BIT_EXACT | DCADEC_FLAG_CORE_LFE_FIR))
+    if (diff & (DCADEC_FLAG_CORE_BIT_EXACT | DCADEC_FLAG_CORE_LFE_IIR))
         memset(core->lfe_samples, 0, MAX_LFE_HISTORY * sizeof(int));
 
     if (diff & DCADEC_FLAG_CORE_SYNTH_X96)
@@ -1069,13 +1069,12 @@ int core_filter(struct core_decoder *core, int flags)
                 return -DCADEC_EINVAL;
             }
             interpolate = interpolate_lfe_fixed_fir;
-        } else if (flags & DCADEC_FLAG_CORE_LFE_FIR) {
-            if (dec_select)
-                interpolate = interpolate_lfe_float_fir_2x;
-            else
-                interpolate = interpolate_lfe_float_fir;
-        } else {
+        } else if (flags & DCADEC_FLAG_CORE_LFE_IIR) {
             interpolate = interpolate_lfe_float_iir;
+        } else if (dec_select) {
+            interpolate = interpolate_lfe_float_fir_2x;
+        } else {
+            interpolate = interpolate_lfe_float_fir;
         }
 
         // Offset output buffer for X96

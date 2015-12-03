@@ -34,7 +34,7 @@
  * that remains compatible. Patch is reserved for non-API related changes.
  */
 #define DCADEC_API_VERSION_MAJOR    0
-#define DCADEC_API_VERSION_MINOR    0
+#define DCADEC_API_VERSION_MINOR    1
 #define DCADEC_API_VERSION_PATCH    0
 
 #define DCADEC_API_VERSION \
@@ -106,8 +106,8 @@
  */
 #define DCADEC_FLAG_CORE_SYNTH_X96      0x04
 
-/** Reserved flag, don't use */
-#define DCADEC_FLAG_CORE_RESERVED       0x08
+/** Use IIR filter for floating point DTS core LFE channel interpolation */
+#define DCADEC_FLAG_CORE_LFE_IIR        0x08
 
 /** Use FIR filter for floating point DTS core LFE channel interpolation */
 #define DCADEC_FLAG_CORE_LFE_FIR        0x10
