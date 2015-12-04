@@ -63,14 +63,13 @@ INTERPOLATE_LFE(lfe_fixed_fir)
 INTERPOLATE_SUB(sub32_fixed)
 {
     (void)subband_samples_hi;
-    assert(subband_samples_hi == NULL);
+    assert(!subband_samples_hi);
 
     // Get history pointer
     int *history = dsp->history;
 
     // Select filter
-    const int32_t *filter_coeff = perfect ?
-        band_fir_perfect : band_fir_nonperfect;
+    const int32_t *filter_coeff = perfect ? band_fir_perfect : band_fir_nonperfect;
 
     // Interpolation begins
     for (int sample = 0; sample < nsamples; sample++) {
@@ -92,35 +91,32 @@ INTERPOLATE_SUB(sub32_fixed)
         }
 
         // One subband sample generates 32 interpolated ones
-        for (i = 0; i < 16; i++) {
+        for (i = 0, k = 15; i < 16; i++, k--) {
             // Clear accumulation
-            int64_t res = INT64_C(0);
+            int64_t res1 = INT64_C(0);
+            int64_t res2 = INT64_C(0);
 
             // Accumulate
-            for (j = 32; j < 512; j += 64)
-                res += (int64_t)history[16 + i + j] * filter_coeff[i + j];
-            res = round21(res);
-            for (j =  0; j < 512; j += 64)
-                res += (int64_t)history[     i + j] * filter_coeff[i + j];
+            for (j = 32; j < 512; j += 64) {
+                res1 += (int64_t)history[16 + i + j] * filter_coeff[     i + j];
+                res2 += (int64_t)history[16 + k + j] * filter_coeff[16 + i + j];
+            }
+
+            res1 = round21(res1);
+            res2 = round21(res2);
+
+            for (j = 0; j < 512; j += 64) {
+                res1 += (int64_t)history[i + j] * filter_coeff[     i + j];
+                res2 += (int64_t)history[k + j] * filter_coeff[16 + i + j];
+            }
 
             // Save interpolated samples
-            pcm_samples[sample * 32 + i] = clip23(norm21(res));
+            pcm_samples[     i] = clip23(norm21(res1));
+            pcm_samples[16 + i] = clip23(norm21(res2));
         }
 
-        for (i = 16, k = 15; i < 32; i++, k--) {
-            // Clear accumulation
-            int64_t res = INT64_C(0);
-
-            // Accumulate
-            for (j = 32; j < 512; j += 64)
-                res += (int64_t)history[16 + k + j] * filter_coeff[i + j];
-            res = round21(res);
-            for (j =  0; j < 512; j += 64)
-                res += (int64_t)history[     k + j] * filter_coeff[i + j];
-
-            // Save interpolated samples
-            pcm_samples[sample * 32 + i] = clip23(norm21(res));
-        }
+        // Advance output pointer
+        pcm_samples += 32;
 
         // Shift history
         for (i = 511; i >= 32; i--)
@@ -166,35 +162,32 @@ INTERPOLATE_SUB(sub64_fixed)
         }
 
         // One subband sample generates 64 interpolated ones
-        for (i = 0; i < 32; i++) {
+        for (i = 0, k = 31; i < 32; i++, k--) {
             // Clear accumulation
-            int64_t res = INT64_C(0);
+            int64_t res1 = INT64_C(0);
+            int64_t res2 = INT64_C(0);
 
             // Accumulate
-            for (j = 64; j < 1024; j += 128)
-                res += (int64_t)history[32 + i + j] * band_fir_x96[i + j];
-            res = round20(res);
-            for (j =  0; j < 1024; j += 128)
-                res += (int64_t)history[     i + j] * band_fir_x96[i + j];
+            for (j = 64; j < 1024; j += 128) {
+                res1 += (int64_t)history[32 + i + j] * band_fir_x96[     i + j];
+                res2 += (int64_t)history[32 + k + j] * band_fir_x96[32 + i + j];
+            }
+
+            res1 = round20(res1);
+            res2 = round20(res2);
+
+            for (j = 0; j < 1024; j += 128) {
+                res1 += (int64_t)history[i + j] * band_fir_x96[     i + j];
+                res2 += (int64_t)history[k + j] * band_fir_x96[32 + i + j];
+            }
 
             // Save interpolated samples
-            pcm_samples[sample * 64 + i] = clip23(norm20(res));
+            pcm_samples[     i] = clip23(norm20(res1));
+            pcm_samples[32 + i] = clip23(norm20(res2));
         }
 
-        for (i = 32, k = 31; i < 64; i++, k--) {
-            // Clear accumulation
-            int64_t res = INT64_C(0);
-
-            // Accumulate
-            for (j = 64; j < 1024; j += 128)
-                res += (int64_t)history[32 + k + j] * band_fir_x96[i + j];
-            res = round20(res);
-            for (j =  0; j < 1024; j += 128)
-                res += (int64_t)history[     k + j] * band_fir_x96[i + j];
-
-            // Save interpolated samples
-            pcm_samples[sample * 64 + i] = clip23(norm20(res));
-        }
+        // Advance output pointer
+        pcm_samples += 64;
 
         // Shift history
         for (i = 1023; i >= 64; i--)
