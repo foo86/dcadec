@@ -122,7 +122,7 @@ static int parse_frame_header(struct core_decoder *core)
     // Primary frame byte size
     core->frame_size = bits_get(&core->bits, 14) + 1;
     if (core->frame_size < 96) {
-        core_err("Invalid frame size");
+        core_err("Invalid core frame size");
         return -DCADEC_EBADDATA;
     }
 
@@ -301,7 +301,7 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
             if (code) {
                 unsigned int index = code * 4 - 44;
                 if (index >= dca_countof(dmix_table_inv)) {
-                    core_err("Invalid downmix scale index");
+                    core_err("Invalid XXCH downmix scale index");
                     return -DCADEC_EBADDATA;
                 }
                 core->dmix_scale_inv = dmix_table_inv[index];
@@ -323,7 +323,7 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
                         if (code) {
                             unsigned int index = code * 4 - 4;
                             if (index >= dca_countof(dmix_table)) {
-                                core_err("Invalid downmix coefficient index");
+                                core_err("Invalid XXCH downmix coefficient index");
                                 return -DCADEC_EBADDATA;
                             }
                             *coeff_ptr++ = (dmix_table[index] ^ sign) - sign;
@@ -1404,7 +1404,7 @@ static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xb
         // DSYNC
         if ((ssf == core->nsubsubframes[sf] - 1 || core->sync_ssf)
             && bits_get(&core->bits, 16) != 0xffff) {
-            core_err("DSYNC check failed");
+            core_err("XBR-DSYNC check failed");
             return -DCADEC_EBADDATA;
         }
     }
@@ -1605,7 +1605,7 @@ static int parse_x96_subframe_audio(struct x96_decoder *x96, int sf, int xch_bas
         // DSYNC
         if ((ssf == core->nsubsubframes[sf] - 1 || core->sync_ssf)
             && bits_get(&core->bits, 16) != 0xffff) {
-            core_err("DSYNC check failed");
+            core_err("X96-DSYNC check failed");
             return -DCADEC_EBADDATA;
         }
     }
@@ -1733,7 +1733,7 @@ static int parse_x96_subframe_header(struct x96_decoder *x96, int xch_base)
                 abits = bits_get(&core->bits, 3 + x96->high_res);
 
             if ((unsigned int)abits > abits_max) {
-                core_err("Invalid bit allocation index");
+                core_err("Invalid X96 bit allocation index");
                 return -DCADEC_EBADDATA;
             }
 
@@ -1761,7 +1761,7 @@ static int parse_x96_subframe_header(struct x96_decoder *x96, int xch_base)
         if (x96->joint_intensity_index[ch]) {
             x96->joint_scale_sel[ch] = bits_get(&core->bits, 3);
             if (x96->joint_scale_sel[ch] == 7) {
-                core_err("Invalid joint scale factor code book");
+                core_err("Invalid X96 joint scale factor code book");
                 return -DCADEC_EBADDATA;
             }
         }
@@ -1836,7 +1836,7 @@ static int parse_x96_coding_header(struct x96_decoder *x96, bool exss, int xch_b
         if ((n = bits_get(&core->bits, 3)) && xch_base)
             n += xch_base - 1;
         if (n > x96->nchannels) {
-            core_err("Invalid joint intensity coding index");
+            core_err("Invalid X96 joint intensity coding index");
             return -DCADEC_EBADDATA;
         }
         x96->joint_intensity_index[ch] = n;
@@ -1846,7 +1846,7 @@ static int parse_x96_coding_header(struct x96_decoder *x96, bool exss, int xch_b
     for (ch = xch_base; ch < x96->nchannels; ch++) {
         x96->scale_factor_sel[ch] = bits_get(&core->bits, 3);
         if (x96->scale_factor_sel[ch] >= 6) {
-            core_err("Invalid scale factor code book");
+            core_err("Invalid X96 scale factor code book");
             return -DCADEC_EBADDATA;
         }
     }

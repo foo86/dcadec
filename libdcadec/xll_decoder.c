@@ -71,7 +71,7 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
             if (code > 0) {
                 unsigned int index = code - 1;
                 if (index < 40 || index >= dca_countof(dmix_table)) {
-                    xll_err("Invalid downmix scale index");
+                    xll_err("Invalid XLL downmix scale index");
                     return -DCADEC_EBADDATA;
                 }
                 int scale = dmix_table[index];
@@ -91,7 +91,7 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
             if (code > 0) {
                 unsigned int index = code - 1;
                 if (index >= dca_countof(dmix_table)) {
-                    xll_err("Invalid downmix coefficient index");
+                    xll_err("Invalid XLL downmix coefficient index");
                     return -DCADEC_EBADDATA;
                 }
                 int coeff = dmix_table[index];
@@ -120,14 +120,14 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
 
     // Check CRC
     if ((ret = bits_check_crc(&xll->bits, header_pos, header_pos + header_size * 8)) < 0) {
-        xll_err("Invalid sub-header checksum");
+        xll_err("Invalid XLL sub-header checksum");
         return ret;
     }
 
     // Number of channels in the channel set
     chs->nchannels = bits_get(&xll->bits, 4) + 1;
     if (chs->nchannels > XLL_MAX_CHANNELS) {
-        xll_err_once("Unsupported number of channels (%d)", chs->nchannels);
+        xll_err_once("Unsupported number of XLL channels (%d)", chs->nchannels);
         return -DCADEC_ENOSUP;
     }
 
@@ -143,7 +143,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
     // Original sampling frequency
     chs->freq = exss_sample_rates[bits_get(&xll->bits, 4)];
     if (chs->freq > 192000) {
-        xll_err_once("Unsupported sampling frequency");
+        xll_err_once("Unsupported XLL sampling frequency");
         return -DCADEC_ENOSUP;
     }
 
@@ -175,7 +175,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         if (chs->dmix_coeffs_present && chs->primary_chset) {
             chs->dmix_type = bits_get(&xll->bits, 3);
             if (chs->dmix_type >= DMIX_TYPE_COUNT) {
-                xll_err("Invalid primary channel set downmix type");
+                xll_err("Invalid XLL primary channel set downmix type");
                 return -DCADEC_EBADDATA;
             }
         }
@@ -193,7 +193,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
             // Channel mask for set
             chs->ch_mask = bits_get(&xll->bits, xll->ch_mask_nbits);
             if (dca_popcount(chs->ch_mask) != chs->nchannels) {
-                xll_err("Invalid channel mask");
+                xll_err("Invalid XLL channel mask");
                 return -DCADEC_EBADDATA;
             }
         } else {
@@ -383,7 +383,7 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
     // Byte align
     // CRC16 of channel set sub-header
     if ((ret = bits_seek(&xll->bits, header_pos + header_size * 8)) < 0)
-        xll_err("Read past end of sub-header");
+        xll_err("Read past end of XLL sub-header");
     return ret;
 }
 
@@ -843,14 +843,14 @@ static int parse_common_header(struct xll_decoder *xll)
 
     // XLL extension sync word
     if (bits_get(&xll->bits, 32) != SYNC_WORD_XLL) {
-        xll_verbose("Invalid sync word");
+        xll_verbose("Invalid XLL sync word");
         return -DCADEC_ENOSYNC;
     }
 
     // Version number
     int stream_ver = bits_get(&xll->bits, 4) + 1;
     if (stream_ver > 1) {
-        xll_err_once("Unsupported stream version (%d)", stream_ver);
+        xll_err_once("Unsupported XLL stream version (%d)", stream_ver);
         return -DCADEC_ENOSUP;
     }
 
@@ -859,7 +859,7 @@ static int parse_common_header(struct xll_decoder *xll)
 
     // Check CRC
     if ((ret = bits_check_crc(&xll->bits, 32, header_size * 8)) < 0) {
-        xll_err("Invalid common header checksum");
+        xll_err("Invalid XLL common header checksum");
         return ret;
     }
 
@@ -869,7 +869,7 @@ static int parse_common_header(struct xll_decoder *xll)
     // Number of bytes in a lossless frame
     xll->frame_size = bits_get(&xll->bits, frame_size_nbits);
     if (xll->frame_size >= XLL_PBR_SIZE) {
-        xll_err("Invalid frame size");
+        xll_err("Invalid XLL frame size");
         return -DCADEC_EBADDATA;
     }
     xll->frame_size++;
@@ -939,7 +939,7 @@ static int parse_common_header(struct xll_decoder *xll)
     // Byte align
     // Header CRC16 protection
     if ((ret = bits_seek(&xll->bits, header_size * 8)) < 0)
-        xll_err("Read past end of common header");
+        xll_err("Read past end of XLL common header");
     return ret;
 }
 
@@ -1073,7 +1073,7 @@ static int parse_frame(struct xll_decoder *xll, uint8_t *data, size_t size, stru
     if ((ret = parse_band_data(xll)) < 0)
         return ret;
     if ((ret = bits_seek(&xll->bits, xll->frame_size * 8)) < 0)
-        xll_err("Read past end of frame");
+        xll_err("Read past end of XLL frame");
     return ret;
 }
 
@@ -1107,7 +1107,7 @@ static int parse_frame_no_pbr(struct xll_decoder *xll, uint8_t *data, size_t siz
     // right into the middle of PBR smoothing period
     if (ret == -DCADEC_ENOSYNC && asset->xll_sync_present) {
         if (asset->xll_sync_offset > size) {
-            xll_err("Invalid sync word offset");
+            xll_err("Invalid XLL sync word offset");
             return -DCADEC_EINVAL;
         }
 

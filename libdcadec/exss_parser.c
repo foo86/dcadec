@@ -384,7 +384,7 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
 
     // Check CRC
     if ((ret = bits_check_crc(&exss->bits, 32 + 8, header_size * 8)) < 0) {
-        exss_err("Invalid header checksum");
+        exss_err("Invalid EXSS header checksum");
         return ret;
     }
 
@@ -393,7 +393,7 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
     // Number of bytes of extension substream
     exss->exss_size = bits_get(&exss->bits, exss->exss_size_nbits) + 1;
     if (exss->exss_size > size) {
-        exss_err("Packet too short");
+        exss_err("Packet too short for EXSS frame");
         return -DCADEC_EBADDATA;
     }
 
@@ -492,7 +492,7 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
     // Byte align
     // CRC16 of extension substream header
     if ((ret = bits_seek(&exss->bits, header_size * 8)) < 0)
-        exss_err("Read past end of header");
+        exss_err("Read past end of EXSS header");
     return ret;
 }
 
