@@ -2110,6 +2110,16 @@ static int parse_aux_data(struct core_decoder *core)
     return ret;
 }
 
+#define CHECK_SYNC(pos, msg) \
+    if (!pos) { \
+        if (flags & DCADEC_FLAG_STRICT) { \
+            core_err(msg); \
+            return -DCADEC_ENOSYNC; \
+        } \
+        core_warn_once(msg); \
+        status = DCADEC_WCOREEXTFAILED; \
+    }
+
 static int parse_optional_info(struct core_decoder *core, int flags)
 {
     int status = 0;
@@ -2164,12 +2174,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 }
             }
 
-            if (!core->xch_pos) {
-                core_warn("XCH sync word not found");
-                if (flags & DCADEC_FLAG_STRICT)
-                    return -DCADEC_ENOSYNC;
-                status = DCADEC_WCOREEXTFAILED;
-            }
+            CHECK_SYNC(core->xch_pos, "XCH sync word not found")
             break;
 
         case EXT_AUDIO_X96:
@@ -2188,12 +2193,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 }
             }
 
-            if (!core->x96_pos) {
-                core_warn("X96 sync word not found");
-                if (flags & DCADEC_FLAG_STRICT)
-                    return -DCADEC_ENOSYNC;
-                status = DCADEC_WCOREEXTFAILED;
-            }
+            CHECK_SYNC(core->x96_pos, "X96 sync word not found")
             break;
 
         case EXT_AUDIO_XXCH:
@@ -2215,12 +2215,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
                 }
             }
 
-            if (!core->xxch_pos) {
-                core_warn("XXCH sync word not found");
-                if (flags & DCADEC_FLAG_STRICT)
-                    return -DCADEC_ENOSYNC;
-                status = DCADEC_WCOREEXTFAILED;
-            }
+            CHECK_SYNC(core->xxch_pos, "XXCH sync word not found")
             break;
 
         default:
