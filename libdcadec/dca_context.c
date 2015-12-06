@@ -29,9 +29,12 @@
 #define DCADEC_PACKET_FILTERED  0x100
 #define DCADEC_PACKET_RECOVERY  0x200
 
+#define dca_warn_once(...)  dca_log_once(WARNING, dca, warn_shown, __VA_ARGS__)
+
 struct dcadec_context {
     dcadec_log_cb log_cb;
     void *log_cbarg;
+    bool warn_shown;
 
     int flags;
     int packet;
@@ -73,6 +76,9 @@ static const uint8_t dca2wav_wide[] = {
     WAVESPKR_TFL, WAVESPKR_TFR, WAVESPKR_TBC, WAVESPKR_TBL,
     WAVESPKR_TBR, WAVESPKR_BC,  WAVESPKR_BL,  WAVESPKR_BR
 };
+
+#define DCADEC_LAYOUT_STEREO    (SPEAKER_MASK_L | SPEAKER_MASK_R)
+#define DCADEC_LAYOUT_2POINT1   (DCADEC_LAYOUT_STEREO | SPEAKER_MASK_LFE1)
 
 #define DCADEC_LAYOUT_7POINT0_WIDE  \
     (SPEAKER_MASK_C  | SPEAKER_MASK_L  | SPEAKER_MASK_R |   \
@@ -181,19 +187,53 @@ static int clip_samples(struct dcadec_context *dca, int nchannels)
     return nclipped;
 }
 
-static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
-                               int nsamples, int *ch_mask, int *dmix_coeff)
+static int get_dmix_coeff(int nchannels, int spkr, int ch)
 {
-    // No action if already 2.0. Remove LFE channel if 2.1.
-    if ((*ch_mask & ~SPEAKER_MASK_LFE1) == (SPEAKER_MASK_L | SPEAKER_MASK_R)) {
-        *ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
+    switch (spkr) {
+    case SPEAKER_C:
+    case SPEAKER_Cs:
+        return (nchannels == 1) ? 23170 : 16423;
+    case SPEAKER_L:
+        return (ch == 0) ? 23170 : 0;
+    case SPEAKER_R:
+        return (ch == 1) ? 23170 : 0;
+    case SPEAKER_Ls:
+        return (ch == 0) ? 16423 : 0;
+    case SPEAKER_Rs:
+        return (ch == 1) ? 16423 : 0;
+    default:
         return 0;
     }
+}
 
-    // Unless both KEEP_DMIX flags are set, perform 2.0 downmix only when
-    // custom matrix is present
-    if (!dmix_coeff && !(dca->flags & DCADEC_FLAG_KEEP_DMIX_6CH))
+static int down_mix_prim_chset(struct dcadec_context *dca,
+                               bool dmix_embedded, int dmix_type,
+                               int *dmix_coeff_cur, int *dmix_coeff_pre,
+                               int **samples, int nsamples, int *ch_mask)
+{
+    // No action if already 2.0
+    if (*ch_mask == DCADEC_LAYOUT_STEREO)
         return 0;
+
+    if (dmix_embedded && dmix_type != DMIX_TYPE_LoRo) {
+        dca_warn_once("Unsupported primary channel set downmix type (%d)", dmix_type);
+        dmix_embedded = false;
+    }
+
+    if (!dmix_embedded) {
+        // Remove LFE channel if 2.1
+        if (*ch_mask == DCADEC_LAYOUT_2POINT1) {
+            *ch_mask = DCADEC_LAYOUT_STEREO;
+            return 0;
+        }
+
+        // Unless both KEEP_DMIX flags are set, perform 2.0 downmix only when
+        // custom matrix is present
+        if (!(dca->flags & DCADEC_FLAG_KEEP_DMIX_6CH))
+            return 0;
+    }
+
+    assert(nsamples > 1);
 
     // Reallocate downmix sample buffer
     if (ta_alloc_fast(dca, &dca->dmix_sample_buffer, 2 * nsamples, sizeof(int)) < 0)
@@ -202,49 +242,40 @@ static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
     memset(dca->dmix_sample_buffer, 0, 2 * nsamples * sizeof(int));
 
     int nchannels = dca_popcount(*ch_mask);
+    int nsamples_log2 = 31 - dca_clz32(nsamples);
 
     // Perform downmix
     for (int spkr = 0, pos = 0; spkr < SPEAKER_COUNT; spkr++) {
         if (!(*ch_mask & (1U << spkr)))
             continue;
 
+        int *src = samples[spkr];
+        int *dst = dca->dmix_sample_buffer;
+
         for (int ch = 0; ch < 2; ch++) {
-            int coeff;
+            int coeff_cur, coeff_pre;
 
             // Use custom matrix if present. Otherwise use default matrix that
             // covers all supported core audio channel arrangements.
-            if (dmix_coeff) {
-                coeff = dmix_coeff[ch * nchannels + pos];
+            if (dmix_embedded) {
+                coeff_cur = dmix_coeff_cur[ch * nchannels + pos];
+                coeff_pre = dmix_coeff_pre[ch * nchannels + pos];
             } else {
-                switch (spkr) {
-                case SPEAKER_C:
-                case SPEAKER_Cs:
-                    coeff = (nchannels == 1) ? 23170 : 16423;
-                    break;
-                case SPEAKER_L:
-                    coeff = (ch == 0) ? 23170 : 0;
-                    break;
-                case SPEAKER_R:
-                    coeff = (ch == 1) ? 23170 : 0;
-                    break;
-                case SPEAKER_Ls:
-                    coeff = (ch == 0) ? 16423 : 0;
-                    break;
-                case SPEAKER_Rs:
-                    coeff = (ch == 1) ? 16423 : 0;
-                    break;
-                default:
-                    coeff = 0;
-                    break;
-                }
+                coeff_cur = coeff_pre = get_dmix_coeff(nchannels, spkr, ch);
             }
 
-            if (coeff) {
-                int *src = samples[spkr];
-                int *dst = dca->dmix_sample_buffer + ch * nsamples;
+            int delta = coeff_cur - coeff_pre;
+            if (delta) {
+                // Downmix coefficient interpolation
+                int ramp = 1 << (nsamples_log2 - 1);
+                for (int n = 0; n < nsamples; n++, ramp += delta)
+                    dst[n] += mul15(src[n], coeff_pre + (ramp >> nsamples_log2));
+            } else if (coeff_cur) {
                 for (int n = 0; n < nsamples; n++)
-                    dst[n] += mul15(src[n], coeff);
+                    dst[n] += mul15(src[n], coeff_cur);
             }
+
+            dst += nsamples;
         }
 
         pos++;
@@ -253,7 +284,7 @@ static int down_mix_prim_chset(struct dcadec_context *dca, int **samples,
     samples[SPEAKER_L] = dca->dmix_sample_buffer;
     samples[SPEAKER_R] = dca->dmix_sample_buffer + nsamples;
     *ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
-    return 0;
+    return 1;
 }
 
 static int filter_core_frame(struct dcadec_context *dca)
@@ -271,11 +302,14 @@ static int filter_core_frame(struct dcadec_context *dca)
 
     // Downmix core channels to Lo/Ro
     if (dca->flags & DCADEC_FLAG_KEEP_DMIX_2CH) {
-        int *coeff = NULL;
-        if (core->prim_dmix_embedded && core->prim_dmix_type == DMIX_TYPE_LoRo)
-            coeff = core->prim_dmix_coeff;
-        if ((ret = down_mix_prim_chset(dca, core->output_samples, core->npcmsamples,
-                                       &core->ch_mask, coeff)) < 0)
+        if ((ret = down_mix_prim_chset(dca,
+                                       core->prim_dmix_embedded,
+                                       core->prim_dmix_type,
+                                       core->prim_dmix_coeff,
+                                       core->prim_dmix_coeff,
+                                       core->output_samples,
+                                       core->npcmsamples,
+                                       &core->ch_mask)) < 0)
             return ret;
     }
 
@@ -298,8 +332,8 @@ static int filter_core_frame(struct dcadec_context *dca)
     else
         dca->profile = DCADEC_PROFILE_DS;
 
-    // Perform clipping
-    if (dca->flags & DCADEC_FLAG_KEEP_DMIX_2CH)
+    // Perform clipping after Lo/Ro downmix
+    if (ret > 0)
         clip_samples(dca, nchannels);
 
     return 0;
@@ -797,11 +831,14 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
 
     // Downmix primary channel set to Lo/Ro
     if (dca->flags & DCADEC_FLAG_KEEP_DMIX_2CH) {
-        int *coeff = NULL;
-        if (p->dmix_embedded && p->dmix_type == DMIX_TYPE_LoRo)
-            coeff = p->dmix_coeff_cur;
-        if ((ret = down_mix_prim_chset(dca, spkr_map, xll->nframesamples,
-                                       &ch_mask, coeff)) < 0)
+        if ((ret = down_mix_prim_chset(dca,
+                                       p->dmix_embedded,
+                                       p->dmix_type,
+                                       p->dmix_coeff_cur,
+                                       p->dmix_coeff_pre,
+                                       spkr_map,
+                                       xll->nframesamples,
+                                       &ch_mask)) < 0)
             return ret;
     }
 
