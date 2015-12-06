@@ -280,7 +280,8 @@ static int filter_core_frame(struct dcadec_context *dca)
     }
 
     // Reorder sample buffer pointers
-    if ((ret = reorder_samples(dca, core->output_samples, core->ch_mask)) <= 0)
+    int nchannels;
+    if ((nchannels = reorder_samples(dca, core->output_samples, core->ch_mask)) <= 0)
         return -DCADEC_EINVAL;
 
     dca->nframesamples = core->npcmsamples;
@@ -299,7 +300,7 @@ static int filter_core_frame(struct dcadec_context *dca)
 
     // Perform clipping
     if (dca->flags & DCADEC_FLAG_KEEP_DMIX_2CH)
-        clip_samples(dca, ret);
+        clip_samples(dca, nchannels);
 
     return 0;
 }
@@ -805,14 +806,15 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     }
 
     // Reorder sample buffer pointers
-    if ((ret = reorder_samples(dca, spkr_map, ch_mask)) <= 0)
+    int nchannels;
+    if ((nchannels = reorder_samples(dca, spkr_map, ch_mask)) <= 0)
         return -DCADEC_EINVAL;
 
     // Shift samples to account for storage bit width
     int shift = p->storage_bit_res - p->pcm_bit_res;
     if (shift > 0) {
         int nsamples = xll->nframesamples;
-        for (int ch = 0; ch < ret; ch++)
+        for (int ch = 0; ch < nchannels; ch++)
             for (int n = 0; n < nsamples; n++)
                 dca->samples[ch][n] *= 1 << shift;
     }
@@ -823,7 +825,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     dca->profile = DCADEC_PROFILE_HD_MA;
 
     // Perform clipping. Audio is not lossless if clipping is detected.
-    if (clip_samples(dca, ret) > 0 && !(dca->flags & DCADEC_FLAG_KEEP_DMIX_MASK))
+    if (clip_samples(dca, nchannels) > 0 && !(dca->flags & DCADEC_FLAG_KEEP_DMIX_MASK))
         status = DCA_MAX(status, DCADEC_WXLLCLIPPED);
 
     return status;
