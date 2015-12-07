@@ -263,8 +263,8 @@ DCADEC_API void dcadec_context_free_exss_info(struct dcadec_exss_info *info);
  * @param dca       Pointer to decoder context.
  *
  * @param samples   Filled with address of array of pointers to planes
- *                  containing PCM data for active channels. This data is only
- *                  valid until the next call to any libdcadec function.
+ *                  containing PCM data for active channels. This data is valid
+ *                  until the next call to dcadec_context_parse() or _destroy().
  *                  Returned array is tightly packed, there are no gaps for
  *                  missing channels. Use channel_mask to determine total number
  *                  of channels and size of returned array. By default channels
