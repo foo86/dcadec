@@ -21,7 +21,6 @@
 
 #include "bitstream.h"
 
-#define XLL_MAX_CHSETS      16
 #define XLL_MAX_CHANNELS    8
 #define XLL_MAX_BANDS       2
 
