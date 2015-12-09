@@ -38,36 +38,7 @@
 #define core_err_once(...)     dca_log_once(ERROR, core, err_shown, __VA_ARGS__)
 #define core_warn_once(...)    dca_log_once(WARNING, core, warn_shown, __VA_ARGS__)
 
-struct core_decoder;
 struct exss_asset;
-struct dcadec_core_info;
-
-struct x96_decoder {
-    struct core_decoder *core;
-
-    int     rev_no;
-    bool    crc_present;
-    int     nchannels;
-    bool    high_res;
-    int     subband_start;
-    int     nsubbands[MAX_CHANNELS];
-    int     joint_intensity_index[MAX_CHANNELS];
-    int     scale_factor_sel[MAX_CHANNELS];
-    int     bit_allocation_sel[MAX_CHANNELS];
-    int     quant_index_sel[MAX_CHANNELS][NUM_CODE_BOOKS];
-
-    bool    prediction_mode[MAX_CHANNELS][MAX_SUBBANDS_X96];
-    int     prediction_vq_index[MAX_CHANNELS][MAX_SUBBANDS_X96];
-    int     bit_allocation[MAX_CHANNELS][MAX_SUBBANDS_X96];
-    int     scale_factors[MAX_CHANNELS][MAX_SUBBANDS_X96];
-    int     joint_scale_sel[MAX_CHANNELS];
-    int     joint_scale_factors[MAX_CHANNELS][MAX_SUBBANDS_X96];
-
-    int     rand;
-
-    int     *subband_buffer;
-    int     *subband_samples[MAX_CHANNELS][MAX_SUBBANDS_X96];
-};
 
 struct core_decoder {
     struct bitstream    bits;
@@ -118,13 +89,13 @@ struct core_decoder {
     int     quant_index_sel[MAX_CHANNELS][NUM_CODE_BOOKS];
     int     scale_factor_adj[MAX_CHANNELS][NUM_CODE_BOOKS];
 
-    bool    prediction_mode[MAX_CHANNELS][MAX_SUBBANDS];
-    int     prediction_vq_index[MAX_CHANNELS][MAX_SUBBANDS];
-    int     bit_allocation[MAX_CHANNELS][MAX_SUBBANDS];
+    bool    prediction_mode[MAX_CHANNELS][MAX_SUBBANDS_X96];
+    int     prediction_vq_index[MAX_CHANNELS][MAX_SUBBANDS_X96];
+    int     bit_allocation[MAX_CHANNELS][MAX_SUBBANDS_X96];
     int     transition_mode[MAX_SUBFRAMES][MAX_CHANNELS][MAX_SUBBANDS];
     int     scale_factors[MAX_CHANNELS][MAX_SUBBANDS][2];
     int     joint_scale_sel[MAX_CHANNELS];
-    int     joint_scale_factors[MAX_CHANNELS][MAX_SUBBANDS];
+    int     joint_scale_factors[MAX_CHANNELS][MAX_SUBBANDS_X96];
 
     int                 *subband_buffer;
     int                 *subband_samples[MAX_CHANNELS][MAX_SUBBANDS];
@@ -147,8 +118,16 @@ struct core_decoder {
     int     xxch_spkr_mask;
     size_t  xxch_pos;
 
-    struct x96_decoder  *x96_decoder;
-    size_t              x96_pos;
+    int     x96_rev_no;
+    bool    x96_crc_present;
+    int     x96_nchannels;
+    bool    x96_high_res;
+    int     x96_subband_start;
+    int     x96_rand;
+    size_t  x96_pos;
+
+    int     *x96_subband_buffer;
+    int     *x96_subband_samples[MAX_CHANNELS][MAX_SUBBANDS_X96];
 
     int     *output_buffer;
     int     *output_samples[SPEAKER_COUNT];

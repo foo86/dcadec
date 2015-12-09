@@ -875,6 +875,7 @@ static int alloc_core_decoder(struct dcadec_context *dca)
             return -DCADEC_ENOMEM;
         dca->core->log_cb = dca->log_cb;
         dca->core->log_cbarg = dca->log_cbarg;
+        dca->core->x96_rand = 1;
     }
     return 0;
 }
