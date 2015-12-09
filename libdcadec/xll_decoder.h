@@ -166,7 +166,7 @@ int xll_get_lsb_width(struct xll_chset *chs, int band, int ch);
 void xll_assemble_msbs_lsbs(struct xll_chset *chs, int band);
 int xll_assemble_freq_bands(struct xll_chset *chs);
 int xll_map_ch_to_spkr(struct xll_chset *chs, int ch);
-int xll_parse(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset);
+int xll_parse(struct xll_decoder *xll, uint8_t *data, struct exss_asset *asset);
 void xll_clear(struct xll_decoder *xll) __attribute__((cold));
 
 #endif

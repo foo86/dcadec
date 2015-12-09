@@ -2266,12 +2266,10 @@ int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
     return status;
 }
 
-int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
+int core_parse_exss(struct core_decoder *core, uint8_t *data,
                     int flags, struct exss_asset *asset)
 {
     int status = 0, ret;
-
-    (void)size;
 
     // Parse (X)XCH unless downmixing
     if (!(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {

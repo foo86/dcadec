@@ -1200,7 +1200,7 @@ static void clear_chs(struct xll_decoder *xll)
     }
 }
 
-int xll_parse(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
+int xll_parse(struct xll_decoder *xll, uint8_t *data, struct exss_asset *asset)
 {
     int ret;
 
@@ -1209,13 +1209,10 @@ int xll_parse(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_a
         xll->hd_stream_id = asset->hd_stream_id;
     }
 
-    data += asset->xll_offset;
-    size = asset->xll_size;
-
     if (xll->pbr_buffer)
-        ret = parse_frame_pbr(xll, data, size, asset);
+        ret = parse_frame_pbr(xll, data + asset->xll_offset, asset->xll_size, asset);
     else
-        ret = parse_frame_no_pbr(xll, data, size, asset);
+        ret = parse_frame_no_pbr(xll, data + asset->xll_offset, asset->xll_size, asset);
 
     if (ret < 0)
         clear_chs(xll);

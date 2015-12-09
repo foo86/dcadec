@@ -162,7 +162,7 @@ struct core_decoder {
 
 int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
                int flags, struct exss_asset *asset);
-int core_parse_exss(struct core_decoder *core, uint8_t *data, size_t size,
+int core_parse_exss(struct core_decoder *core, uint8_t *data,
                     int flags, struct exss_asset *asset);
 int core_filter(struct core_decoder *core, int flags);
 void core_clear(struct core_decoder *core) __attribute__((cold));

@@ -969,7 +969,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
         if (!(dca->flags & DCADEC_FLAG_CORE_ONLY) && (asset->extension_mask & EXSS_XLL)) {
             if ((ret = alloc_xll_decoder(dca)) < 0)
                 return ret;
-            if ((ret = xll_parse(dca->xll, data, size, asset)) < 0) {
+            if ((ret = xll_parse(dca->xll, data, asset)) < 0) {
                 // Conceal XLL synchronization error
                 if (ret == -DCADEC_ENOSYNC &&
                     (prev_packet & DCADEC_PACKET_XLL) &&
@@ -994,7 +994,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
 
     // Parse core extensions in EXSS or backward compatible core sub-stream
     if (!(dca->flags & DCADEC_FLAG_CORE_ONLY) && (dca->packet & DCADEC_PACKET_CORE)) {
-        if ((ret = core_parse_exss(dca->core, data, size, dca->flags, asset)) < 0)
+        if ((ret = core_parse_exss(dca->core, data, dca->flags, asset)) < 0)
             return ret;
         if (ret > status)
             status = ret;
