@@ -2248,11 +2248,11 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data,
                     int flags, struct exss_asset *asset)
 {
     int status = 0, ret;
+    struct bitstream temp = core->bits;
 
     // Parse (X)XCH unless downmixing
     if (!(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
         if (asset && (asset->extension_mask & EXSS_XXCH)) {
-            struct bitstream temp = core->bits;
             bits_init(&core->bits, data + asset->xxch_offset, asset->xxch_size);
             if ((ret = parse_xxch_frame(core)) < 0) {
                 if (flags & DCADEC_FLAG_STRICT)
@@ -2262,7 +2262,6 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data,
             } else {
                 core->ext_audio_mask |= EXSS_XXCH;
             }
-            core->bits = temp;
         } else if (core->xxch_pos) {
             core->bits.index = core->xxch_pos;
             if ((ret = parse_xxch_frame(core)) < 0) {
@@ -2286,6 +2285,18 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data,
         }
     }
 
+    // Parse XBR
+    if (asset && (asset->extension_mask & EXSS_XBR)) {
+        bits_init(&core->bits, data + asset->xbr_offset, asset->xbr_size);
+        if ((ret = parse_xbr_frame(core)) < 0) {
+            if (flags & DCADEC_FLAG_STRICT)
+                return ret;
+            status = DCADEC_WCOREEXTFAILED;
+        } else {
+            core->ext_audio_mask |= EXSS_XBR;
+        }
+    }
+
     // Parse X96
     if (asset && (asset->extension_mask & EXSS_X96)) {
         bits_init(&core->bits, data + asset->x96_offset, asset->x96_size);
@@ -2297,6 +2308,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data,
             core->ext_audio_mask |= EXSS_X96;
         }
     } else if (core->x96_pos) {
+        core->bits = temp;
         core->bits.index = core->x96_pos;
         if ((ret = parse_x96_frame(core)) < 0) {
             if (flags & DCADEC_FLAG_STRICT)
@@ -2304,18 +2316,6 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data,
             status = DCADEC_WCOREEXTFAILED;
         } else {
             core->ext_audio_mask |= CSS_X96;
-        }
-    }
-
-    // Parse XBR
-    if (asset && (asset->extension_mask & EXSS_XBR)) {
-        bits_init(&core->bits, data + asset->xbr_offset, asset->xbr_size);
-        if ((ret = parse_xbr_frame(core)) < 0) {
-            if (flags & DCADEC_FLAG_STRICT)
-                return ret;
-            status = DCADEC_WCOREEXTFAILED;
-        } else {
-            core->ext_audio_mask |= EXSS_XBR;
         }
     }
 
