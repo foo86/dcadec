@@ -32,6 +32,9 @@
 
 #define MAX_SUBBANDS_X96        64
 
+#define MAX_CHANNELS_CORE       6
+#define MAX_CHANNELS_DMIX       4
+
 #define core_err(...)   dca_log(ERROR, core, __VA_ARGS__)
 #define core_warn(...)  dca_log(WARNING, core, __VA_ARGS__)
 
@@ -106,7 +109,7 @@ struct core_decoder {
 
     bool    prim_dmix_embedded;
     int     prim_dmix_type;
-    int     prim_dmix_coeff[4 * 6];
+    int     prim_dmix_coeff[MAX_CHANNELS_DMIX * MAX_CHANNELS_CORE];
 
     int     ext_audio_mask;
 
