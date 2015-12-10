@@ -492,10 +492,11 @@ static int parse_subframe_header(struct core_decoder *core, int sf,
 
     // Bit allocation index
     for (ch = xch_base; ch < core->nchannels; ch++) {
+        // Select codebook
+        int sel = core->bit_allocation_sel[ch];
         // Not high frequency VQ subbands
         for (band = 0; band < core->subband_vq_start[ch]; band++) {
-            // Select codebook
-            int abits, sel = core->bit_allocation_sel[ch];
+            int abits;
             if (sel < 5)
                 abits = bits_get_unsigned_vlc(&core->bits, &bit_allocation_huff[sel]) + 1;
             else
@@ -516,13 +517,13 @@ static int parse_subframe_header(struct core_decoder *core, int sf,
 
         // Transient possible only if more than one subsubframe
         if (core->nsubsubframes[sf] > 1) {
+            // Select codebook
+            int sel = core->transition_mode_sel[ch];
             // Not high frequency VQ subbands
             for (band = 0; band < core->subband_vq_start[ch]; band++) {
                 // Present only if bits allocated
                 if (core->bit_allocation[ch][band]) {
-                    int sel = core->transition_mode_sel[ch];
-                    const struct huffman *huff = &transition_mode_huff[sel];
-                    int trans_ssf = bits_get_unsigned_vlc(&core->bits, huff);
+                    int trans_ssf = bits_get_unsigned_vlc(&core->bits, &transition_mode_huff[sel]);
                     if (trans_ssf >= 4) {
                         core_err("Invalid transition mode index");
                         return -DCADEC_EBADDATA;
@@ -1744,13 +1745,16 @@ static int parse_x96_subframe_header(struct core_decoder *core, int xch_base)
 
     // Scale factors
     for (ch = xch_base; ch < core->x96_nchannels; ch++) {
+        // Select codebook
+        int sel = core->scale_factor_sel[ch];
+
         // Clear accumulation
         int scale_index = 0;
 
         // Extract scales for subbands
         // Transmitted even for unallocated subbands
         for (band = core->x96_subband_start; band < core->nsubbands[ch]; band++) {
-            if ((ret = parse_scale(core, &scale_index, core->scale_factor_sel[ch])) < 0)
+            if ((ret = parse_scale(core, &scale_index, sel)) < 0)
                 return ret;
             core->scale_factors[ch][0][band] = ret;
         }
