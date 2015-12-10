@@ -34,6 +34,7 @@
 
 #define MAX_CHANNELS_CORE       6
 #define MAX_CHANNELS_DMIX       4
+#define MAX_CHANNELS_XXCH       2
 
 #define core_err(...)   dca_log(ERROR, core, __VA_ARGS__)
 #define core_warn(...)  dca_log(WARNING, core, __VA_ARGS__)
@@ -77,12 +78,6 @@ struct core_decoder {
     int     nchannels;
     int     ch_mask;
 
-    bool    dmix_coeffs_present;
-    bool    dmix_embedded;
-    int     dmix_scale_inv;
-    int     dmix_mask[MAX_CHANNELS];
-    int     dmix_coeff[64];
-
     int     nsubbands[MAX_CHANNELS];
     int     subband_vq_start[MAX_CHANNELS];
     int     joint_intensity_index[MAX_CHANNELS];
@@ -119,6 +114,10 @@ struct core_decoder {
     int     xxch_mask_nbits;
     int     xxch_core_mask;
     int     xxch_spkr_mask;
+    bool    xxch_dmix_embedded;
+    int     xxch_dmix_scale_inv;
+    int     xxch_dmix_mask[MAX_CHANNELS_XXCH];
+    int     xxch_dmix_coeff[MAX_CHANNELS_XXCH * MAX_CHANNELS_CORE];
     size_t  xxch_pos;
 
     int     x96_rev_no;

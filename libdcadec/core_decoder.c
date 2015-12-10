@@ -242,8 +242,6 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
         // Add LFE channel if present
         if (core->lfe_present)
             core->ch_mask |= SPEAKER_MASK_LFE1;
-
-        core->dmix_coeffs_present = core->dmix_embedded = false;
         break;
 
     case HEADER_XCH:
@@ -263,19 +261,19 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
         }
 
         // Number of channels in a channel set
-        n = bits_get(&core->bits, 3) + 1;
-        if (n > 2) {
-            core_err_once("Unsupported number of XXCH channels (%d)", n);
+        int nchannels = bits_get(&core->bits, 3) + 1;
+        if (nchannels > MAX_CHANNELS_XXCH) {
+            core_err_once("Unsupported number of XXCH channels (%d)", nchannels);
             return -DCADEC_ENOSUP;
         }
-        core->nchannels = audio_mode_nch[core->audio_mode] + n;
+        core->nchannels = audio_mode_nch[core->audio_mode] + nchannels;
         assert(core->nchannels <= MAX_CHANNELS);
 
         // Loudspeaker layout mask
         unsigned int mask = bits_get(&core->bits, core->xxch_mask_nbits - SPEAKER_Cs);
         core->xxch_spkr_mask = mask << SPEAKER_Cs;
 
-        if (dca_popcount(core->xxch_spkr_mask) != n) {
+        if (dca_popcount(core->xxch_spkr_mask) != nchannels) {
             core_err("Invalid XXCH speaker layout mask (%#x)", core->xxch_spkr_mask);
             return -DCADEC_EBADDATA;
         }
@@ -290,11 +288,9 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
         core->ch_mask = core->xxch_core_mask | core->xxch_spkr_mask;
 
         // Downmix coefficients present in stream
-        core->dmix_coeffs_present = bits_get1(&core->bits);
-
-        if (core->dmix_coeffs_present) {
+        if (bits_get1(&core->bits)) {
             // Downmix already performed by encoder
-            core->dmix_embedded = bits_get1(&core->bits);
+            core->xxch_dmix_embedded = bits_get1(&core->bits);
 
             // Downmix scale factor
             int code = bits_get(&core->bits, 6);
@@ -304,26 +300,26 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
                     core_err("Invalid XXCH downmix scale index");
                     return -DCADEC_EBADDATA;
                 }
-                core->dmix_scale_inv = dmix_table_inv[index];
+                core->xxch_dmix_scale_inv = dmix_table_inv[index];
             } else {
-                core->dmix_scale_inv = 0;
+                core->xxch_dmix_scale_inv = 0;
             }
 
             // Downmix channel mapping mask
-            for (ch = xch_base; ch < core->nchannels; ch++) {
+            for (ch = 0; ch < nchannels; ch++) {
                 mask = bits_get(&core->bits, core->xxch_mask_nbits);
                 if ((mask & core->xxch_core_mask) != mask) {
                     core_err("Invalid XXCH downmix channel mapping mask (%#x)", mask);
                     return -DCADEC_EBADDATA;
                 }
-                core->dmix_mask[ch] = mask;
+                core->xxch_dmix_mask[ch] = mask;
             }
 
             // Downmix coefficients
-            int *coeff_ptr = core->dmix_coeff;
-            for (ch = xch_base; ch < core->nchannels; ch++) {
+            int *coeff_ptr = core->xxch_dmix_coeff;
+            for (ch = 0; ch < nchannels; ch++) {
                 for (n = 0; n < core->xxch_mask_nbits; n++) {
-                    if (core->dmix_mask[ch] & (1U << n)) {
+                    if (core->xxch_dmix_mask[ch] & (1U << n)) {
                         int code = bits_get(&core->bits, 7);
                         int sign = (code >> 6) - 1; code &= 63;
                         if (code) {
@@ -340,7 +336,7 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
                 }
             }
         } else {
-            core->dmix_embedded = false;
+            core->xxch_dmix_embedded = false;
         }
 
         break;
@@ -1125,9 +1121,12 @@ int core_filter(struct core_decoder *core, int flags)
         }
 
         // Undo embedded XXCH downmix
-        if (core->dmix_embedded) {
+        if ((core->ext_audio_mask & (CSS_XXCH | EXSS_XXCH)) && core->xxch_dmix_embedded) {
+            int xch_base = audio_mode_nch[core->audio_mode];
+            assert(core->nchannels - xch_base <= MAX_CHANNELS_XXCH);
+
             // Undo embedded core downmix pre-scaling
-            int scale_inv = core->dmix_scale_inv;
+            int scale_inv = core->xxch_dmix_scale_inv;
             if (scale_inv != (1 << 16)) {
                 for (int spkr = 0; spkr < core->xxch_mask_nbits; spkr++) {
                     if (core->xxch_core_mask & (1U << spkr)) {
@@ -1139,13 +1138,13 @@ int core_filter(struct core_decoder *core, int flags)
             }
 
             // Undo downmix
-            int *coeff_ptr = core->dmix_coeff;
-            for (int ch = audio_mode_nch[core->audio_mode]; ch < core->nchannels; ch++) {
+            int *coeff_ptr = core->xxch_dmix_coeff;
+            for (int ch = xch_base; ch < core->nchannels; ch++) {
                 int spkr1 = map_prm_ch_to_spkr(core, ch);
                 if (spkr1 < 0)
                     return -DCADEC_EINVAL;
                 for (int spkr2 = 0; spkr2 < core->xxch_mask_nbits; spkr2++) {
-                    if (core->dmix_mask[ch] & (1U << spkr2)) {
+                    if (core->xxch_dmix_mask[ch - xch_base] & (1U << spkr2)) {
                         int coeff = mul16(*coeff_ptr++, scale_inv);
                         if (coeff) {
                             int *src = core->output_samples[spkr1];
@@ -2021,7 +2020,6 @@ static void revert_to_base_chset(struct core_decoder *core)
     core->ch_mask = audio_mode_ch_mask[core->audio_mode];
     if (core->lfe_present)
         core->ch_mask |= SPEAKER_MASK_LFE1;
-    core->dmix_coeffs_present = core->dmix_embedded = false;
 }
 
 static int parse_aux_data(struct core_decoder *core)
