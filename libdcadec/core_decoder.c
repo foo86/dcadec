@@ -310,8 +310,14 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
             }
 
             // Downmix channel mapping mask
-            for (ch = xch_base; ch < core->nchannels; ch++)
-                core->dmix_mask[ch] = bits_get(&core->bits, core->xxch_mask_nbits);
+            for (ch = xch_base; ch < core->nchannels; ch++) {
+                mask = bits_get(&core->bits, core->xxch_mask_nbits);
+                if ((mask & core->xxch_core_mask) != mask) {
+                    core_err("Invalid XXCH downmix channel mapping mask (%#x)", mask);
+                    return -DCADEC_EBADDATA;
+                }
+                core->dmix_mask[ch] = mask;
+            }
 
             // Downmix coefficients
             int *coeff_ptr = core->dmix_coeff;
