@@ -78,22 +78,22 @@ struct core_decoder {
     int     nchannels;
     int     ch_mask;
 
-    int     nsubbands[MAX_CHANNELS];
-    int     subband_vq_start[MAX_CHANNELS];
-    int     joint_intensity_index[MAX_CHANNELS];
-    int     transition_mode_sel[MAX_CHANNELS];
-    int     scale_factor_sel[MAX_CHANNELS];
-    int     bit_allocation_sel[MAX_CHANNELS];
-    int     quant_index_sel[MAX_CHANNELS][NUM_CODE_BOOKS];
-    int     scale_factor_adj[MAX_CHANNELS][NUM_CODE_BOOKS];
+    int8_t      nsubbands[MAX_CHANNELS];
+    int8_t      subband_vq_start[MAX_CHANNELS];
+    int8_t      joint_intensity_index[MAX_CHANNELS];
+    int8_t      transition_mode_sel[MAX_CHANNELS];
+    int8_t      scale_factor_sel[MAX_CHANNELS];
+    int8_t      bit_allocation_sel[MAX_CHANNELS];
+    int8_t      quant_index_sel[MAX_CHANNELS][NUM_CODE_BOOKS];
+    int32_t     scale_factor_adj[MAX_CHANNELS][NUM_CODE_BOOKS];
 
-    bool    prediction_mode[MAX_CHANNELS][MAX_SUBBANDS_X96];
-    int     prediction_vq_index[MAX_CHANNELS][MAX_SUBBANDS_X96];
-    int     bit_allocation[MAX_CHANNELS][MAX_SUBBANDS_X96];
-    int     transition_mode[MAX_SUBFRAMES][MAX_CHANNELS][MAX_SUBBANDS];
-    int     scale_factors[MAX_CHANNELS][MAX_SUBBANDS][2];
-    int     joint_scale_sel[MAX_CHANNELS];
-    int     joint_scale_factors[MAX_CHANNELS][MAX_SUBBANDS_X96];
+    int8_t      prediction_mode[MAX_CHANNELS][MAX_SUBBANDS_X96];
+    int16_t     prediction_vq_index[MAX_CHANNELS][MAX_SUBBANDS_X96];
+    int8_t      bit_allocation[MAX_CHANNELS][MAX_SUBBANDS_X96];
+    int8_t      transition_mode[MAX_SUBFRAMES][MAX_CHANNELS][MAX_SUBBANDS];
+    int32_t     scale_factors[MAX_CHANNELS][MAX_SUBBANDS][2];
+    int8_t      joint_scale_sel[MAX_CHANNELS];
+    int32_t     joint_scale_factors[MAX_CHANNELS][MAX_SUBBANDS_X96];
 
     int                 *subband_buffer;
     int                 *subband_samples[MAX_CHANNELS][MAX_SUBBANDS];

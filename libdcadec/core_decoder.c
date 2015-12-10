@@ -650,7 +650,7 @@ static inline void dequantize(int *output, const int *input, int step_size,
 }
 
 static inline int extract_audio(struct core_decoder *core, int *audio,
-                                int abits, int *quant_index_sel)
+                                int abits, int8_t *quant_index_sel)
 {
     const struct huffman *huff = NULL;
 
