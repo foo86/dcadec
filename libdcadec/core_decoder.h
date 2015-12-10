@@ -54,7 +54,7 @@ struct core_decoder {
 
     bool    crc_present;
     int     npcmblocks;
-    size_t  frame_size;
+    int     frame_size;
     int     audio_mode;
     int     sample_rate;
     int     bit_rate;
@@ -108,7 +108,7 @@ struct core_decoder {
 
     int     ext_audio_mask;
 
-    size_t  xch_pos;
+    int     xch_pos;
 
     bool    xxch_crc_present;
     int     xxch_mask_nbits;
@@ -118,7 +118,7 @@ struct core_decoder {
     int     xxch_dmix_scale_inv;
     int     xxch_dmix_mask[MAX_CHANNELS_XXCH];
     int     xxch_dmix_coeff[MAX_CHANNELS_XXCH * MAX_CHANNELS_CORE];
-    size_t  xxch_pos;
+    int     xxch_pos;
 
     int     x96_rev_no;
     bool    x96_crc_present;
@@ -126,7 +126,7 @@ struct core_decoder {
     bool    x96_high_res;
     int     x96_subband_start;
     int     x96_rand;
-    size_t  x96_pos;
+    int     x96_pos;
 
     int     *x96_subband_buffer;
     int     *x96_subband_samples[MAX_CHANNELS][MAX_SUBBANDS_X96];
@@ -141,7 +141,7 @@ struct core_decoder {
     int     filter_flags;
 };
 
-int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
+int core_parse(struct core_decoder *core, uint8_t *data, int size,
                int flags, struct exss_asset *asset);
 int core_parse_exss(struct core_decoder *core, uint8_t *data,
                     int flags, struct exss_asset *asset);

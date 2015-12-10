@@ -27,6 +27,7 @@
 #include <math.h>
 #include <errno.h>
 #include <assert.h>
+#include <limits.h>
 
 #include "compiler.h"
 #include "dca_context.h"

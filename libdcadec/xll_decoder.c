@@ -112,11 +112,10 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
 static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
 {
     struct xll_decoder *xll = chs->decoder;
-    int i, j, k, ret;
-    size_t header_pos = xll->bits.index;
+    int i, j, k, ret, header_pos = xll->bits.index;
 
     // Size of channel set sub-header
-    size_t header_size = bits_get(&xll->bits, 10) + 1;
+    int header_size = bits_get(&xll->bits, 10) + 1;
 
     // Check CRC
     if ((ret = bits_check_crc(&xll->bits, header_pos, header_pos + header_size * 8)) < 0) {
@@ -348,6 +347,10 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         if ((band == 0 && xll->scalable_lsbs) || (band != 0 && bits_get1(&xll->bits))) {
             // Size of LSB section in any segment
             chs->lsb_section_size[band] = bits_get(&xll->bits, xll->seg_size_nbits);
+            if (chs->lsb_section_size[band] < 0 || chs->lsb_section_size[band] > xll->frame_size) {
+                xll_err("Invalid LSB section size");
+                return -DCADEC_EBADDATA;
+            }
 
             // Account for optional CRC bytes after LSB section
             if (chs->lsb_section_size[band] && (xll->band_crc_present > 2 ||
@@ -442,13 +445,13 @@ static int chs_alloc_lsb_band_data(struct xll_chset *chs)
     return 0;
 }
 
-static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t band_data_nbytes)
+static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, int band_data_nbytes)
 {
     struct xll_decoder *xll = chs->decoder;
     int i, j, ret;
 
     // Calculate bit index where band data ends
-    size_t band_data_end = xll->bits.index + band_data_nbytes * 8;
+    int band_data_end = xll->bits.index + band_data_nbytes * 8;
 
     // Skip decoding inactive channel sets
     if (chs >= &xll->chset[xll->nactivechsets])
@@ -587,11 +590,6 @@ static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, size_t 
 
     // Start unpacking LSB portion of the segment
     if (chs->lsb_section_size[band]) {
-        if (chs->lsb_section_size[band] > band_data_nbytes) {
-            xll_err("Invalid LSB section size");
-            return -DCADEC_EBADDATA;
-        }
-
         // Skip to the start of LSB portion
         if ((ret = bits_seek(&xll->bits, band_data_end -
                              chs->lsb_section_size[band] * 8)) < 0) {
@@ -855,7 +853,7 @@ static int parse_common_header(struct xll_decoder *xll)
     }
 
     // Lossless frame header length
-    size_t header_size = bits_get(&xll->bits, 8) + 1;
+    int header_size = bits_get(&xll->bits, 8) + 1;
 
     // Check CRC
     if ((ret = bits_check_crc(&xll->bits, 32, header_size * 8)) < 0) {
@@ -868,7 +866,7 @@ static int parse_common_header(struct xll_decoder *xll)
 
     // Number of bytes in a lossless frame
     xll->frame_size = bits_get(&xll->bits, frame_size_nbits);
-    if (xll->frame_size >= XLL_PBR_SIZE) {
+    if (xll->frame_size < 0 || xll->frame_size >= XLL_PBR_SIZE) {
         xll_err("Invalid XLL frame size");
         return -DCADEC_EBADDATA;
     }
@@ -981,20 +979,20 @@ static int parse_navi_table(struct xll_decoder *xll)
     // Reallocate NAVI table
     if (ta_alloc_fast(xll, &xll->navi,
                       xll->nfreqbands * xll->nframesegs * xll->nchsets,
-                      sizeof(size_t)) < 0)
+                      sizeof(*xll->navi)) < 0)
         return -DCADEC_ENOMEM;
 
     // Parse NAVI
-    size_t navi_pos = xll->bits.index;
-    size_t *navi_ptr = xll->navi;
-    size_t navi_size = 0;
+    int navi_pos = xll->bits.index;
+    int *navi_ptr = xll->navi;
+    int navi_size = 0;
     for (int band = 0; band < xll->nfreqbands; band++) {
         for (int seg = 0; seg < xll->nframesegs; seg++) {
             for_each_chset(xll, chs) {
-                size_t size = 0;
+                int size = 0;
                 if (chs->nfreqbands > band) {
                     size = bits_get(&xll->bits, xll->seg_size_nbits);
-                    if (size >= xll->frame_size) {
+                    if (size < 0 || size >= xll->frame_size) {
                         xll_err("Invalid NAVI size");
                         return -DCADEC_EBADDATA;
                     }
@@ -1035,8 +1033,8 @@ static int parse_band_data(struct xll_decoder *xll)
 
     xll->nfailedsegs = 0;
 
-    size_t navi_pos = xll->bits.index;
-    size_t *navi_ptr = xll->navi;
+    int navi_pos = xll->bits.index;
+    int *navi_ptr = xll->navi;
     for (int band = 0; band < xll->nfreqbands; band++) {
         for (int seg = 0; seg < xll->nframesegs; seg++) {
             for_each_chset(xll, chs) {
@@ -1059,7 +1057,7 @@ static int parse_band_data(struct xll_decoder *xll)
     return 0;
 }
 
-static int parse_frame(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
+static int parse_frame(struct xll_decoder *xll, uint8_t *data, int size, struct exss_asset *asset)
 {
     int ret;
 
@@ -1085,7 +1083,7 @@ static void clear_pbr(struct xll_decoder *xll)
     xll->pbr_delay = 0;
 }
 
-static int copy_to_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, int delay)
+static int copy_to_pbr(struct xll_decoder *xll, uint8_t *data, int size, int delay)
 {
     if (size > XLL_PBR_SIZE) {
         xll_err("PBR smoothing buffer overflow");
@@ -1099,7 +1097,7 @@ static int copy_to_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, int 
     return 0;
 }
 
-static int parse_frame_no_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
+static int parse_frame_no_pbr(struct xll_decoder *xll, uint8_t *data, int size, struct exss_asset *asset)
 {
     int ret = parse_frame(xll, data, size, asset);
 
@@ -1142,11 +1140,9 @@ static int parse_frame_no_pbr(struct xll_decoder *xll, uint8_t *data, size_t siz
     return 0;
 }
 
-static int parse_frame_pbr(struct xll_decoder *xll, uint8_t *data, size_t size, struct exss_asset *asset)
+static int parse_frame_pbr(struct xll_decoder *xll, uint8_t *data, int size, struct exss_asset *asset)
 {
     int ret;
-
-    assert(xll->pbr_length <= XLL_PBR_SIZE);
 
     if (size > XLL_PBR_SIZE - xll->pbr_length) {
         xll_err("PBR smoothing buffer overflow");

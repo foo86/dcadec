@@ -70,12 +70,10 @@ static void parse_lbr_parameters(struct exss_asset *asset)
 static int parse_descriptor(struct exss_asset *asset)
 {
     struct exss_parser *exss = asset->parser;
-    int i, j, ret;
-
-    size_t descr_pos = exss->bits.index;
+    int i, j, ret, descr_pos = exss->bits.index;
 
     // Size of audio asset descriptor in bytes
-    size_t descr_size = bits_get(&exss->bits, 9) + 1;
+    int descr_size = bits_get(&exss->bits, 9) + 1;
 
     // Audio asset identifier
     asset->asset_index = bits_get(&exss->bits, 3);
@@ -307,8 +305,8 @@ static int parse_descriptor(struct exss_asset *asset)
 
 static int set_exss_offsets(struct exss_asset *asset)
 {
-    size_t offs = asset->asset_offset;
-    size_t size = asset->asset_size;
+    int offs = asset->asset_offset;
+    int size = asset->asset_size;
 
     if (asset->extension_mask & EXSS_CORE) {
         asset->core_offset = offs;
@@ -361,7 +359,7 @@ static int set_exss_offsets(struct exss_asset *asset)
     return 0;
 }
 
-int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
+int exss_parse(struct exss_parser *exss, uint8_t *data, int size)
 {
     int i, j, ret;
 
@@ -380,7 +378,7 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
     bool wide_hdr = bits_get1(&exss->bits);
 
     // Extension substream header length
-    size_t header_size = bits_get(&exss->bits, 8 + 4 * wide_hdr) + 1;
+    int header_size = bits_get(&exss->bits, 8 + 4 * wide_hdr) + 1;
 
     // Check CRC
     if ((ret = bits_check_crc(&exss->bits, 32 + 8, header_size * 8)) < 0) {
@@ -463,7 +461,7 @@ int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size)
         return -DCADEC_ENOMEM;
 
     // Size of encoded asset data in bytes
-    size_t offset = header_size;
+    int offset = header_size;
     for (i = 0; i < exss->nassets; i++) {
         exss->assets[i].asset_offset = offset;
         exss->assets[i].asset_size = bits_get(&exss->bits, exss->exss_size_nbits) + 1;

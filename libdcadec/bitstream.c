@@ -24,8 +24,8 @@ static inline uint32_t bits_peek(struct bitstream *bits)
     if (bits->index >= bits->total)
         return 0;
 
-    size_t pos = bits->index >> 5;
-    size_t shift = bits->index & 31;
+    int pos = bits->index >> 5;
+    int shift = bits->index & 31;
 
     uint32_t v = DCA_32BE(bits->data[pos]);
     if (shift) {
@@ -125,26 +125,27 @@ int bits_get_signed_vlc(struct bitstream *bits, const struct huffman *h)
     return ((v >> 1) ^ ((v & 1) - 1)) + 1;
 }
 
-static uint16_t crc16(const uint8_t *data, size_t size)
+static uint16_t crc16(const uint8_t *data, int size)
 {
     static const uint16_t crctab[16] = {
         0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
         0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef
     };
+
     uint16_t res = 0xffff;
-    while (size--) {
-        uint8_t c = *data++;
-        res = (res << 4) ^ crctab[(c >> 4) ^ (res >> 12)];
-        res = (res << 4) ^ crctab[(c & 15) ^ (res >> 12)];
+    for (int i = 0; i < size; i++) {
+        res = (res << 4) ^ crctab[(data[i] >> 4) ^ (res >> 12)];
+        res = (res << 4) ^ crctab[(data[i] & 15) ^ (res >> 12)];
     }
+
     return res;
 }
 
-int bits_check_crc(struct bitstream *bits, size_t p1, size_t p2)
+int bits_check_crc(struct bitstream *bits, int p1, int p2)
 {
-    if (((p1 | p2) & 7) || p1 > p2 || p2 - p1 < 16 || p2 > bits->total)
+    if (((p1 | p2) & 7) || p1 < 0 || p2 > bits->total || p2 - p1 < 16)
         return -DCADEC_EBADREAD;
-    if (crc16((uint8_t *)bits->data + (p1 >> 3), (p2 - p1) >> 3))
+    if (crc16((uint8_t *)bits->data + p1 / 8, (p2 - p1) / 8))
         return -DCADEC_EBADCRC;
     return 0;
 }

@@ -30,8 +30,8 @@ struct exss_parser;
 struct exss_asset {
     struct exss_parser  *parser;
 
-    size_t  asset_offset;
-    size_t  asset_size;
+    int     asset_offset;
+    int     asset_size;
     int     asset_index;
 
     int     pcm_bit_res;
@@ -47,26 +47,26 @@ struct exss_asset {
     int     coding_mode;
     int     extension_mask;
 
-    size_t  core_offset;
-    size_t  core_size;
+    int     core_offset;
+    int     core_size;
 
-    size_t  xbr_offset;
-    size_t  xbr_size;
+    int     xbr_offset;
+    int     xbr_size;
 
-    size_t  xxch_offset;
-    size_t  xxch_size;
+    int     xxch_offset;
+    int     xxch_size;
 
-    size_t  x96_offset;
-    size_t  x96_size;
+    int     x96_offset;
+    int     x96_size;
 
-    size_t  lbr_offset;
-    size_t  lbr_size;
+    int     lbr_offset;
+    int     lbr_size;
 
-    size_t  xll_offset;
-    size_t  xll_size;
+    int     xll_offset;
+    int     xll_size;
     bool    xll_sync_present;
     int     xll_delay_nframes;
-    size_t  xll_sync_offset;
+    int     xll_sync_offset;
 
     int     hd_stream_id;
 };
@@ -80,7 +80,7 @@ struct exss_parser {
 
     int     exss_index;
     int     exss_size_nbits;
-    size_t  exss_size;
+    int     exss_size;
 
     bool    static_fields_present;
     int     npresents;
@@ -95,7 +95,7 @@ struct exss_parser {
 
 extern const uint32_t exss_sample_rates[16];
 
-int exss_parse(struct exss_parser *exss, uint8_t *data, size_t size);
+int exss_parse(struct exss_parser *exss, uint8_t *data, int size);
 struct dcadec_exss_info *exss_get_info(struct exss_parser *exss) __attribute__((cold));
 
 #endif

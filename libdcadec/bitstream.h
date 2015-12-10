@@ -26,15 +26,16 @@
 
 struct bitstream {
     uint32_t    *data;
-    size_t      total;
-    size_t      index;
+    int         total;
+    int         index;
 };
 
-static inline void bits_init(struct bitstream *bits, uint8_t *data, size_t size)
+static inline void bits_init(struct bitstream *bits, uint8_t *data, int size)
 {
-    assert(!((uintptr_t)data & 3));
+    assert(data && !((uintptr_t)data & 3));
+    assert(size > 0 && size < INT_MAX / 8);
     bits->data = (uint32_t *)data;
-    bits->total = size << 3;
+    bits->total = size * 8;
     bits->index = 0;
 }
 
@@ -58,7 +59,7 @@ static inline void bits_skip1(struct bitstream *bits)
     bits->index++;
 }
 
-static inline int bits_seek(struct bitstream *bits, size_t n)
+static inline int bits_seek(struct bitstream *bits, int n)
 {
     if (n < bits->index || n > bits->total)
         return -DCADEC_EBADREAD;
@@ -66,19 +67,19 @@ static inline int bits_seek(struct bitstream *bits, size_t n)
     return 0;
 }
 
-static inline size_t bits_align1(struct bitstream *bits)
+static inline int bits_align1(struct bitstream *bits)
 {
     bits->index = DCA_ALIGN(bits->index, 8);
     return bits->index;
 }
 
-static inline size_t bits_align4(struct bitstream *bits)
+static inline int bits_align4(struct bitstream *bits)
 {
     bits->index = DCA_ALIGN(bits->index, 32);
     return bits->index;
 }
 
-int bits_check_crc(struct bitstream *bits, size_t p1, size_t p2);
+int bits_check_crc(struct bitstream *bits, int p1, int p2);
 void bits_get_array(struct bitstream *bits, int *array, int size, int n);
 void bits_get_signed_array(struct bitstream *bits, int *array, int size, int n);
 void bits_get_signed_linear_array(struct bitstream *bits, int *array, int size, int n);

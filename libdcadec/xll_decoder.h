@@ -97,7 +97,7 @@ struct xll_chset {
 
     bool    band_dmix_embedded[XLL_MAX_BANDS];
 
-    size_t  lsb_section_size[XLL_MAX_BANDS];
+    int     lsb_section_size[XLL_MAX_BANDS];
     int     nscalablelsbs[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
     int     bit_width_adjust[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
 
@@ -129,7 +129,7 @@ struct xll_decoder {
 
     int     flags;
 
-    size_t  frame_size;
+    int     frame_size;
     int     nchsets;
     int     nframesegs;
     int     nsegsamples_log2;
@@ -144,7 +144,7 @@ struct xll_decoder {
 
     struct xll_chset    *chset;
 
-    size_t  *navi;
+    int     *navi;
 
     int     nfreqbands;
     int     nchannels;
@@ -155,7 +155,7 @@ struct xll_decoder {
     int     hd_stream_id;
 
     uint8_t     *pbr_buffer;
-    size_t      pbr_length;
+    int         pbr_length;
     int         pbr_delay;
 };
 

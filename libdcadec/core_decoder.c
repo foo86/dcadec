@@ -218,10 +218,7 @@ static int parse_frame_header(struct core_decoder *core)
 // 5.3.2 - Primary audio coding header
 static int parse_coding_header(struct core_decoder *core, enum HeaderType header, int xch_base)
 {
-    int ch, n, ret;
-
-    size_t header_pos = core->bits.index;
-    size_t header_size = 0;
+    int ch, n, ret, header_size = 0, header_pos = core->bits.index;
 
     switch (header) {
     case HEADER_CORE:
@@ -1217,7 +1214,7 @@ static int parse_xch_frame(struct core_decoder *core)
 
 static int parse_xxch_frame(struct core_decoder *core)
 {
-    size_t header_pos = core->bits.index;
+    int header_pos = core->bits.index;
 
     // XXCH sync word
     if (bits_get(&core->bits, 32) != SYNC_WORD_XXCH) {
@@ -1226,12 +1223,11 @@ static int parse_xxch_frame(struct core_decoder *core)
     }
 
     // XXCH frame header length
-    size_t header_size = bits_get(&core->bits, 6) + 1;
-    size_t header_end = header_pos + header_size * 8;
+    int header_size = bits_get(&core->bits, 6) + 1;
 
     // Check XXCH frame header CRC
     int ret;
-    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_end)) < 0) {
+    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_pos + header_size * 8)) < 0) {
         core_err("Invalid XXCH frame header checksum");
         return ret;
     }
@@ -1277,7 +1273,7 @@ static int parse_xxch_frame(struct core_decoder *core)
     // Reserved
     // Byte align
     // CRC16 of XXCH frame header
-    if ((ret = bits_seek(&core->bits, header_end)) < 0) {
+    if ((ret = bits_seek(&core->bits, header_pos + header_size * 8)) < 0) {
         core_err("Read past end of XXCH frame header");
         return ret;
     }
@@ -1286,7 +1282,7 @@ static int parse_xxch_frame(struct core_decoder *core)
     if ((ret = parse_frame_data(core, HEADER_XXCH, core->nchannels)) < 0)
         return ret;
 
-    if ((ret = bits_seek(&core->bits, header_end + xxch_frame_size * 8)) < 0)
+    if ((ret = bits_seek(&core->bits, header_pos + header_size * 8 + xxch_frame_size * 8)) < 0)
         core_err("Read past end of XXCH channel set");
     return ret;
 }
@@ -1425,7 +1421,7 @@ static int parse_xbr_frame(struct core_decoder *core)
     int     xbr_nchannels[4];
     int     xbr_nsubbands[4 * 8];
 
-    size_t header_pos = core->bits.index;
+    int header_pos = core->bits.index;
 
     // XBR sync word
     if (bits_get(&core->bits, 32) != SYNC_WORD_XBR) {
@@ -1434,12 +1430,11 @@ static int parse_xbr_frame(struct core_decoder *core)
     }
 
     // XBR frame header length
-    size_t header_size = bits_get(&core->bits, 6) + 1;
-    size_t header_end = header_pos + header_size * 8;
+    int header_size = bits_get(&core->bits, 6) + 1;
 
     // Check XBR frame header CRC
     int ret;
-    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_end)) < 0) {
+    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_pos + header_size * 8)) < 0) {
         core_err("Invalid XBR frame header checksum");
         return ret;
     }
@@ -1470,7 +1465,7 @@ static int parse_xbr_frame(struct core_decoder *core)
     // Reserved
     // Byte align
     // CRC16 of XBR frame header
-    if ((ret = bits_seek(&core->bits, header_end)) < 0) {
+    if ((ret = bits_seek(&core->bits, header_pos + header_size * 8)) < 0) {
         core_err("Read past end of XBR frame header");
         return ret;
     }
@@ -1797,9 +1792,7 @@ static int parse_x96_subframe_header(struct core_decoder *core, int xch_base)
 
 static int parse_x96_coding_header(struct core_decoder *core, bool exss, int xch_base)
 {
-    size_t header_pos = core->bits.index;
-    size_t header_size = 0;
-    int ch, n, ret;
+    int ch, n, ret, header_size = 0, header_pos = core->bits.index;
 
     if (exss) {
         // Channel set header length
@@ -1941,10 +1934,10 @@ static int parse_x96_frame(struct core_decoder *core)
 
 static int parse_x96_frame_exss(struct core_decoder *core)
 {
-    size_t  x96_frame_size[4];
+    int     x96_frame_size[4];
     int     x96_nchannels[4];
 
-    size_t header_pos = core->bits.index;
+    int header_pos = core->bits.index;
 
     // X96 sync word
     if (bits_get(&core->bits, 32) != SYNC_WORD_X96) {
@@ -1953,12 +1946,11 @@ static int parse_x96_frame_exss(struct core_decoder *core)
     }
 
     // X96 frame header length
-    size_t header_size = bits_get(&core->bits, 6) + 1;
-    size_t header_end = header_pos + header_size * 8;
+    int header_size = bits_get(&core->bits, 6) + 1;
 
     // Check X96 frame header CRC
     int ret;
-    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_end)) < 0) {
+    if ((ret = bits_check_crc(&core->bits, header_pos + 32, header_pos + header_size * 8)) < 0) {
         core_err("Invalid X96 frame header checksum");
         return ret;
     }
@@ -1987,7 +1979,7 @@ static int parse_x96_frame_exss(struct core_decoder *core)
     // Reserved
     // Byte align
     // CRC16 of X96 frame header
-    if ((ret = bits_seek(&core->bits, header_end)) < 0) {
+    if ((ret = bits_seek(&core->bits, header_pos + header_size * 8)) < 0) {
         core_err("Read past end of X96 frame header");
         return ret;
     }
@@ -2032,7 +2024,7 @@ static int parse_aux_data(struct core_decoder *core)
     bits_skip(&core->bits, 6);
 
     // 4-byte align
-    size_t aux_pos = bits_align4(&core->bits);
+    int aux_pos = bits_align4(&core->bits);
 
     // Auxiliary data sync word
     uint32_t sync = bits_get(&core->bits, 32);
@@ -2129,11 +2121,8 @@ static int parse_optional_info(struct core_decoder *core, int flags)
 
     // Core extensions
     if (core->ext_audio_present && !(flags & DCADEC_FLAG_CORE_ONLY)) {
-        size_t sync_pos = DCA_MIN(core->frame_size / 4, core->bits.total / 32) - 1;
-        size_t last_pos = core->bits.index / 32;
-
-        assert(sync_pos != (size_t)-1);
-        assert(last_pos);
+        int sync_pos = DCA_MIN(core->frame_size / 4, core->bits.total / 32) - 1;
+        int last_pos = core->bits.index / 32;
 
         // Search for extension sync words aligned on 4-byte boundary
         switch (core->ext_audio_type) {
@@ -2149,8 +2138,8 @@ static int parse_optional_info(struct core_decoder *core, int flags)
             for (; sync_pos >= last_pos; sync_pos--) {
                 if (core->bits.data[sync_pos] == DCA_32BE_C(SYNC_WORD_XCH)) {
                     core->bits.index = (sync_pos + 1) * 32;
-                    size_t frame_size = bits_get(&core->bits, 10) + 1;
-                    size_t dist = core->frame_size - sync_pos * 4;
+                    int frame_size = bits_get(&core->bits, 10) + 1;
+                    int dist = core->frame_size - sync_pos * 4;
                     if (frame_size >= 96
                         && (frame_size == dist || frame_size - 1 == dist)
                         && bits_get(&core->bits, 7) == 0x08) {
@@ -2170,8 +2159,8 @@ static int parse_optional_info(struct core_decoder *core, int flags)
             for (; sync_pos >= last_pos; sync_pos--) {
                 if (core->bits.data[sync_pos] == DCA_32BE_C(SYNC_WORD_X96)) {
                     core->bits.index = (sync_pos + 1) * 32;
-                    size_t frame_size = bits_get(&core->bits, 12) + 1;
-                    size_t dist = core->frame_size - sync_pos * 4;
+                    int frame_size = bits_get(&core->bits, 12) + 1;
+                    int dist = core->frame_size - sync_pos * 4;
                     if (frame_size >= 96 && frame_size == dist) {
                         core->x96_pos = core->bits.index;
                         break;
@@ -2191,7 +2180,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
             for (; sync_pos >= last_pos; sync_pos--) {
                 if (core->bits.data[sync_pos] == DCA_32BE_C(SYNC_WORD_XXCH)) {
                     core->bits.index = (sync_pos + 1) * 32;
-                    size_t hdr_size = bits_get(&core->bits, 6) + 1;
+                    int hdr_size = bits_get(&core->bits, 6) + 1;
                     if (hdr_size >= 11 &&
                         !bits_check_crc(&core->bits, (sync_pos + 1) * 32,
                                         sync_pos * 32 + hdr_size * 8)) {
@@ -2214,7 +2203,7 @@ static int parse_optional_info(struct core_decoder *core, int flags)
     return status;
 }
 
-int core_parse(struct core_decoder *core, uint8_t *data, size_t size,
+int core_parse(struct core_decoder *core, uint8_t *data, int size,
                int flags, struct exss_asset *asset)
 {
     core->ext_audio_mask = 0;
