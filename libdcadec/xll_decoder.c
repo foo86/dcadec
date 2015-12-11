@@ -976,10 +976,14 @@ static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
 
 static int parse_navi_table(struct xll_decoder *xll)
 {
+    int navi_nb = xll->nfreqbands * xll->nframesegs * xll->nchsets;
+    if (navi_nb > 1024) {
+        xll_err("Too many NAVI entries");
+        return -DCADEC_EBADDATA;
+    }
+
     // Reallocate NAVI table
-    if (ta_alloc_fast(xll, &xll->navi,
-                      xll->nfreqbands * xll->nframesegs * xll->nchsets,
-                      sizeof(*xll->navi)) < 0)
+    if (ta_alloc_fast(xll, &xll->navi, navi_nb, sizeof(*xll->navi)) < 0)
         return -DCADEC_ENOMEM;
 
     // Parse NAVI
