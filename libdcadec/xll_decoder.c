@@ -1108,6 +1108,10 @@ static int parse_frame_no_pbr(struct xll_decoder *xll, uint8_t *data, int size, 
             xll_err("Invalid XLL sync word offset");
             return -DCADEC_EINVAL;
         }
+        if (asset->xll_delay_nframes < 0) {
+            xll_err("Invalid XLL decoding delay");
+            return -DCADEC_EINVAL;
+        }
 
         // Skip to the next sync word in this packet
         data += asset->xll_sync_offset;
