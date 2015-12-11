@@ -22,6 +22,8 @@
 #include "xll_decoder.h"
 #include "fixed_math.h"
 
+#define MAX_PACKET_SIZE     0x104000
+
 #define DCADEC_PACKET_CORE  0x01
 #define DCADEC_PACKET_EXSS  0x02
 #define DCADEC_PACKET_XLL   0x04
@@ -907,7 +909,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
 {
     int status = 0, ret;
 
-    if (!dca || !data || size < 4 || ((uintptr_t)data & 3))
+    if (!dca || !data || size < 4 || size > MAX_PACKET_SIZE || ((uintptr_t)data & 3))
         return -DCADEC_EINVAL;
 
     int prev_packet = dca->packet;
