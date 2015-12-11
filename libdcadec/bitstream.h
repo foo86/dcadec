@@ -43,7 +43,6 @@ bool bits_get1(struct bitstream *bits);
 int bits_get(struct bitstream *bits, int n);
 int bits_get_signed(struct bitstream *bits, int n);
 int bits_get_signed_linear(struct bitstream *bits, int n);
-int bits_get_unsigned_rice(struct bitstream *bits, int k);
 int bits_get_signed_rice(struct bitstream *bits, int k);
 int bits_get_unsigned_vlc(struct bitstream *bits, const struct huffman *h);
 int bits_get_signed_vlc(struct bitstream *bits, const struct huffman *h);

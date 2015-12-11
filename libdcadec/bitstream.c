@@ -76,7 +76,7 @@ int bits_get_signed_linear(struct bitstream *bits, int n)
     return (v >> 1) ^ -(v & 1);
 }
 
-int bits_get_unsigned_rice(struct bitstream *bits, int k)
+static int bits_get_unsigned_rice(struct bitstream *bits, int k)
 {
     unsigned int unary = 0;
 
