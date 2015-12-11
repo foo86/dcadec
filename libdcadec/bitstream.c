@@ -51,8 +51,6 @@ bool bits_get1(struct bitstream *bits)
 
 int bits_get(struct bitstream *bits, int n)
 {
-    assert(n > 0 && n <= 32);
-
     uint32_t v = bits_peek(bits);
     v >>= 32 - n;
 
@@ -62,8 +60,6 @@ int bits_get(struct bitstream *bits, int n)
 
 int bits_get_signed(struct bitstream *bits, int n)
 {
-    assert(n > 0 && n <= 32);
-
     int32_t v = bits_peek(bits);
     v >>= 32 - n;
 
