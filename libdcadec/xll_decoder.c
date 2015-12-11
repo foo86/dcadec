@@ -1162,11 +1162,9 @@ static int parse_frame_pbr(struct xll_decoder *xll, uint8_t *data, int size, str
     xll->pbr_length += size;
 
     // Respect decoding delay after synchronization error
-    if (xll->pbr_delay > 0) {
-        if (--xll->pbr_delay > 0) {
-            xll_verbose("Waiting until decoding delay expires (%d)", xll->pbr_delay);
-            return -DCADEC_ENOSYNC;
-        }
+    if (xll->pbr_delay > 0 && --xll->pbr_delay) {
+        xll_verbose("Waiting until XLL decoding delay expires (%d)", xll->pbr_delay);
+        return -DCADEC_ENOSYNC;
     }
 
     if ((ret = parse_frame(xll, xll->pbr_buffer, xll->pbr_length, asset)) < 0)

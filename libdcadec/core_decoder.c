@@ -1024,16 +1024,14 @@ int core_filter(struct core_decoder *core, int flags)
 
     core->filter_flags = flags;
 
-    if (!core->subband_dsp_idct)
-        if (!(core->subband_dsp_idct = idct_init(core)))
-            return -DCADEC_ENOMEM;
+    if (!core->subband_dsp_idct && !(core->subband_dsp_idct = idct_init(core)))
+        return -DCADEC_ENOMEM;
 
     // Filter primary channels
     for (int ch = 0; ch < core->nchannels; ch++) {
         // Allocate subband DSP
-        if (!core->subband_dsp[ch])
-            if (!(core->subband_dsp[ch] = interpolator_create(core->subband_dsp_idct, flags)))
-                return -DCADEC_ENOMEM;
+        if (!core->subband_dsp[ch] && !(core->subband_dsp[ch] = interpolator_create(core->subband_dsp_idct, flags)))
+            return -DCADEC_ENOMEM;
 
         // Map this primary channel to speaker
         int spkr = map_prm_ch_to_spkr(core, ch);
