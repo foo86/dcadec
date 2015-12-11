@@ -76,13 +76,13 @@ int bits_get_signed_linear(struct bitstream *bits, int n)
     if (n == 0)
         return 0;
 
-    int v = bits_get(bits, n);
+    unsigned int v = bits_get(bits, n);
     return (v >> 1) ^ -(v & 1);
 }
 
 int bits_get_unsigned_rice(struct bitstream *bits, int k)
 {
-    int unary = 0;
+    unsigned int unary = 0;
 
     while (bits->index < bits->total) {
         uint32_t v = bits_peek(bits);
@@ -101,7 +101,7 @@ int bits_get_unsigned_rice(struct bitstream *bits, int k)
 
 int bits_get_signed_rice(struct bitstream *bits, int k)
 {
-    int v = bits_get_unsigned_rice(bits, k);
+    unsigned int v = bits_get_unsigned_rice(bits, k);
     return (v >> 1) ^ -(v & 1);
 }
 
@@ -121,7 +121,7 @@ int bits_get_unsigned_vlc(struct bitstream *bits, const struct huffman *h)
 
 int bits_get_signed_vlc(struct bitstream *bits, const struct huffman *h)
 {
-    int v = bits_get_unsigned_vlc(bits, h);
+    unsigned int v = bits_get_unsigned_vlc(bits, h);
     return ((v >> 1) ^ ((v & 1) - 1)) + 1;
 }
 
@@ -164,12 +164,10 @@ void bits_get_signed_array(struct bitstream *bits, int *array, int size, int n)
 
 void bits_get_signed_linear_array(struct bitstream *bits, int *array, int size, int n)
 {
-    if (n == 0) {
+    if (n == 0)
         memset(array, 0, sizeof(*array) * size);
-    } else for (int i = 0; i < size; i++) {
-        int v = bits_get(bits, n);
-        array[i] = (v >> 1) ^ -(v & 1);
-    }
+    else for (int i = 0; i < size; i++)
+        array[i] = bits_get_signed_linear(bits, n);
 }
 
 void bits_get_signed_rice_array(struct bitstream *bits, int *array, int size, int k)
