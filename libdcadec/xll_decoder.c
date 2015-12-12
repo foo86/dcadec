@@ -445,13 +445,10 @@ static int chs_alloc_lsb_band_data(struct xll_chset *chs)
     return 0;
 }
 
-static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, int band_data_nbytes)
+static int chs_parse_band_data(struct xll_chset *chs, int band, int seg, int band_data_end)
 {
     struct xll_decoder *xll = chs->decoder;
     int i, j, ret;
-
-    // Calculate bit index where band data ends
-    int band_data_end = xll->bits.index + band_data_nbytes * 8;
 
     // Skip decoding inactive channel sets
     if (chs >= &xll->chset[xll->nactivechsets])
@@ -989,7 +986,6 @@ static int parse_navi_table(struct xll_decoder *xll)
     // Parse NAVI
     int navi_pos = xll->bits.index;
     int *navi_ptr = xll->navi;
-    int navi_size = 0;
     for (int band = 0; band < xll->nfreqbands; band++) {
         for (int seg = 0; seg < xll->nframesegs; seg++) {
             for_each_chset(xll, chs) {
@@ -1003,14 +999,8 @@ static int parse_navi_table(struct xll_decoder *xll)
                     size++;
                 }
                 *navi_ptr++ = size;
-                navi_size += size;
             }
         }
-    }
-
-    if (navi_size > xll->frame_size) {
-        xll_err("Invalid NAVI size");
-        return -DCADEC_EBADDATA;
     }
 
     // Byte align
@@ -1044,7 +1034,11 @@ static int parse_band_data(struct xll_decoder *xll)
             for_each_chset(xll, chs) {
                 if (chs->nfreqbands > band) {
                     navi_pos += *navi_ptr * 8;
-                    if ((ret = chs_parse_band_data(chs, band, seg, *navi_ptr)) < 0) {
+                    if (navi_pos > xll->bits.total) {
+                        xll_err("Invalid NAVI position");
+                        return -DCADEC_EBADREAD;
+                    }
+                    if ((ret = chs_parse_band_data(chs, band, seg, navi_pos)) < 0) {
                         if (xll->flags & DCADEC_FLAG_STRICT)
                             return ret;
                         // Zero band data and advance to next segment
