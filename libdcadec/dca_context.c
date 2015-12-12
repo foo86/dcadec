@@ -392,10 +392,11 @@ struct downmix {
 static void undo_down_mix(struct xll_chset *c, struct downmix *dmix, int band)
 {
     struct xll_decoder *xll = c->decoder;
+    struct xll_band *b = &c->bands[band];
     int nsamples = xll->nframesamples;
     int nsamples_log2 = xll->nframesamples_log2;
 
-    if (!c->band_dmix_embedded[band])
+    if (!b->dmix_embedded)
         return;
 
     for (int i = 0; i < c->dmix_m; i++) {
@@ -405,7 +406,7 @@ static void undo_down_mix(struct xll_chset *c, struct downmix *dmix, int band)
             int delta = coeff_cur - coeff_pre;
 
             // Undo downmix of channel samples
-            int *src = c->msb_sample_buffer[band][j];
+            int *src = b->msb_sample_buffer[j];
             int *dst = dmix->samples[band][i];
 
             if (delta) {
@@ -430,10 +431,11 @@ static void undo_down_mix(struct xll_chset *c, struct downmix *dmix, int band)
 static void scale_down_mix(struct xll_chset *c, struct downmix *dmix, int band)
 {
     struct xll_decoder *xll = c->decoder;
+    struct xll_band *b = &c->bands[band];
     int nsamples = xll->nframesamples;
     int nsamples_log2 = xll->nframesamples_log2;
 
-    if (!c->band_dmix_embedded[band])
+    if (!b->dmix_embedded)
         return;
 
     for (int i = 0; i < c->dmix_m; i++) {
@@ -567,11 +569,6 @@ static void force_lossy_output(struct core_decoder *core, struct xll_chset *c)
     if (c->nfreqbands > 1)
         xll_clear_band_data(c, XLL_BAND_1);
 
-    // Clear decimator history and scalable LSBs
-    memset(c->deci_history, 0, sizeof(c->deci_history));
-    memset(c->nscalablelsbs, 0, sizeof(c->nscalablelsbs));
-    memset(c->bit_width_adjust, 0, sizeof(c->bit_width_adjust));
-
     // Replace non-residual encoded channels with lossy counterparts
     for (int ch = 0; ch < c->nchannels; ch++) {
         if (!(c->residual_encode & (1 << ch)))
@@ -659,7 +656,7 @@ static int combine_residual_core_frame(struct dcadec_context *dca,
             shift += xll_get_lsb_width(c, XLL_BAND_0, ch);
         int round = shift > 0 ? 1 << (shift - 1) : 0;
 
-        int *dst = c->msb_sample_buffer[XLL_BAND_0][ch];
+        int *dst = c->bands[XLL_BAND_0].msb_sample_buffer[ch];
         int *src = core->output_samples[core_spkr];
         if (o) {
             // Undo embedded core downmix pre-scaling
@@ -754,9 +751,9 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
 
             for (int ch = 0; ch < c->nchannels; ch++) {
                 dmix.samples[XLL_BAND_0][nchannels] =
-                    c->msb_sample_buffer[XLL_BAND_0][ch];
+                    c->bands[XLL_BAND_0].msb_sample_buffer[ch];
                 dmix.samples[XLL_BAND_1][nchannels] =
-                    c->msb_sample_buffer[XLL_BAND_1][ch];
+                    c->bands[XLL_BAND_1].msb_sample_buffer[ch];
                 dmix.deci_history[nchannels] = c->deci_history[ch];
                 nchannels++;
             }

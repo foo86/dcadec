@@ -54,6 +54,26 @@
 struct xll_decoder;
 struct exss_asset;
 
+struct xll_band {
+    bool    decor_enabled;
+    int     orig_order[XLL_MAX_CHANNELS];
+    int     decor_coeff[XLL_MAX_CHANNELS / 2];
+
+    int     adapt_pred_order[XLL_MAX_CHANNELS];
+    int     highest_pred_order;
+    int     fixed_pred_order[XLL_MAX_CHANNELS];
+    int     adapt_refl_coeff[XLL_MAX_CHANNELS][16];
+
+    bool    dmix_embedded;
+
+    int     lsb_section_size;
+    int     nscalablelsbs[XLL_MAX_CHANNELS];
+    int     bit_width_adjust[XLL_MAX_CHANNELS];
+
+    int     *msb_sample_buffer[XLL_MAX_CHANNELS];
+    int     *lsb_sample_buffer[XLL_MAX_CHANNELS];
+};
+
 struct xll_chset {
     struct xll_decoder  *decoder;
 
@@ -86,20 +106,7 @@ struct xll_chset {
     int     nfreqbands;
     int     nabits;
 
-    bool    decor_enabled[XLL_MAX_BANDS];
-    int     orig_order[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
-    int     decor_coeff[XLL_MAX_BANDS][XLL_MAX_CHANNELS / 2];
-
-    int     adapt_pred_order[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
-    int     highest_pred_order[XLL_MAX_BANDS];
-    int     fixed_pred_order[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
-    int     adapt_refl_coeff[XLL_MAX_BANDS][XLL_MAX_CHANNELS][16];
-
-    bool    band_dmix_embedded[XLL_MAX_BANDS];
-
-    int     lsb_section_size[XLL_MAX_BANDS];
-    int     nscalablelsbs[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
-    int     bit_width_adjust[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
+    struct xll_band     bands[XLL_MAX_BANDS];
 
     bool    seg_type;
     bool    rice_code_flag[XLL_MAX_CHANNELS];
@@ -110,8 +117,6 @@ struct xll_chset {
 
     int     deci_history[XLL_MAX_CHANNELS][XLL_DECI_HISTORY];
 
-    int     *msb_sample_buffer[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
-    int     *lsb_sample_buffer[XLL_MAX_BANDS][XLL_MAX_CHANNELS];
     int     *out_sample_buffer[XLL_MAX_CHANNELS];
 
     int     *sample_buffer1;
