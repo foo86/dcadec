@@ -1522,8 +1522,6 @@ static int parse_x96_subband_samples(struct core_decoder *core, int ssf,
     return 0;
 }
 
-#define NUM_VQ_X96  16
-
 // Modified ISO/IEC 9899 linear congruential generator
 // Returns pseudorandom integer in range [-2^30, 2^30 - 1]
 static int rand_x96(struct core_decoder *core)
@@ -1542,11 +1540,6 @@ static int parse_x96_subframe_audio(struct core_decoder *core, int sf, int xch_b
         core_err("Subband sample buffer overflow");
         return -DCADEC_EBADDATA;
     }
-
-    // Number of VQ lookup iterations for this subframe
-    int n_ssf_iter = core->nsubsubframes[sf] / 2;
-    if (nsamples > n_ssf_iter * NUM_VQ_X96)
-        n_ssf_iter++;
 
     // VQ encoded or unallocated subbands
     for (ch = xch_base; ch < core->x96_nchannels; ch++) {
@@ -1567,7 +1560,7 @@ static int parse_x96_subframe_audio(struct core_decoder *core, int sf, int xch_b
                         samples[n] = mul31(rand_x96(core), scale);
                 }
             } else if (abits == 1) {    // VQ encoded subband
-                for (int ssf_iter = 0; ssf_iter < n_ssf_iter; ssf_iter++) {
+                for (ssf = 0; ssf < (core->nsubsubframes[sf] + 1) / 2; ssf++) {
                     // Extract the VQ address from the bit stream
                     int vq_index = bits_get(&core->bits, 10);
 
@@ -1575,14 +1568,11 @@ static int parse_x96_subframe_audio(struct core_decoder *core, int sf, int xch_b
                     const int8_t *vq_samples = high_freq_samples[vq_index];
 
                     // Number of VQ samples to look up
-                    int vq_nsamples = nsamples - ssf_iter * NUM_VQ_X96;
-                    if (vq_nsamples > NUM_VQ_X96)
-                        vq_nsamples = NUM_VQ_X96;
+                    int vq_nsamples = DCA_MIN(nsamples - ssf * 16, 16);
 
                     // Scale and take the samples
                     for (int n = 0; n < vq_nsamples; n++)
-                        samples[n] = clip23(mul4(scale, vq_samples[n]));
-                    samples += vq_nsamples;
+                        *samples++ = clip23(mul4(scale, vq_samples[n]));
                 }
             }
         }
