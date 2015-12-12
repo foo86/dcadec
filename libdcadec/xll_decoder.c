@@ -953,7 +953,8 @@ static int parse_common_header(struct xll_decoder *xll)
 
 static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
 {
-    int ret;
+    struct xll_chset *chs;
+    int i, ret;
 
     // Reallocate channel sets
     if (ta_zalloc_fast(xll, &xll->chset, xll->nchsets, sizeof(struct xll_chset)) < 0)
@@ -962,7 +963,7 @@ static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
     // Parse channel set headers
     xll->nfreqbands = 0;
     xll->nchannels = 0;
-    for_each_chset(xll, chs) {
+    for (i = 0, chs = xll->chset; i < xll->nchsets; i++, chs++) {
         chs->decoder = xll;
         chs->dmix_m = xll->nchannels;
         if ((ret = chs_parse_header(chs, asset)) < 0)
@@ -986,6 +987,9 @@ static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
 
 static int parse_navi_table(struct xll_decoder *xll)
 {
+    struct xll_chset *chs;
+    int i;
+
     int navi_nb = xll->nfreqbands * xll->nframesegs * xll->nchsets;
     if (navi_nb > 1024) {
         xll_err("Too many NAVI entries");
@@ -1001,7 +1005,7 @@ static int parse_navi_table(struct xll_decoder *xll)
     int *navi_ptr = xll->navi;
     for (int band = 0; band < xll->nfreqbands; band++) {
         for (int seg = 0; seg < xll->nframesegs; seg++) {
-            for_each_chset(xll, chs) {
+            for (i = 0, chs = xll->chset; i < xll->nchsets; i++, chs++) {
                 int size = 0;
                 if (chs->nfreqbands > band) {
                     size = bits_get(&xll->bits, xll->seg_size_nbits);
@@ -1030,8 +1034,10 @@ static int parse_navi_table(struct xll_decoder *xll)
 
 static int parse_band_data(struct xll_decoder *xll)
 {
-    int ret;
-    for_each_active_chset(xll, chs) {
+    struct xll_chset *chs;
+    int i, ret;
+
+    for (i = 0, chs = xll->chset; i < xll->nactivechsets; i++, chs++) {
         if ((ret = chs_alloc_msb_band_data(chs)) < 0)
             return ret;
         if ((ret = chs_alloc_lsb_band_data(chs)) < 0)
@@ -1044,7 +1050,7 @@ static int parse_band_data(struct xll_decoder *xll)
     int *navi_ptr = xll->navi;
     for (int band = 0; band < xll->nfreqbands; band++) {
         for (int seg = 0; seg < xll->nframesegs; seg++) {
-            for_each_chset(xll, chs) {
+            for (i = 0, chs = xll->chset; i < xll->nchsets; i++, chs++) {
                 if (chs->nfreqbands > band) {
                     navi_pos += *navi_ptr * 8;
                     if (navi_pos > xll->bits.total) {
@@ -1202,9 +1208,9 @@ fail:
 static void clear_chs(struct xll_decoder *xll)
 {
     if (xll->chset) {
-        for_each_chset(xll, chs) {
-            chs->dmix_coeffs_signature = 0;
-            chs->dmix_coeffs_parity = false;
+        for (int i = 0; i < xll->nchsets; i++) {
+            xll->chset[i].dmix_coeffs_signature = 0;
+            xll->chset[i].dmix_coeffs_parity = false;
         }
     }
 }

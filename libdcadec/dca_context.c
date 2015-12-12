@@ -467,7 +467,8 @@ static void scale_down_mix(struct xll_chset *c, struct downmix *dmix, int band)
 static int validate_hd_ma_frame(struct dcadec_context *dca)
 {
     struct xll_decoder *xll = dca->xll;
-    struct xll_chset *p = &xll->chset[0];
+    struct xll_chset *p = &xll->chset[0], *c;
+    int i;
 
     // Validate the first (primary) channel set
     if (!p->primary_chset) {
@@ -495,30 +496,32 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
 
     // Validate channel sets
     dca->has_residual_encoded = false;
-    for_each_active_chset(xll, c) {
-        if (c->primary_chset && c != p) {
-            xll_err_once("Multiple primary channel sets are not supported");
-            return -DCADEC_ENOSUP;
-        }
+    for (i = 0, c = xll->chset; i < xll->nactivechsets; i++, c++) {
+        if (i > 0) {
+            if (c->primary_chset) {
+                xll_err_once("Multiple primary channel sets are not supported");
+                return -DCADEC_ENOSUP;
+            }
 
-        if (!c->ch_mask_enabled && c != p) {
-            xll_err_once("Secondary channel sets with channel mask disabled "
-                         "are not supported");
-            return -DCADEC_ENOSUP;
-        }
+            if (!c->ch_mask_enabled) {
+                xll_err_once("Secondary channel sets with channel mask "
+                             "disabled are not supported");
+                return -DCADEC_ENOSUP;
+            }
 
-        if (!c->primary_chset && c->dmix_embedded && !c->hier_chset) {
-            xll_err_once("Channel sets with embedded parallel downmix "
-                         "are not supported");
-            return -DCADEC_ENOSUP;
-        }
+            if (c->dmix_embedded && !c->hier_chset) {
+                xll_err_once("Channel sets with embedded parallel downmix "
+                             "are not supported");
+                return -DCADEC_ENOSUP;
+            }
 
-        if (c->freq != p->freq || c->pcm_bit_res != p->pcm_bit_res
-            || c->storage_bit_res != p->storage_bit_res
-            || c->nfreqbands != p->nfreqbands) {
-            xll_err_once("Channel sets with different audio "
-                         "characteristics are not supported");
-            return -DCADEC_ENOSUP;
+            if (c->freq != p->freq || c->pcm_bit_res != p->pcm_bit_res
+                || c->storage_bit_res != p->storage_bit_res
+                || c->nfreqbands != p->nfreqbands) {
+                xll_err_once("Channel sets with different audio "
+                             "characteristics are not supported");
+                return -DCADEC_ENOSUP;
+            }
         }
 
         if (c->interpolate) {
@@ -587,14 +590,14 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
 {
     struct core_decoder *core = dca->core;
     struct xll_decoder *xll = dca->xll;
-    int flags = DCADEC_FLAG_CORE_BIT_EXACT | DCADEC_FLAG_KEEP_DMIX_6CH;
+    int i, ret, flags = DCADEC_FLAG_CORE_BIT_EXACT | DCADEC_FLAG_KEEP_DMIX_6CH;
+    struct xll_chset *c;
 
     // Double sampling frequency if needed
     if (xll->chset->freq == 96000 && core->sample_rate == 48000)
         flags |= DCADEC_FLAG_CORE_SYNTH_X96;
 
     // Filter core frame
-    int ret;
     if ((ret = core_filter(core, flags)) < 0) {
         dca->core_residual_valid = false;
         return ret;
@@ -604,12 +607,14 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
     // the last time history was cleared, or XLL decoder is recovering from sync loss
     if ((dca->has_residual_encoded && !dca->core_residual_valid && xll->nchsets > 1) ||
         (dca->packet & DCADEC_PACKET_RECOVERY)) {
-        for_each_chset(xll, c) {
-            if (c < &xll->chset[xll->nactivechsets])
+        for (i = 0, c = xll->chset; i < xll->nchsets; i++, c++) {
+            if (i < xll->nactivechsets)
                 force_lossy_output(core, c);
+
             if (!c->primary_chset)
                 c->dmix_embedded = false;
         }
+
         xll->scalable_lsbs = false;
         xll->fixed_lsb_width = 0;
     }
@@ -688,8 +693,8 @@ static int combine_residual_core_frame(struct dcadec_context *dca,
 static int filter_hd_ma_frame(struct dcadec_context *dca)
 {
     struct xll_decoder *xll = dca->xll;
-    struct xll_chset *p = &xll->chset[0];
-    int status = 0, ret;
+    struct xll_chset *p = &xll->chset[0], *c;
+    int status = 0, ret, i;
 
     // Status indicating if this frame has not been decoded losslessly
     if ((dca->packet & DCADEC_PACKET_RECOVERY) || xll->nfailedsegs > 0)
@@ -701,7 +706,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
             return ret;
 
     // Prepare downmixing coefficients for all channel sets
-    for_each_chset_reverse(xll, c) {
+    for (i = xll->nchsets - 1, c = &xll->chset[i]; i >= 0; i--, c--) {
         // Pre-scale by next channel set in hierarchy
         if (is_hier_dmix_chset(c)) {
             struct xll_chset *o = find_next_hier_dmix_chset(c);
@@ -714,8 +719,8 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         c->dmix_coeffs_parity ^= true;
     }
 
-    // Process frequency band 0 for active channel sets
-    for_each_active_chset(xll, c) {
+    // Process frequency bands for active channel sets
+    for (i = 0, c = xll->chset; i < xll->nactivechsets; i++, c++) {
         xll_filter_band_data(c, XLL_BAND_0);
 
         // Check for residual encoded channel set
@@ -726,11 +731,8 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         // Assemble MSB and LSB parts after combining with core
         if (xll->scalable_lsbs)
             xll_assemble_msbs_lsbs(c, XLL_BAND_0);
-    }
 
-    // Process frequency band 1 for active channel sets
-    if (xll->nfreqbands > 1) {
-        for_each_active_chset(xll, c) {
+        if (c->nfreqbands > 1) {
             xll_filter_band_data(c, XLL_BAND_1);
             xll_assemble_msbs_lsbs(c, XLL_BAND_1);
         }
@@ -742,7 +744,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         int nchannels = 0;
 
         // Build channel vectors for all active channel sets
-        for_each_active_chset(xll, c) {
+        for (i = 0, c = xll->chset; i < xll->nactivechsets; i++, c++) {
             if (!c->hier_chset)
                 continue;
 
@@ -760,31 +762,31 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         }
 
         // Walk through downmix embedded channel sets
-        for_each_chset(xll, o) {
-            if (!is_hier_dmix_chset(o))
+        for (i = 0, c = xll->chset; i < xll->nchsets; i++, c++) {
+            if (!is_hier_dmix_chset(c))
                 continue;
 
-            if (o->dmix_m > nchannels)
-                o->dmix_m = nchannels;
-            if (o->dmix_m == nchannels) {
+            if (c->dmix_m > nchannels)
+                c->dmix_m = nchannels;
+            if (c->dmix_m == nchannels) {
                 // Scale down preceding channels in all frequency bands
-                scale_down_mix(o, &dmix, XLL_BAND_0);
-                if (o->nfreqbands > 1)
-                    scale_down_mix(o, &dmix, XLL_BAND_1);
+                scale_down_mix(c, &dmix, XLL_BAND_0);
+                if (c->nfreqbands > 1)
+                    scale_down_mix(c, &dmix, XLL_BAND_1);
                 break;
             }
 
             // Undo downmix of preceding channels in all frequency bands
-            undo_down_mix(o, &dmix, XLL_BAND_0);
-            if (o->nfreqbands > 1)
-                undo_down_mix(o, &dmix, XLL_BAND_1);
+            undo_down_mix(c, &dmix, XLL_BAND_0);
+            if (c->nfreqbands > 1)
+                undo_down_mix(c, &dmix, XLL_BAND_1);
         }
     }
 
     // Assemble frequency bands 0 and 1 for active channel sets
     if (xll->nfreqbands > 1) {
-        for_each_active_chset(xll, c)
-            if ((ret = xll_assemble_freq_bands(c)) < 0)
+        for (i = 0; i < xll->nactivechsets; i++)
+            if ((ret = xll_assemble_freq_bands(&xll->chset[i])) < 0)
                 return ret;
         // Double sampling frequency
         xll->nframesamples *= 2;
@@ -804,7 +806,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     }
 
     // Build the output speaker map
-    for_each_active_chset(xll, c) {
+    for (i = 0, c = xll->chset; i < xll->nactivechsets; i++, c++) {
         for (int ch = 0; ch < c->nchannels; ch++) {
             int spkr = xll_map_ch_to_spkr(c, ch);
             if (spkr < 0)

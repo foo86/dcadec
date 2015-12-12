@@ -34,18 +34,6 @@
     ((chs)->nchannels | ((chs)->dmix_m << 4) | ((chs)->primary_chset << 12) \
      | ((chs)->dmix_embedded << 13) | ((chs)->hier_chset << 14) | ((chs)->dmix_type << 15))
 
-#define for_each_chset(xll, chs) \
-    for (struct xll_chset *(chs) = (xll)->chset; \
-         (chs) != &(xll)->chset[(xll)->nchsets]; (chs)++)
-
-#define for_each_chset_reverse(xll, chs) \
-    for (struct xll_chset *(chs) = &(xll)->chset[(xll)->nchsets - 1]; \
-         (chs) >= (xll)->chset; (chs)--)
-
-#define for_each_active_chset(xll, chs) \
-    for (struct xll_chset *(chs) = (xll)->chset; \
-         (chs) != &(xll)->chset[(xll)->nactivechsets]; (chs)++)
-
 #define xll_err(...)        dca_log(ERROR, xll, __VA_ARGS__)
 #define xll_verbose(...)    dca_log(VERBOSE, xll, __VA_ARGS__)
 
