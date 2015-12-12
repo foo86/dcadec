@@ -664,7 +664,7 @@ void xll_filter_band_data(struct xll_chset *chs, int band_i)
         int *buf = band->msb_sample_buffer[i];
         int order = band->adapt_pred_order[i];
         if (order > 0) {
-            int coeff[16];
+            int coeff[XLL_MAX_ADAPT_PRED_ORDER];
             // Conversion from reflection coefficients to direct form coefficients
             for (j = 0; j < order; j++) {
                 int rc = band->adapt_refl_coeff[i][j];

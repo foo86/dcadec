@@ -23,6 +23,7 @@
 
 #define XLL_MAX_CHANNELS    8
 #define XLL_MAX_BANDS       2
+#define XLL_MAX_ADAPT_PRED_ORDER    16
 
 #define XLL_DECI_HISTORY    8
 
@@ -62,7 +63,7 @@ struct xll_band {
     int     adapt_pred_order[XLL_MAX_CHANNELS];
     int     highest_pred_order;
     int     fixed_pred_order[XLL_MAX_CHANNELS];
-    int     adapt_refl_coeff[XLL_MAX_CHANNELS][16];
+    int     adapt_refl_coeff[XLL_MAX_CHANNELS][XLL_MAX_ADAPT_PRED_ORDER];
 
     bool    dmix_embedded;
 
