@@ -453,10 +453,6 @@ static int chs_parse_band_data(struct xll_chset *chs, int band_i, int seg, int b
     struct xll_band *band = &chs->bands[band_i];
     int i, j, ret;
 
-    // Skip decoding inactive channel sets
-    if (chs >= &xll->chset[xll->nactivechsets])
-        return bits_seek(&xll->bits, band_data_end);
-
     // Start unpacking MSB portion of the segment
     if (seg == 0 || bits_get1(&xll->bits) == false) {
         // Unpack segment type
@@ -1057,14 +1053,15 @@ static int parse_band_data(struct xll_decoder *xll)
                         xll_err("Invalid NAVI position");
                         return -DCADEC_EBADREAD;
                     }
-                    if ((ret = chs_parse_band_data(chs, band, seg, navi_pos)) < 0) {
+                    if (i < xll->nactivechsets &&
+                        (ret = chs_parse_band_data(chs, band, seg, navi_pos)) < 0) {
                         if (xll->flags & DCADEC_FLAG_STRICT)
                             return ret;
                         // Zero band data and advance to next segment
                         chs_clear_band_data(chs, band, seg);
-                        xll->bits.index = navi_pos;
                         xll->nfailedsegs++;
                     }
+                    xll->bits.index = navi_pos;
                 }
                 navi_ptr++;
             }
