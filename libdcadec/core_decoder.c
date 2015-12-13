@@ -29,13 +29,6 @@
 #include "core_huffman.h"
 #include "core_vectors.h"
 
-enum SampleType {
-    NO_BITS_ALLOCATED,
-    HUFFMAN_CODE,
-    BLOCK_CODE,
-    NO_FURTHER_ENCODING
-};
-
 enum HeaderType {
     HEADER_CORE,
     HEADER_XCH,
@@ -606,79 +599,72 @@ static int parse_subframe_header(struct core_decoder *core, int sf,
     return 0;
 }
 
-static int parse_block_code(struct core_decoder *core, int *value, int sel)
+static int parse_block_codes(struct core_decoder *core, int *audio, int abits)
 {
-    // Select block code book
-    // Extract the block code index from the bit stream
-    int code = bits_get(&core->bits, block_code_nbits[sel]);
-    int levels = quant_levels[sel];
-    int offset = (levels - 1) >> 1;
+    // Extract the block code indices from the bit stream
+    int code1 = bits_get(&core->bits, block_code_nbits[abits]);
+    int code2 = bits_get(&core->bits, block_code_nbits[abits]);
+    int levels = quant_levels[abits];
+    int offset = (levels - 1) / 2;
+    int n;
 
-    // Look up 4 samples from the block code book
-    for (int n = 0; n < 4; n++) {
-        value[n] = (code % levels) - offset;
-        code /= levels;
+    // Look up samples from the block code book
+    for (n = 0; n < NUM_SUBBAND_SAMPLES / 2; n++) {
+        audio[n] = (code1 % levels) - offset;
+        code1 /= levels;
+    }
+    for (; n < NUM_SUBBAND_SAMPLES; n++) {
+        audio[n] = (code2 % levels) - offset;
+        code2 /= levels;
     }
 
-    if (code) {
-        core_err("Failed to decode block code");
+    if (code1 || code2) {
+        core_err("Failed to decode block codes");
         return -DCADEC_EBADDATA;
     }
 
     return 0;
 }
 
-static inline int extract_audio(struct core_decoder *core, int *audio,
-                                int abits, int8_t *quant_index_sel)
+static int parse_huffman_codes(struct core_decoder *core, int *audio, int abits, int sel)
 {
-    const struct huffman *huff = NULL;
+    int ret;
 
-    // Assume no further encoding by default
-    enum SampleType type = NO_FURTHER_ENCODING;
+    // Extract Huffman codes from the bit stream
+    if ((ret = bits_get_signed_vlc_array(&core->bits, audio, NUM_SUBBAND_SAMPLES,
+                                         &quant_index_group_huff[abits - 1][sel])) < 0) {
+        core_err("Failed to decode huffman codes");
+        return ret;
+    }
 
-    // Select the quantizer
+    return 1;
+}
+
+static inline int extract_audio(struct core_decoder *core, int *audio, int abits, int ch)
+{
     assert(abits >= 0 && abits < 27);
+
     if (abits == 0) {
         // No bits allocated
-        type = NO_BITS_ALLOCATED;
-    } else if (abits <= NUM_CODE_BOOKS) {
-        // Select the group of code books
-        const struct huffman *group_huff = quant_index_group_huff[abits - 1];
-        int group_size = quant_index_group_size[abits - 1];
-        // Select quantization index code book
-        int sel = quant_index_sel[abits - 1];
-        if (sel < group_size) {
-            type = HUFFMAN_CODE;
-            huff = &group_huff[sel];
-        } else if (abits <= 7) {
-            type = BLOCK_CODE;
-        }
-    }
-
-    // Extract bits from the bit stream
-    int ret;
-    switch (type) {
-    case NO_BITS_ALLOCATED:
         memset(audio, 0, NUM_SUBBAND_SAMPLES * sizeof(*audio));
-        break;
-    case HUFFMAN_CODE:
-        if ((ret = bits_get_signed_vlc_array(&core->bits, audio, NUM_SUBBAND_SAMPLES, huff)) < 0) {
-            core_err("Failed to decode huffman code");
-            return ret;
-        }
-        break;
-    case BLOCK_CODE:
-        if ((ret = parse_block_code(core, audio + 0, abits)) < 0)
-            return ret;
-        if ((ret = parse_block_code(core, audio + 4, abits)) < 0)
-            return ret;
-        break;
-    case NO_FURTHER_ENCODING:
-        bits_get_signed_array(&core->bits, audio, NUM_SUBBAND_SAMPLES, abits - 3);
-        break;
+        return 0;
     }
 
-    return type;
+    if (abits <= NUM_CODE_BOOKS) {
+        int sel = core->quant_index_sel[ch][abits - 1];
+        if (sel < quant_index_group_size[abits - 1]) {
+            // Huffman codes
+            return parse_huffman_codes(core, audio, abits, sel);
+        }
+        if (abits <= 7) {
+            // Block codes
+            return parse_block_codes(core, audio, abits);
+        }
+    }
+
+    // No further encoding
+    bits_get_signed_array(&core->bits, audio, NUM_SUBBAND_SAMPLES, abits - 3);
+    return 0;
 }
 
 static inline void dequantize(int *output, const int *input, int step_size,
@@ -705,48 +691,10 @@ static inline void dequantize(int *output, const int *input, int step_size,
 }
 
 // 5.5 - Primary audio data arrays
-static int parse_subband_samples(struct core_decoder *core, int sf, int ssf,
-                                 int ch, int band, int sub_pos)
-{
-    int abits = core->bit_allocation[ch][band];
-    int audio[NUM_SUBBAND_SAMPLES];
-    int ret, step_size, trans_ssf, scale;
-
-    if ((ret = extract_audio(core, audio, abits, core->quant_index_sel[ch])) < 0)
-        return ret;
-
-    // Select quantization step size table
-    // Look up quantization step size
-    if (core->bit_rate == -2)
-        step_size = step_size_lossless[abits];
-    else
-        step_size = step_size_lossy[abits];
-
-    // Identify transient location
-    trans_ssf = core->transition_mode[sf][ch][band];
-
-    // Determine proper scale factor
-    if (trans_ssf == 0 || ssf < trans_ssf)
-        scale = core->scale_factors[ch][band][0];
-    else
-        scale = core->scale_factors[ch][band][1];
-
-    // Adjustment of scale factor
-    // Only when SEL indicates Huffman code
-    if (ret == HUFFMAN_CODE)
-        scale = clip23(mul22nrd(core->scale_factor_adj[ch][abits - 1], scale));
-
-    dequantize(core->subband_samples[ch][band] +
-               sub_pos + ssf * NUM_SUBBAND_SAMPLES,
-               audio, step_size, scale, false);
-    return 0;
-}
-
-// 5.5 - Primary audio data arrays
 static int parse_subframe_audio(struct core_decoder *core, int sf, enum HeaderType header,
                                 int xch_base, int *sub_pos, int *lfe_pos)
 {
-    int ssf, ch, band;
+    int ssf, ch, band, ofs;
 
     // Number of subband samples in this subframe
     int nsamples = core->nsubsubframes[sf] * NUM_SUBBAND_SAMPLES;
@@ -807,14 +755,45 @@ static int parse_subframe_audio(struct core_decoder *core, int sf, enum HeaderTy
     }
 
     // Audio data
-    for (ssf = 0; ssf < core->nsubsubframes[sf]; ssf++) {
-        int ret;
-
-        for (ch = xch_base; ch < core->nchannels; ch++)
+    for (ssf = 0, ofs = *sub_pos; ssf < core->nsubsubframes[sf]; ssf++) {
+        for (ch = xch_base; ch < core->nchannels; ch++) {
             // Not high frequency VQ subbands
-            for (band = 0; band < core->subband_vq_start[ch]; band++)
-                if ((ret = parse_subband_samples(core, sf, ssf, ch, band, *sub_pos)) < 0)
+            for (band = 0; band < core->subband_vq_start[ch]; band++) {
+                int abits = core->bit_allocation[ch][band];
+                int audio[NUM_SUBBAND_SAMPLES];
+                int ret, step_size, trans_ssf, scale;
+
+                // Extract bits from the bit stream
+                if ((ret = extract_audio(core, audio, abits, ch)) < 0)
                     return ret;
+
+                // Select quantization step size table
+                // Look up quantization step size
+                if (core->bit_rate == -2)
+                    step_size = step_size_lossless[abits];
+                else
+                    step_size = step_size_lossy[abits];
+
+                // Identify transient location
+                trans_ssf = core->transition_mode[sf][ch][band];
+
+                // Determine proper scale factor
+                if (trans_ssf == 0 || ssf < trans_ssf)
+                    scale = core->scale_factors[ch][band][0];
+                else
+                    scale = core->scale_factors[ch][band][1];
+
+                // Adjustment of scale factor
+                // Only when SEL indicates Huffman code
+                if (ret > 0) {
+                    int64_t adj = core->scale_factor_adj[ch][abits - 1];
+                    scale = clip23((adj * scale) >> 22);
+                }
+
+                dequantize(core->subband_samples[ch][band] + ofs,
+                           audio, step_size, scale, false);
+            }
+        }
 
         // DSYNC
         if ((ssf == core->nsubsubframes[sf] - 1 || core->sync_ssf)
@@ -822,6 +801,8 @@ static int parse_subframe_audio(struct core_decoder *core, int sf, enum HeaderTy
             core_err("DSYNC check failed");
             return -DCADEC_EBADDATA;
         }
+
+        ofs += NUM_SUBBAND_SAMPLES;
     }
 
     // Inverse ADPCM
@@ -1296,7 +1277,7 @@ static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xb
     int     xbr_bit_allocation[MAX_CHANNELS][MAX_SUBBANDS];
     int     xbr_scale_nbits[MAX_CHANNELS];
     int     xbr_scale_factors[MAX_CHANNELS][MAX_SUBBANDS][2];
-    int     ch, band, ssf;
+    int     ssf, ch, band, ofs;
 
     // Number of subband samples in this subframe
     int nsamples = core->nsubsubframes[sf] * NUM_SUBBAND_SAMPLES;
@@ -1359,29 +1340,25 @@ static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xb
     }
 
     // Audio data
-    for (ssf = 0; ssf < core->nsubsubframes[sf]; ssf++) {
+    for (ssf = 0, ofs = *sub_pos; ssf < core->nsubsubframes[sf]; ssf++) {
         for (ch = xbr_base_ch; ch < xbr_nchannels; ch++) {
             for (band = 0; band < xbr_nsubbands[ch]; band++) {
-                int audio[NUM_SUBBAND_SAMPLES];
-
-                // Select the quantizer
                 int abits = xbr_bit_allocation[ch][band];
+                int audio[NUM_SUBBAND_SAMPLES];
+                int ret, step_size, trans_ssf, scale;
+
+                // Extract bits from the bit stream
                 if (abits > 7) {
                     // No further encoding
                     bits_get_signed_array(&core->bits, audio, NUM_SUBBAND_SAMPLES, abits - 3);
                 } else if (abits > 0) {
                     // Block codes
-                    int ret;
-                    if ((ret = parse_block_code(core, audio + 0, abits)) < 0)
-                        return ret;
-                    if ((ret = parse_block_code(core, audio + 4, abits)) < 0)
+                    if ((ret = parse_block_codes(core, audio, abits)) < 0)
                         return ret;
                 } else {
                     // No bits allocated
                     continue;
                 }
-
-                int step_size, trans_ssf, scale;
 
                 // Look up quantization step size
                 step_size = step_size_lossless[abits];
@@ -1398,8 +1375,7 @@ static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xb
                 else
                     scale = xbr_scale_factors[ch][band][1];
 
-                dequantize(core->subband_samples[ch][band] +
-                           *sub_pos + ssf * NUM_SUBBAND_SAMPLES,
+                dequantize(core->subband_samples[ch][band] + ofs,
                            audio, step_size, scale, true);
             }
         }
@@ -1410,6 +1386,8 @@ static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xb
             core_err("XBR-DSYNC check failed");
             return -DCADEC_EBADDATA;
         }
+
+        ofs += NUM_SUBBAND_SAMPLES;
     }
 
     // Advance subband sample pointer for the next subframe
@@ -1499,33 +1477,6 @@ static int parse_xbr_frame(struct core_decoder *core)
     return 0;
 }
 
-static int parse_x96_subband_samples(struct core_decoder *core, int ssf,
-                                     int ch, int band, int sub_pos)
-{
-    // Subtract 1 from ABITS to account for VQ case (Table 6-8: Quantization
-    // index code book select SEL96). ABITS = 0 and ABITS = 1 have already been
-    // dealt with by the caller.
-    int abits = core->bit_allocation[ch][band] - 1;
-    int audio[NUM_SUBBAND_SAMPLES];
-    int ret, step_size;
-
-    if ((ret = extract_audio(core, audio, abits, core->quant_index_sel[ch])) < 0)
-        return ret;
-
-    // Select quantization step size table
-    // Look up quantization step size
-    if (core->bit_rate == -2)
-        step_size = step_size_lossless[abits];
-    else
-        step_size = step_size_lossy[abits];
-
-    dequantize(core->x96_subband_samples[ch][band] +
-               sub_pos + ssf * NUM_SUBBAND_SAMPLES,
-               audio, step_size,
-               core->scale_factors[ch][0][band], false);
-    return 0;
-}
-
 // Modified ISO/IEC 9899 linear congruential generator
 // Returns pseudorandom integer in range [-2^30, 2^30 - 1]
 static int rand_x96(struct core_decoder *core)
@@ -1536,7 +1487,7 @@ static int rand_x96(struct core_decoder *core)
 
 static int parse_x96_subframe_audio(struct core_decoder *core, int sf, int xch_base, int *sub_pos)
 {
-    int ssf, ch, band;
+    int ssf, ch, band, ofs;
 
     // Number of subband samples in this subframe
     int nsamples = core->nsubsubframes[sf] * NUM_SUBBAND_SAMPLES;
@@ -1583,15 +1534,35 @@ static int parse_x96_subframe_audio(struct core_decoder *core, int sf, int xch_b
     }
 
     // Audio data
-    for (ssf = 0; ssf < core->nsubsubframes[sf]; ssf++) {
-        int ret;
+    for (ssf = 0, ofs = *sub_pos; ssf < core->nsubsubframes[sf]; ssf++) {
+        for (ch = xch_base; ch < core->x96_nchannels; ch++) {
+            for (band = core->x96_subband_start; band < core->nsubbands[ch]; band++) {
+                int abits = core->bit_allocation[ch][band] - 1;
+                int audio[NUM_SUBBAND_SAMPLES];
+                int ret, step_size, scale;
 
-        for (ch = xch_base; ch < core->x96_nchannels; ch++)
-            for (band = core->x96_subband_start; band < core->nsubbands[ch]; band++)
                 // Not VQ encoded or unallocated subbands
-                if (core->bit_allocation[ch][band] > 1)
-                    if ((ret = parse_x96_subband_samples(core, ssf, ch, band, *sub_pos)) < 0)
-                        return ret;
+                if (abits < 1)
+                    continue;
+
+                // Extract bits from the bit stream
+                if ((ret = extract_audio(core, audio, abits, ch)) < 0)
+                    return ret;
+
+                // Select quantization step size table
+                // Look up quantization step size
+                if (core->bit_rate == -2)
+                    step_size = step_size_lossless[abits];
+                else
+                    step_size = step_size_lossy[abits];
+
+                // Determine proper scale factor
+                scale = core->scale_factors[ch][0][band];
+
+                dequantize(core->x96_subband_samples[ch][band] + ofs,
+                           audio, step_size, scale, false);
+            }
+        }
 
         // DSYNC
         if ((ssf == core->nsubsubframes[sf] - 1 || core->sync_ssf)
@@ -1599,6 +1570,8 @@ static int parse_x96_subframe_audio(struct core_decoder *core, int sf, int xch_b
             core_err("X96-DSYNC check failed");
             return -DCADEC_EBADDATA;
         }
+
+        ofs += NUM_SUBBAND_SAMPLES;
     }
 
     // Inverse ADPCM

@@ -67,11 +67,6 @@ static inline int32_t mul4(int32_t a, int32_t b)
     return (a * b + (1 << 3)) >> 4;
 }
 
-static inline int32_t mul22nrd(int32_t a, int32_t b)
-{
-    return (int32_t)(((int64_t)a * b) >> 22);
-}
-
 static inline int32_t mul15(int32_t a, int32_t b) { return mul__(a, b, 15); }
 static inline int32_t mul16(int32_t a, int32_t b) { return mul__(a, b, 16); }
 static inline int32_t mul17(int32_t a, int32_t b) { return mul__(a, b, 17); }
