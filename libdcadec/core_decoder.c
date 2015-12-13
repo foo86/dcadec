@@ -690,7 +690,7 @@ static inline void dequantize(int *output, const int *input, int step_size,
 
     // Limit scale factor resolution to 22 bits
     if (step_scale > (1 << 23)) {
-        shift = 32 - dca_clz32(step_scale >> 23);
+        shift = 32 - dca_clz(step_scale >> 23);
         step_scale >>= shift;
     }
 

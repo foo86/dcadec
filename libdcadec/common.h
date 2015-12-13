@@ -34,10 +34,9 @@
 #include "ta.h"
 
 #if AT_LEAST_GCC(3, 4)
-#define dca_clz32(x)    __builtin_clz(x)
-#define dca_clz64(x)    __builtin_clzll(x)
+#define dca_clz(x)  __builtin_clz(x)
 #else
-static inline int dca_clz32(uint32_t x)
+static inline int dca_clz(uint32_t x)
 {
     int r = 0;
 
@@ -49,21 +48,6 @@ static inline int dca_clz32(uint32_t x)
     if (x & 0x00000002) { x >>=  1; r |=  1; }
 
     return 31 - r;
-}
-
-static inline int dca_clz64(uint64_t x)
-{
-    int r = 0;
-
-    assert(x);
-    if (x & 0xffffffff00000000) { x >>= 32; r |= 32; }
-    if (x & 0x00000000ffff0000) { x >>= 16; r |= 16; }
-    if (x & 0x000000000000ff00) { x >>=  8; r |=  8; }
-    if (x & 0x00000000000000f0) { x >>=  4; r |=  4; }
-    if (x & 0x000000000000000c) { x >>=  2; r |=  2; }
-    if (x & 0x0000000000000002) { x >>=  1; r |=  1; }
-
-    return 63 - r;
 }
 #endif
 

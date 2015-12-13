@@ -83,7 +83,7 @@ static int bits_get_unsigned_rice(struct bitstream *bits, int k)
     while (bits->index < bits->total) {
         uint32_t v = bits_peek(bits);
         if (v) {
-            int z = dca_clz32(v);
+            int z = dca_clz(v);
             bits->index += z + 1;
             unary += z;
             break;

@@ -244,7 +244,7 @@ static int down_mix_prim_chset(struct dcadec_context *dca,
     memset(dca->dmix_sample_buffer, 0, 2 * nsamples * sizeof(int));
 
     int nchannels = dca_popcount(*ch_mask);
-    int nsamples_log2 = 31 - dca_clz32(nsamples);
+    int nsamples_log2 = 31 - dca_clz(nsamples);
 
     // Perform downmix
     for (int spkr = 0, pos = 0; spkr < SPEAKER_COUNT; spkr++) {
