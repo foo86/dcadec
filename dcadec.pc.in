@@ -1,9 +1,10 @@
-prefix=%PREFIX%
-libdir=%LIBDIR%
-includedir=%INCLUDEDIR%
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
 
 Name: dcadec
 Description: a free DTS Coherent Acoustics decoder with support for HD extensions
-Version: %VERSION%
+Version: @version@
 Libs: -L${libdir} -ldcadec
 Cflags: -I${includedir}
