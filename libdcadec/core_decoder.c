@@ -628,25 +628,6 @@ static int parse_block_code(struct core_decoder *core, int *value, int sel)
     return 0;
 }
 
-static inline void dequantize(int *output, const int *input, int step_size,
-                              int scale, bool residual)
-{
-    // Account for quantizer step size
-    int64_t step_scale = (int64_t)step_size * scale;
-    int nbits = 64 - dca_clz64(step_scale | INT64_C(1));
-    int shift = nbits > 23 ? nbits - 23 : 0;
-    int32_t _step_scale = (int32_t)(step_scale >> shift);
-
-    // Scale the samples
-    if (residual) {
-        for (int n = 0; n < NUM_SUBBAND_SAMPLES; n++)
-            output[n] += clip23(mul__(input[n], _step_scale, 22 - shift));
-    } else {
-        for (int n = 0; n < NUM_SUBBAND_SAMPLES; n++)
-            output[n] = clip23(mul__(input[n], _step_scale, 22 - shift));
-    }
-}
-
 static inline int extract_audio(struct core_decoder *core, int *audio,
                                 int abits, int8_t *quant_index_sel)
 {
@@ -698,6 +679,29 @@ static inline int extract_audio(struct core_decoder *core, int *audio,
     }
 
     return type;
+}
+
+static inline void dequantize(int *output, const int *input, int step_size,
+                              int scale, bool residual)
+{
+    // Account for quantizer step size
+    int64_t step_scale = (int64_t)step_size * scale;
+    int shift = 0;
+
+    // Limit scale factor resolution to 22 bits
+    if (step_scale > (1 << 23)) {
+        shift = 32 - dca_clz32(step_scale >> 23);
+        step_scale >>= shift;
+    }
+
+    // Scale the samples
+    if (residual) {
+        for (int n = 0; n < NUM_SUBBAND_SAMPLES; n++)
+            output[n] += clip23(norm__(input[n] * step_scale, 22 - shift));
+    } else {
+        for (int n = 0; n < NUM_SUBBAND_SAMPLES; n++)
+            output[n]  = clip23(norm__(input[n] * step_scale, 22 - shift));
+    }
 }
 
 // 5.5 - Primary audio data arrays
