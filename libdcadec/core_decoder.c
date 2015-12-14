@@ -502,8 +502,7 @@ static int parse_subframe_header(struct core_decoder *core, int sf,
     // Transition mode
     for (ch = xch_base; ch < core->nchannels; ch++) {
         // Clear transition mode for all subbands
-        for (band = 0; band < MAX_SUBBANDS; band++)
-            core->transition_mode[sf][ch][band] = 0;
+        memset(core->transition_mode[sf][ch], 0, sizeof(core->transition_mode[0][0]));
 
         // Transient possible only if more than one subsubframe
         if (core->nsubsubframes[sf] > 1) {
@@ -526,12 +525,6 @@ static int parse_subframe_header(struct core_decoder *core, int sf,
 
     // Scale factors
     for (ch = xch_base; ch < core->nchannels; ch++) {
-        // Clear scale factors
-        for (band = 0; band < core->nsubbands[ch]; band++) {
-            core->scale_factors[ch][band][0] = 0;
-            core->scale_factors[ch][band][1] = 0;
-        }
-
         // Select codebook
         int sel = core->scale_factor_sel[ch];
 
@@ -549,6 +542,8 @@ static int parse_subframe_header(struct core_decoder *core, int sf,
                         return ret;
                     core->scale_factors[ch][band][1] = ret;
                 }
+            } else {
+                core->scale_factors[ch][band][0] = 0;
             }
         }
 
