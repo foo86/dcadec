@@ -35,6 +35,9 @@
 #define MAX_CHANNELS_CORE       6
 #define MAX_CHANNELS_DMIX       4
 #define MAX_CHANNELS_XXCH       2
+#define MAX_CHANNELS_CHSET      8
+
+#define MAX_EXSS_CHSETS         4
 
 #define core_err(...)   dca_log(ERROR, core, __VA_ARGS__)
 #define core_warn(...)  dca_log(WARNING, core, __VA_ARGS__)

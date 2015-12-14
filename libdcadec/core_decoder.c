@@ -1392,9 +1392,9 @@ static int parse_xbr_subframe(struct core_decoder *core, int xbr_base_ch, int xb
 
 static int parse_xbr_frame(struct core_decoder *core)
 {
-    int     xbr_frame_size[4];
-    int     xbr_nchannels[4];
-    int     xbr_nsubbands[4 * 8];
+    int     xbr_frame_size[MAX_EXSS_CHSETS];
+    int     xbr_nchannels[MAX_EXSS_CHSETS];
+    int     xbr_nsubbands[MAX_EXSS_CHSETS * MAX_CHANNELS_CHSET];
 
     int header_pos = core->bits.index;
 
@@ -1894,8 +1894,8 @@ static int parse_x96_frame(struct core_decoder *core)
 
 static int parse_x96_frame_exss(struct core_decoder *core)
 {
-    int     x96_frame_size[4];
-    int     x96_nchannels[4];
+    int     x96_frame_size[MAX_EXSS_CHSETS];
+    int     x96_nchannels[MAX_EXSS_CHSETS];
 
     int header_pos = core->bits.index;
 
