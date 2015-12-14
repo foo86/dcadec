@@ -79,17 +79,6 @@ static const uint8_t dca2wav_wide[] = {
     WAVESPKR_TBR, WAVESPKR_BC,  WAVESPKR_BL,  WAVESPKR_BR
 };
 
-#define DCADEC_LAYOUT_STEREO    (SPEAKER_MASK_L | SPEAKER_MASK_R)
-#define DCADEC_LAYOUT_2POINT1   (DCADEC_LAYOUT_STEREO | SPEAKER_MASK_LFE1)
-
-#define DCADEC_LAYOUT_7POINT0_WIDE  \
-    (SPEAKER_MASK_C  | SPEAKER_MASK_L  | SPEAKER_MASK_R |   \
-     SPEAKER_MASK_Ls | SPEAKER_MASK_Rs |                    \
-     SPEAKER_MASK_Lw | SPEAKER_MASK_Rw)
-
-#define DCADEC_LAYOUT_7POINT1_WIDE  \
-    (DCADEC_LAYOUT_7POINT0_WIDE | SPEAKER_MASK_LFE1)
-
 void dca_format_log(dcadec_log_cb cb, void *cbarg, int level,
                     const char *file, int line, const char *fmt, ...)
 {
@@ -120,8 +109,8 @@ static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dc
         int wav_mask = 0;
         int *wav_samples[WAVESPKR_COUNT] = { NULL };
         const uint8_t *dca2wav;
-        if (dca_mask == DCADEC_LAYOUT_7POINT0_WIDE ||
-            dca_mask == DCADEC_LAYOUT_7POINT1_WIDE)
+        if (dca_mask == SPEAKER_LAYOUT_7POINT0_WIDE ||
+            dca_mask == SPEAKER_LAYOUT_7POINT1_WIDE)
             dca2wav = dca2wav_wide;
         else
             dca2wav = dca2wav_norm;
@@ -214,7 +203,7 @@ static int down_mix_prim_chset(struct dcadec_context *dca,
                                int **samples, int nsamples, int *ch_mask)
 {
     // No action if already 2.0
-    if (*ch_mask == DCADEC_LAYOUT_STEREO)
+    if (*ch_mask == SPEAKER_LAYOUT_STEREO)
         return 0;
 
     if (dmix_embedded && dmix_type != DMIX_TYPE_LoRo) {
@@ -224,8 +213,8 @@ static int down_mix_prim_chset(struct dcadec_context *dca,
 
     if (!dmix_embedded) {
         // Remove LFE channel if 2.1
-        if (*ch_mask == DCADEC_LAYOUT_2POINT1) {
-            *ch_mask = DCADEC_LAYOUT_STEREO;
+        if (*ch_mask == SPEAKER_LAYOUT_2POINT1) {
+            *ch_mask = SPEAKER_LAYOUT_STEREO;
             return 0;
         }
 
