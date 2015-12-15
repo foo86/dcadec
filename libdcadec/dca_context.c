@@ -24,12 +24,12 @@
 
 #define MAX_PACKET_SIZE     0x104000
 
-#define DCADEC_PACKET_CORE  0x01
-#define DCADEC_PACKET_EXSS  0x02
-#define DCADEC_PACKET_XLL   0x04
+#define PACKET_CORE     0x01
+#define PACKET_EXSS     0x02
+#define PACKET_XLL      0x04
 
-#define DCADEC_PACKET_FILTERED  0x100
-#define DCADEC_PACKET_RECOVERY  0x200
+#define PACKET_FILTERED     0x100
+#define PACKET_RECOVERY     0x200
 
 #define dca_warn_once(...) \
     dca_format_log(dca, DCADEC_LOG_WARNING | DCADEC_LOG_ONCE, __FILE__, __LINE__, __VA_ARGS__)
@@ -535,7 +535,7 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
 
     // Verify that core is compatible if there are residual encoded channel sets
     if (dca->has_residual_encoded) {
-        if (!(dca->packet & DCADEC_PACKET_CORE)) {
+        if (!(dca->packet & PACKET_CORE)) {
             xll_err("Residual encoded channels are present without core");
             return -DCADEC_EINVAL;
         }
@@ -606,7 +606,7 @@ static int filter_residual_core_frame(struct dcadec_context *dca)
     // Force lossy downmixed output if this is the first core frame since
     // the last time history was cleared, or XLL decoder is recovering from sync loss
     if ((dca->has_residual_encoded && !dca->core_residual_valid && xll->nchsets > 1) ||
-        (dca->packet & DCADEC_PACKET_RECOVERY)) {
+        (dca->packet & PACKET_RECOVERY)) {
         for (i = 0, c = xll->chset; i < xll->nchsets; i++, c++) {
             if (i < xll->nactivechsets)
                 force_lossy_output(core, c);
@@ -697,11 +697,11 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     int status = 0, ret, i;
 
     // Status indicating if this frame has not been decoded losslessly
-    if ((dca->packet & DCADEC_PACKET_RECOVERY) || xll->nfailedsegs > 0)
+    if ((dca->packet & PACKET_RECOVERY) || xll->nfailedsegs > 0)
         status = DCADEC_WXLLLOSSY;
 
     // Filter core frame if present
-    if (dca->packet & DCADEC_PACKET_CORE)
+    if (dca->packet & PACKET_CORE)
         if ((ret = filter_residual_core_frame(dca)) < 0)
             return ret;
 
@@ -922,7 +922,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
         if (ret > status)
             status = ret;
 
-        dca->packet |= DCADEC_PACKET_CORE;
+        dca->packet |= PACKET_CORE;
 
         // EXXS data must be aligned on 4-byte boundary by the caller
         size_t frame_size = DCA_ALIGN(dca->core->frame_size, 4);
@@ -943,15 +943,15 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
                 return ret;
             status = DCADEC_WEXSSFAILED;
         } else {
-            dca->packet |= DCADEC_PACKET_EXSS;
+            dca->packet |= PACKET_EXSS;
             asset = &dca->exss->assets[0];
         }
     }
 
     // Parse coding components in the first EXSS asset
-    if (dca->packet & DCADEC_PACKET_EXSS) {
+    if (dca->packet & PACKET_EXSS) {
         // Parse core component in EXSS
-        if (!(dca->packet & DCADEC_PACKET_CORE) && (asset->extension_mask & EXSS_CORE)) {
+        if (!(dca->packet & PACKET_CORE) && (asset->extension_mask & EXSS_CORE)) {
             if ((ret = alloc_core_decoder(dca)) < 0)
                 return ret;
             if ((ret = core_parse(dca->core, data, size, dca->flags, asset)) < 0) {
@@ -961,7 +961,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
             if (ret > status)
                 status = ret;
 
-            dca->packet |= DCADEC_PACKET_CORE;
+            dca->packet |= PACKET_CORE;
         }
 
         // Parse XLL component in EXSS
@@ -971,9 +971,9 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
             if ((ret = xll_parse(dca->xll, data, asset)) < 0) {
                 // Conceal XLL synchronization error
                 if (ret == -DCADEC_ENOSYNC &&
-                    (prev_packet & DCADEC_PACKET_XLL) &&
-                    (dca->packet & DCADEC_PACKET_CORE)) {
-                    dca->packet |= DCADEC_PACKET_XLL | DCADEC_PACKET_RECOVERY;
+                    (prev_packet & PACKET_XLL) &&
+                    (dca->packet & PACKET_CORE)) {
+                    dca->packet |= PACKET_XLL | PACKET_RECOVERY;
                     status = DCADEC_WXLLSYNCERR;
                 } else {
                     if (dca->flags & DCADEC_FLAG_STRICT)
@@ -981,7 +981,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
                     status = DCADEC_WXLLFAILED;
                 }
             } else {
-                dca->packet |= DCADEC_PACKET_XLL;
+                dca->packet |= PACKET_XLL;
                 if (dca->xll->nfailedsegs)
                     status = DCADEC_WXLLBANDERR;
             }
@@ -992,7 +992,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
         return -DCADEC_ENOSYNC;
 
     // Parse core extensions in EXSS or backward compatible core sub-stream
-    if (!(dca->flags & DCADEC_FLAG_CORE_ONLY) && (dca->packet & DCADEC_PACKET_CORE)) {
+    if (!(dca->flags & DCADEC_FLAG_CORE_ONLY) && (dca->packet & PACKET_CORE)) {
         if ((ret = core_parse_exss(dca->core, data, dca->flags, asset)) < 0)
             return ret;
         if (ret > status)
@@ -1004,7 +1004,7 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
 
 DCADEC_API struct dcadec_core_info *dcadec_context_get_core_info(struct dcadec_context *dca)
 {
-    if (dca && (dca->packet & DCADEC_PACKET_CORE))
+    if (dca && (dca->packet & PACKET_CORE))
         return core_get_info(dca->core);
     return NULL;
 }
@@ -1017,9 +1017,9 @@ DCADEC_API void dcadec_context_free_core_info(struct dcadec_core_info *info)
 DCADEC_API struct dcadec_exss_info *dcadec_context_get_exss_info(struct dcadec_context *dca)
 {
     if (dca) {
-        if (dca->packet & DCADEC_PACKET_EXSS)
+        if (dca->packet & PACKET_EXSS)
             return exss_get_info(dca->exss);
-        if (dca->packet & DCADEC_PACKET_CORE)
+        if (dca->packet & PACKET_CORE)
             return core_get_info_exss(dca->core);
     }
     return NULL;
@@ -1040,12 +1040,12 @@ DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
     if (!dca)
         return -DCADEC_EINVAL;
 
-    if (!(dca->packet & DCADEC_PACKET_FILTERED)) {
-        if (dca->packet & DCADEC_PACKET_XLL) {
+    if (!(dca->packet & PACKET_FILTERED)) {
+        if (dca->packet & PACKET_XLL) {
             if ((ret = validate_hd_ma_frame(dca)) < 0) {
                 if (dca->flags & DCADEC_FLAG_STRICT)
                     return ret;
-                if (!(dca->packet & DCADEC_PACKET_CORE))
+                if (!(dca->packet & PACKET_CORE))
                     return ret;
                 if ((ret = filter_core_frame(dca)) < 0)
                     return ret;
@@ -1054,14 +1054,14 @@ DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
                 if ((ret = filter_hd_ma_frame(dca)) < 0)
                     return ret;
             }
-        } else if (dca->packet & DCADEC_PACKET_CORE) {
+        } else if (dca->packet & PACKET_CORE) {
             if ((ret = filter_core_frame(dca)) < 0)
                 return ret;
         } else {
             return -DCADEC_EINVAL;
         }
         dca->status = ret;
-        dca->packet |= DCADEC_PACKET_FILTERED;
+        dca->packet |= PACKET_FILTERED;
     }
 
     if (samples)
