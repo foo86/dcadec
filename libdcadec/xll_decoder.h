@@ -34,11 +34,11 @@
     ((chs)->nchannels | ((chs)->dmix_m << 4) | ((chs)->primary_chset << 12) \
      | ((chs)->dmix_embedded << 13) | ((chs)->hier_chset << 14) | ((chs)->dmix_type << 15))
 
-#define xll_err(...)        dca_log(ERROR, xll, __VA_ARGS__)
-#define xll_verbose(...)    dca_log(VERBOSE, xll, __VA_ARGS__)
+#define xll_err(...)        dca_log(xll, ERROR, __VA_ARGS__)
+#define xll_verbose(...)    dca_log(xll, VERBOSE, __VA_ARGS__)
 
-#define xll_err_once(...)     dca_log_once(ERROR, xll, err_shown, __VA_ARGS__)
-#define xll_warn_once(...)    dca_log_once(WARNING, xll, warn_shown, __VA_ARGS__)
+#define xll_err_once(...)     dca_log_once(xll, ERROR, __VA_ARGS__)
+#define xll_warn_once(...)    dca_log_once(xll, WARNING, __VA_ARGS__)
 
 struct xll_decoder;
 struct exss_asset;
@@ -118,12 +118,8 @@ struct xll_chset {
 };
 
 struct xll_decoder {
-    struct bitstream    bits;   ///< Bitstream reader
-
-    dcadec_log_cb   log_cb;     ///< Logging callback function
-    void            *log_cbarg; ///< Logging callback argument
-    bool    err_shown;  ///< Error already shown
-    bool    warn_shown; ///< Warning already shown
+    struct dcadec_context   *ctx; ///< Parent context
+    struct bitstream        bits; ///< Bitstream reader
 
     int     flags;  ///< Context flags
 

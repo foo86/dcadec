@@ -39,21 +39,17 @@
 
 #define MAX_EXSS_CHSETS         4
 
-#define core_err(...)   dca_log(ERROR, core, __VA_ARGS__)
-#define core_warn(...)  dca_log(WARNING, core, __VA_ARGS__)
+#define core_err(...)   dca_log(core, ERROR, __VA_ARGS__)
+#define core_warn(...)  dca_log(core, WARNING, __VA_ARGS__)
 
-#define core_err_once(...)     dca_log_once(ERROR, core, err_shown, __VA_ARGS__)
-#define core_warn_once(...)    dca_log_once(WARNING, core, warn_shown, __VA_ARGS__)
+#define core_err_once(...)     dca_log_once(core, ERROR, __VA_ARGS__)
+#define core_warn_once(...)    dca_log_once(core, WARNING, __VA_ARGS__)
 
 struct exss_asset;
 
 struct core_decoder {
-    struct bitstream    bits;   ///< Bitstream reader
-
-    dcadec_log_cb   log_cb;     ///< Logging callback function
-    void            *log_cbarg; ///< Logging callback argument
-    bool    err_shown;  ///< Error already shown
-    bool    warn_shown; ///< Warning already shown
+    struct dcadec_context   *ctx;   ///< Parent context
+    struct bitstream        bits;   ///< Bitstream reader
 
     // Bit stream header
     bool    crc_present;        ///< CRC present flag

@@ -150,25 +150,17 @@ static inline uint32_t DCA_MEM32NE(const void *data)
     return res;
 }
 
-void dca_format_log(dcadec_log_cb cb, void *cbarg, int level,
+void dca_format_log(struct dcadec_context *dca, int level,
                     const char *file, int line, const char *fmt, ...)
-    __attribute__((format(printf, 6, 7)));
+    __attribute__((format(printf, 5, 6)));
 
-#define dca_log(lvl, obj, ...) \
-    do { \
-        if (obj->log_cb) \
-            dca_format_log(obj->log_cb, obj->log_cbarg, DCADEC_LOG_##lvl, \
-                           __FILE__, __LINE__, __VA_ARGS__); \
-    } while (0)
+#define DCADEC_LOG_ONCE     0x80000000
 
-#define dca_log_once(lvl, obj, flag, ...) \
-    do { \
-        if (obj->log_cb && !obj->flag) { \
-            dca_format_log(obj->log_cb, obj->log_cbarg, DCADEC_LOG_##lvl, \
-                           __FILE__, __LINE__, __VA_ARGS__); \
-            obj->flag = true; \
-        } \
-    } while (0)
+#define dca_log(obj, lvl, ...) \
+    dca_format_log((obj)->ctx, DCADEC_LOG_##lvl, __FILE__, __LINE__, __VA_ARGS__)
+
+#define dca_log_once(obj, lvl, ...) \
+    dca_format_log((obj)->ctx, DCADEC_LOG_##lvl | DCADEC_LOG_ONCE, __FILE__, __LINE__, __VA_ARGS__)
 
 #define DCADEC_FLAG_KEEP_DMIX_MASK  \
     (DCADEC_FLAG_KEEP_DMIX_2CH | DCADEC_FLAG_KEEP_DMIX_6CH)

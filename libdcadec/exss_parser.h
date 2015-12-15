@@ -21,9 +21,9 @@
 
 #include "bitstream.h"
 
-#define exss_err(...)   dca_log(ERROR, exss, __VA_ARGS__)
+#define exss_err(...)   dca_log(exss, ERROR, __VA_ARGS__)
 
-#define exss_err_once(...)  dca_log_once(ERROR, exss, err_shown, __VA_ARGS__)
+#define exss_err_once(...)  dca_log_once(exss, ERROR, __VA_ARGS__)
 
 struct exss_parser;
 
@@ -72,11 +72,8 @@ struct exss_asset {
 };
 
 struct exss_parser {
-    struct bitstream   bits;    ///< Bitstream reader
-
-    dcadec_log_cb   log_cb;     ///< Logging callback function
-    void            *log_cbarg; ///< Logging callback argument
-    bool    err_shown;  ///< Error already shown
+    struct dcadec_context   *ctx;   ///< Parent context
+    struct bitstream        bits;   ///< Bitstream reader
 
     int     exss_index;         ///< Extension substream index
     int     exss_size_nbits;    ///< Number of bits for extension substream size

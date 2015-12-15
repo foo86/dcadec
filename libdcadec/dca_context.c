@@ -31,12 +31,13 @@
 #define DCADEC_PACKET_FILTERED  0x100
 #define DCADEC_PACKET_RECOVERY  0x200
 
-#define dca_warn_once(...)  dca_log_once(WARNING, dca, warn_shown, __VA_ARGS__)
+#define dca_warn_once(...) \
+    dca_format_log(dca, DCADEC_LOG_WARNING | DCADEC_LOG_ONCE, __FILE__, __LINE__, __VA_ARGS__)
 
 struct dcadec_context {
     dcadec_log_cb   log_cb;         ///< Logging callback function
     void            *log_cbarg;     ///< Logging callback argument
-    bool            warn_shown;     ///< Warning already shown
+    int             log_shown;      ///< Bitmask of logging levels shown once
 
     int     flags;  ///< Context flags passed to dcadec_context_create()
     int     packet; ///< Packet flags set by dcadec_context_parse()
@@ -79,17 +80,27 @@ static const uint8_t dca2wav_wide[] = {
     WAVESPKR_TBR, WAVESPKR_BC,  WAVESPKR_BL,  WAVESPKR_BR
 };
 
-void dca_format_log(dcadec_log_cb cb, void *cbarg, int level,
+void dca_format_log(struct dcadec_context *dca, int level,
                     const char *file, int line, const char *fmt, ...)
 {
     char buffer[1024];
     va_list ap;
 
+    if (!dca || !dca->log_cb)
+        return;
+
+    if (level & DCADEC_LOG_ONCE) {
+        level &= ~DCADEC_LOG_ONCE;
+        if (dca->log_shown & (1 << level))
+            return;
+        dca->log_shown |= 1 << level;
+    }
+
     va_start(ap, fmt);
     vsnprintf(buffer, sizeof(buffer), fmt, ap);
     va_end(ap);
 
-    cb(level, file, line, buffer, cbarg);
+    dca->log_cb(level, file, line, buffer, dca->log_cbarg);
 }
 
 static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dca_mask)
@@ -863,8 +874,7 @@ static int alloc_core_decoder(struct dcadec_context *dca)
     if (!dca->core) {
         if (!(dca->core = ta_znew(dca, struct core_decoder)))
             return -DCADEC_ENOMEM;
-        dca->core->log_cb = dca->log_cb;
-        dca->core->log_cbarg = dca->log_cbarg;
+        dca->core->ctx = dca;
         dca->core->x96_rand = 1;
     }
     return 0;
@@ -875,8 +885,7 @@ static int alloc_exss_parser(struct dcadec_context *dca)
     if (!dca->exss) {
         if (!(dca->exss = ta_znew(dca, struct exss_parser)))
             return -DCADEC_ENOMEM;
-        dca->exss->log_cb = dca->log_cb;
-        dca->exss->log_cbarg = dca->log_cbarg;
+        dca->exss->ctx = dca;
     }
     return 0;
 }
@@ -886,8 +895,7 @@ static int alloc_xll_decoder(struct dcadec_context *dca)
     if (!dca->xll) {
         if (!(dca->xll = ta_znew(dca, struct xll_decoder)))
             return -DCADEC_ENOMEM;
-        dca->xll->log_cb = dca->log_cb;
-        dca->xll->log_cbarg = dca->log_cbarg;
+        dca->xll->ctx = dca;
         dca->xll->flags = dca->flags;
     }
     return 0;
@@ -1100,18 +1108,7 @@ DCADEC_API void dcadec_context_set_log_cb(struct dcadec_context *dca,
     if (dca) {
         dca->log_cb = log_cb;
         dca->log_cbarg = log_cbarg;
-        if (dca->core) {
-            dca->core->log_cb = log_cb;
-            dca->core->log_cbarg = log_cbarg;
-        }
-        if (dca->exss) {
-            dca->exss->log_cb = log_cb;
-            dca->exss->log_cbarg = log_cbarg;
-        }
-        if (dca->xll) {
-            dca->xll->log_cb = log_cb;
-            dca->xll->log_cbarg = log_cbarg;
-        }
+        dca->log_shown = 0;
     }
 }
 
