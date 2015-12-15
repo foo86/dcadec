@@ -43,25 +43,25 @@
 #endif
 
 struct dcadec_stream {
-    FILE    *fp;
+    FILE    *fp;    ///< Input file
 
-    off_t   stream_size;
-    off_t   stream_start;
-    off_t   stream_end;
+    off_t   stream_size;    ///< Size of stream data
+    off_t   stream_start;   ///< Starting position of stream data in file
+    off_t   stream_end;     ///< Ending position of stream data in file
 
-    bool        aupr_present;
-    uint32_t    aupr_sample_rate;
-    uint32_t    aupr_nframes;
-    uint32_t    aupr_nframesamples;
-    uint64_t    aupr_npcmsamples;
-    uint32_t    aupr_ch_mask;
-    uint32_t    aupr_ndelaysamples;
+    bool        aupr_present;           ///< Audio presentation header flag
+    uint32_t    aupr_sample_rate;       ///< Audio sample rate in Hz
+    uint32_t    aupr_nframes;           ///< Number of encoded frames
+    uint32_t    aupr_nframesamples;     ///< Number of PCM samples in each encoded frame
+    uint64_t    aupr_npcmsamples;       ///< Number of PCM samples in original audio
+    uint32_t    aupr_ch_mask;           ///< Channel mask in EXSS format
+    uint32_t    aupr_ndelaysamples;     ///< Codec delay in PCM samples
 
-    uint8_t     *buffer;
-    size_t      packet_size;
-    uint32_t    backup_sync;
+    uint8_t     *buffer;        ///< Packet buffer
+    size_t      packet_size;    ///< Size of packet
+    uint32_t    backup_sync;    ///< Backed-up sync word
 
-    bool    core_plus_exss;
+    bool    core_plus_exss;     ///< Whether previous packet was core plus extension substream
 };
 
 // Check for DTS-HD container format. Such files have an extra `blackout'

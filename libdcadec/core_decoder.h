@@ -48,100 +48,107 @@
 struct exss_asset;
 
 struct core_decoder {
-    struct bitstream    bits;
+    struct bitstream    bits;   ///< Bitstream reader
 
-    dcadec_log_cb   log_cb;
-    void            *log_cbarg;
-    bool    err_shown;
-    bool    warn_shown;
+    dcadec_log_cb   log_cb;     ///< Logging callback function
+    void            *log_cbarg; ///< Logging callback argument
+    bool    err_shown;  ///< Error already shown
+    bool    warn_shown; ///< Warning already shown
 
-    bool    crc_present;
-    int     npcmblocks;
-    int     frame_size;
-    int     audio_mode;
-    int     sample_rate;
-    int     bit_rate;
-    bool    drc_present;
-    bool    ts_present;
-    bool    aux_present;
-    int     ext_audio_type;
-    bool    ext_audio_present;
-    bool    sync_ssf;
-    int     lfe_present;
-    bool    predictor_history;
-    bool    filter_perfect;
-    int     source_pcm_res;
-    bool    es_format;
-    bool    sumdiff_front;
-    bool    sumdiff_surround;
+    // Bit stream header
+    bool    crc_present;        ///< CRC present flag
+    int     npcmblocks;         ///< Number of PCM sample blocks
+    int     frame_size;         ///< Primary frame byte size
+    int     audio_mode;         ///< Audio channel arrangement
+    int     sample_rate;        ///< Core audio sampling frequency
+    int     bit_rate;           ///< Transmission bit rate
+    bool    drc_present;        ///< Embedded dynamic range flag
+    bool    ts_present;         ///< Embedded time stamp flag
+    bool    aux_present;        ///< Auxiliary data flag
+    int     ext_audio_type;     ///< Extension audio descriptor flag
+    bool    ext_audio_present;  ///< Extended coding flag
+    bool    sync_ssf;           ///< Audio sync word insertion flag
+    int     lfe_present;        ///< Low frequency effects flag
+    bool    predictor_history;  ///< Predictor history flag switch
+    bool    filter_perfect;     ///< Multirate interpolator switch
+    int     source_pcm_res;     ///< Source PCM resolution
+    bool    es_format;          ///< Extended surround (ES) mastering flag
+    bool    sumdiff_front;      ///< Front sum/difference flag
+    bool    sumdiff_surround;   ///< Surround sum/difference flag
 
-    int     nsubframes;
-    int     nsubsubframes[MAX_SUBFRAMES];
+    // Primary audio coding header
+    int         nsubframes;     ///< Number of subframes
+    int         nchannels;      ///< Number of primary audio channels (incl. extension channels)
+    int         ch_mask;        ///< Speaker layout mask (incl. LFE and extension channels)
+    int8_t      nsubbands[MAX_CHANNELS];                ///< Subband activity count
+    int8_t      subband_vq_start[MAX_CHANNELS];         ///< High frequency VQ start subband
+    int8_t      joint_intensity_index[MAX_CHANNELS];    ///< Joint intensity coding index
+    int8_t      transition_mode_sel[MAX_CHANNELS];      ///< Transient mode code book
+    int8_t      scale_factor_sel[MAX_CHANNELS];         ///< Scale factor code book
+    int8_t      bit_allocation_sel[MAX_CHANNELS];       ///< Bit allocation quantizer select
+    int8_t      quant_index_sel[MAX_CHANNELS][NUM_CODE_BOOKS];  ///< Quantization index codebook select
+    int32_t     scale_factor_adj[MAX_CHANNELS][NUM_CODE_BOOKS]; ///< Scale factor adjustment
 
-    int     nchannels;
-    int     ch_mask;
+    // Primary audio coding side information
+    int8_t      nsubsubframes[MAX_SUBFRAMES];   ///< Subsubframe count for each subframe
+    int8_t      prediction_mode[MAX_CHANNELS][MAX_SUBBANDS_X96];            ///< Prediction mode
+    int16_t     prediction_vq_index[MAX_CHANNELS][MAX_SUBBANDS_X96];        ///< Prediction coefficients VQ address
+    int8_t      bit_allocation[MAX_CHANNELS][MAX_SUBBANDS_X96];             ///< Bit allocation index
+    int8_t      transition_mode[MAX_SUBFRAMES][MAX_CHANNELS][MAX_SUBBANDS]; ///< Transition mode
+    int32_t     scale_factors[MAX_CHANNELS][MAX_SUBBANDS][2];               ///< Scale factors (2x for transients and X96)
+    int8_t      joint_scale_sel[MAX_CHANNELS];                              ///< Joint subband codebook select
+    int32_t     joint_scale_factors[MAX_CHANNELS][MAX_SUBBANDS_X96];        ///< Scale factors for joint subband coding
 
-    int8_t      nsubbands[MAX_CHANNELS];
-    int8_t      subband_vq_start[MAX_CHANNELS];
-    int8_t      joint_intensity_index[MAX_CHANNELS];
-    int8_t      transition_mode_sel[MAX_CHANNELS];
-    int8_t      scale_factor_sel[MAX_CHANNELS];
-    int8_t      bit_allocation_sel[MAX_CHANNELS];
-    int8_t      quant_index_sel[MAX_CHANNELS][NUM_CODE_BOOKS];
-    int32_t     scale_factor_adj[MAX_CHANNELS][NUM_CODE_BOOKS];
+    // Auxiliary data
+    bool    prim_dmix_embedded; ///< Auxiliary dynamic downmix flag
+    int     prim_dmix_type;     ///< Auxiliary primary channel downmix type
+    int     prim_dmix_coeff[MAX_CHANNELS_DMIX * MAX_CHANNELS_CORE]; ///< Dynamic downmix code coefficients
 
-    int8_t      prediction_mode[MAX_CHANNELS][MAX_SUBBANDS_X96];
-    int16_t     prediction_vq_index[MAX_CHANNELS][MAX_SUBBANDS_X96];
-    int8_t      bit_allocation[MAX_CHANNELS][MAX_SUBBANDS_X96];
-    int8_t      transition_mode[MAX_SUBFRAMES][MAX_CHANNELS][MAX_SUBBANDS];
-    int32_t     scale_factors[MAX_CHANNELS][MAX_SUBBANDS][2];
-    int8_t      joint_scale_sel[MAX_CHANNELS];
-    int32_t     joint_scale_factors[MAX_CHANNELS][MAX_SUBBANDS_X96];
+    // Core extensions
+    int     ext_audio_mask;     ///< Bit mask of fully decoded core extensions
 
-    int                 *subband_buffer;
-    int                 *subband_samples[MAX_CHANNELS][MAX_SUBBANDS];
-    struct interpolator *subband_dsp[MAX_CHANNELS];
-    struct idct_context *subband_dsp_idct;
+    // XCH extension data
+    int     xch_pos;    ///< Bit position of XCH frame in core substream
 
-    int     *lfe_samples;
+    // XXCH extension data
+    bool    xxch_crc_present;       ///< CRC presence flag for XXCH channel set header
+    int     xxch_mask_nbits;        ///< Number of bits for loudspeaker mask
+    int     xxch_core_mask;         ///< Core loudspeaker activity mask
+    int     xxch_spkr_mask;         ///< Loudspeaker layout mask
+    bool    xxch_dmix_embedded;     ///< Downmix already performed by encoder
+    int     xxch_dmix_scale_inv;    ///< Downmix scale factor
+    int     xxch_dmix_mask[MAX_CHANNELS_XXCH];  ///< Downmix channel mapping mask
+    int     xxch_dmix_coeff[MAX_CHANNELS_XXCH * MAX_CHANNELS_CORE];     ///< Downmix coefficients
+    int     xxch_pos;   ///< Bit position of XXCH frame in core substream
 
-    bool    prim_dmix_embedded;
-    int     prim_dmix_type;
-    int     prim_dmix_coeff[MAX_CHANNELS_DMIX * MAX_CHANNELS_CORE];
+    // X96 extension data
+    int     x96_rev_no;         ///< X96 revision number
+    bool    x96_crc_present;    ///< CRC presence flag for X96 channel set header
+    int     x96_nchannels;      ///< Number of primary channels in X96 extension
+    bool    x96_high_res;       ///< X96 high resolution flag
+    int     x96_subband_start;  ///< First encoded subband in X96 extension
+    int     x96_rand;           ///< Random seed for generating samples for unallocated X96 subbands
+    int     x96_pos;            ///< Bit position of X96 frame in core substream
 
-    int     ext_audio_mask;
+    int     *x96_subband_buffer;    ///< X96 subband sample buffer base
+    int     *x96_subband_samples[MAX_CHANNELS][MAX_SUBBANDS_X96];   ///< X96 subband samples
 
-    int     xch_pos;
+    // Core subband buffer and filter banks
+    int                 *subband_buffer;    ///< Subband sample buffer base
+    int                 *subband_samples[MAX_CHANNELS][MAX_SUBBANDS];   ///< Subband samples
+    struct interpolator *subband_dsp[MAX_CHANNELS]; ///< Filter banks
+    struct idct_context *subband_dsp_idct;          ///< IDCT context
+    int                 *lfe_samples;   ///< Buffer for decimated LFE samples
 
-    bool    xxch_crc_present;
-    int     xxch_mask_nbits;
-    int     xxch_core_mask;
-    int     xxch_spkr_mask;
-    bool    xxch_dmix_embedded;
-    int     xxch_dmix_scale_inv;
-    int     xxch_dmix_mask[MAX_CHANNELS_XXCH];
-    int     xxch_dmix_coeff[MAX_CHANNELS_XXCH * MAX_CHANNELS_CORE];
-    int     xxch_pos;
+    // PCM output data
+    int     *output_buffer;                 ///< PCM output buffer base
+    int     *output_samples[SPEAKER_COUNT]; ///< PCM output speaker map
+    int     output_history_lfe;             ///< LFE PCM history for X96 filter
 
-    int     x96_rev_no;
-    bool    x96_crc_present;
-    int     x96_nchannels;
-    bool    x96_high_res;
-    int     x96_subband_start;
-    int     x96_rand;
-    int     x96_pos;
+    int     npcmsamples;    ///< Number of PCM samples per channel
+    int     output_rate;    ///< Output sample rate (1x or 2x header rate)
 
-    int     *x96_subband_buffer;
-    int     *x96_subband_samples[MAX_CHANNELS][MAX_SUBBANDS_X96];
-
-    int     *output_buffer;
-    int     *output_samples[SPEAKER_COUNT];
-    int     output_history_lfe;
-
-    int     npcmsamples;
-    int     output_rate;
-
-    int     filter_flags;
+    int     filter_flags;   ///< Previous filtering flags for detecting changes
 };
 
 int core_parse(struct core_decoder *core, uint8_t *data, int size,

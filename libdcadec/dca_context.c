@@ -34,29 +34,29 @@
 #define dca_warn_once(...)  dca_log_once(WARNING, dca, warn_shown, __VA_ARGS__)
 
 struct dcadec_context {
-    dcadec_log_cb log_cb;
-    void *log_cbarg;
-    bool warn_shown;
+    dcadec_log_cb   log_cb;         ///< Logging callback function
+    void            *log_cbarg;     ///< Logging callback argument
+    bool            warn_shown;     ///< Warning already shown
 
-    int flags;
-    int packet;
-    int status;
+    int     flags;  ///< Context flags passed to dcadec_context_create()
+    int     packet; ///< Packet flags set by dcadec_context_parse()
 
-    struct core_decoder *core;
-    struct exss_parser *exss;
-    struct xll_decoder *xll;
+    struct core_decoder *core;  ///< Core decoder context
+    struct exss_parser  *exss;  ///< EXSS parser context
+    struct xll_decoder  *xll;   ///< XLL decoder context
 
-    bool has_residual_encoded;
-    bool core_residual_valid;
+    bool    has_residual_encoded;   ///< XLL residual encoded channels present
+    bool    core_residual_valid;    ///< Core valid for residual decoding
 
-    int *dmix_sample_buffer;
+    int     *dmix_sample_buffer;    ///< Primary channel set downmixing buffer
 
-    int nframesamples;
-    int sample_rate;
-    int bits_per_sample;
-    int profile;
-    int channel_mask;
-    int *samples[SPEAKER_COUNT];
+    int     status;             ///< Filtering status
+    int     nframesamples;      ///< Number of PCM samples per channel
+    int     sample_rate;        ///< Sample rate in Hz
+    int     bits_per_sample;    ///< PCM resolution in bits
+    int     profile;            ///< Type of DTS profile decoded
+    int     channel_mask;       ///< Channel or speaker mask
+    int     *samples[SPEAKER_COUNT];    ///< Sample buffer pointers
 };
 
 static const uint8_t dca2wav_norm[] = {

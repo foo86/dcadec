@@ -27,18 +27,18 @@
 #endif
 
 struct dcadec_waveout {
-    FILE        *fp[SPEAKER_COUNT];
-    uint64_t    size;
-    uint8_t     *buffer;
-    char        *pattern;
-    int         flags;
+    FILE        *fp[SPEAKER_COUNT]; ///< Output file(s)
+    uint64_t    size;       ///< Size of PCM data written
+    uint8_t     *buffer;    ///< PCM data conversion buffer
+    char        *pattern;   ///< Filename pattern for writing multiple mono files
+    int         flags;      ///< Option flags passed to dcadec_waveout_open()
 
-    int         channel_mask;
-    int         nchannels;
-    int         sample_rate;
-    int         bits_per_sample;
-    int         bytes_per_sample;
-    int         block_align;
+    int         channel_mask;       ///< WAVEFORMATEXTENSIBLE channel mask
+    int         nchannels;          ///< Number of channels
+    int         sample_rate;        ///< Audio sample rate
+    int         bits_per_sample;    ///< Audio PCM resolution
+    int         bytes_per_sample;   ///< Number of bytes per sample
+    int         block_align;        ///< Alignment of PCM data block
 };
 
 static const char * const dca_speaker_names[] = {
