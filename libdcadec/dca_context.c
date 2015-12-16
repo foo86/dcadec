@@ -285,7 +285,7 @@ static int down_mix_prim_chset(struct dcadec_context *dca,
 
     samples[SPEAKER_L] = dca->dmix_sample_buffer;
     samples[SPEAKER_R] = dca->dmix_sample_buffer + nsamples;
-    *ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
+    *ch_mask = SPEAKER_LAYOUT_STEREO;
     return 1;
 }
 
@@ -800,7 +800,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     // Fake up channel mask for primary channel set if needed for LtRt decoding
     if (!p->ch_mask_enabled) {
         if (p->nchannels == 2)
-            p->ch_mask = SPEAKER_MASK_L | SPEAKER_MASK_R;
+            p->ch_mask = SPEAKER_LAYOUT_STEREO;
         else
             return -DCADEC_EINVAL;
     }
