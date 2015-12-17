@@ -1969,15 +1969,6 @@ static int parse_x96_frame_exss(struct core_decoder *core)
     return 0;
 }
 
-// Revert to base core channel set in case (X)XCH parsing fails
-static void revert_to_base_chset(struct core_decoder *core)
-{
-    core->nchannels = audio_mode_nch[core->audio_mode];
-    core->ch_mask = audio_mode_ch_mask[core->audio_mode];
-    if (core->lfe_present)
-        core->ch_mask |= SPEAKER_MASK_LFE1;
-}
-
 static int parse_aux_data(struct core_decoder *core)
 {
     // Auxiliary data byte count (can't be trusted)
@@ -2204,46 +2195,42 @@ int core_parse(struct core_decoder *core, uint8_t *data, int size,
 int core_parse_exss(struct core_decoder *core, uint8_t *data,
                     int flags, struct exss_asset *asset)
 {
-    int status = 0, ret;
     struct bitstream temp = core->bits;
+    int exss_mask = asset ? asset->extension_mask : 0;
+    int status = 0, ret = 0, ext = 0;
 
     // Parse (X)XCH unless downmixing
     if (!(flags & DCADEC_FLAG_KEEP_DMIX_MASK)) {
-        if (asset && (asset->extension_mask & EXSS_XXCH)) {
+        if (exss_mask & EXSS_XXCH) {
             bits_init(&core->bits, data + asset->xxch_offset, asset->xxch_size);
-            if ((ret = parse_xxch_frame(core)) < 0) {
-                if (flags & DCADEC_FLAG_STRICT)
-                    return ret;
-                revert_to_base_chset(core);
-                status = DCADEC_WCOREEXTFAILED;
-            } else {
-                core->ext_audio_mask |= EXSS_XXCH;
-            }
+            ret = parse_xxch_frame(core);
+            ext = EXSS_XXCH;
         } else if (core->xxch_pos) {
             core->bits.index = core->xxch_pos;
-            if ((ret = parse_xxch_frame(core)) < 0) {
-                if (flags & DCADEC_FLAG_STRICT)
-                    return ret;
-                revert_to_base_chset(core);
-                status = DCADEC_WCOREEXTFAILED;
-            } else {
-                core->ext_audio_mask |= CSS_XXCH;
-            }
+            ret = parse_xxch_frame(core);
+            ext = CSS_XXCH;
         } else if (core->xch_pos) {
             core->bits.index = core->xch_pos;
-            if ((ret = parse_xch_frame(core)) < 0) {
-                if (flags & DCADEC_FLAG_STRICT)
-                    return ret;
-                revert_to_base_chset(core);
-                status = DCADEC_WCOREEXTFAILED;
-            } else {
-                core->ext_audio_mask |= CSS_XCH;
-            }
+            ret = parse_xch_frame(core);
+            ext = CSS_XCH;
+        }
+
+        // Revert to primary channel set in case (X)XCH parsing fails
+        if (ret < 0) {
+            if (flags & DCADEC_FLAG_STRICT)
+                return ret;
+            status = DCADEC_WCOREEXTFAILED;
+            core->nchannels = audio_mode_nch[core->audio_mode];
+            core->ch_mask = audio_mode_ch_mask[core->audio_mode];
+            if (core->lfe_present)
+                core->ch_mask |= SPEAKER_MASK_LFE1;
+        } else {
+            core->ext_audio_mask |= ext;
         }
     }
 
     // Parse XBR
-    if (asset && (asset->extension_mask & EXSS_XBR)) {
+    if (exss_mask & EXSS_XBR) {
         bits_init(&core->bits, data + asset->xbr_offset, asset->xbr_size);
         if ((ret = parse_xbr_frame(core)) < 0) {
             if (flags & DCADEC_FLAG_STRICT)
@@ -2255,7 +2242,7 @@ int core_parse_exss(struct core_decoder *core, uint8_t *data,
     }
 
     // Parse X96
-    if (asset && (asset->extension_mask & EXSS_X96)) {
+    if (exss_mask & EXSS_X96) {
         bits_init(&core->bits, data + asset->x96_offset, asset->x96_size);
         if ((ret = parse_x96_frame_exss(core)) < 0) {
             if (flags & DCADEC_FLAG_STRICT)
