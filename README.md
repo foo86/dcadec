@@ -38,6 +38,8 @@ dcadec is a free DTS Coherent Acoustics decoder. Supported options:
 
 -h  Show this help message.
 
+-i  Use IIR filter for floating point DTS core LFE channel interpolation.
+
 -l  Enable lenient decoding mode. Attempt to recover from errors by skipping
     non-decodable parts of the stream.
 
