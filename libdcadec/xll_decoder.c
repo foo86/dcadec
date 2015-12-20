@@ -1089,8 +1089,6 @@ static int parse_frame(struct xll_decoder *xll, uint8_t *data, int size, struct 
 
 static void clear_pbr(struct xll_decoder *xll)
 {
-    ta_free(xll->pbr_buffer);
-    xll->pbr_buffer = NULL;
     xll->pbr_length = 0;
     xll->pbr_delay = 0;
 }
@@ -1101,7 +1099,7 @@ static int copy_to_pbr(struct xll_decoder *xll, uint8_t *data, int size, int del
         xll_err("PBR smoothing buffer overflow");
         return -DCADEC_EINVAL;
     }
-    if (!(xll->pbr_buffer = ta_zalloc_size(xll, XLL_PBR_SIZE + DCADEC_BUFFER_PADDING)))
+    if (!xll->pbr_buffer && !(xll->pbr_buffer = ta_zalloc_size(xll, XLL_PBR_SIZE + DCADEC_BUFFER_PADDING)))
         return -DCADEC_ENOMEM;
     memcpy(xll->pbr_buffer, data, size);
     xll->pbr_length = size;
@@ -1219,7 +1217,7 @@ int xll_parse(struct xll_decoder *xll, uint8_t *data, struct exss_asset *asset)
         xll->hd_stream_id = asset->hd_stream_id;
     }
 
-    if (xll->pbr_buffer)
+    if (xll->pbr_length)
         ret = parse_frame_pbr(xll, data + asset->xll_offset, asset->xll_size, asset);
     else
         ret = parse_frame_no_pbr(xll, data + asset->xll_offset, asset->xll_size, asset);
