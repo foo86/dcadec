@@ -305,8 +305,8 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
                 for (n = 0; n < core->xxch_mask_nbits; n++) {
                     if (core->xxch_dmix_mask[ch] & (1U << n)) {
                         int code = bits_get(&core->bits, 7);
-                        int sign = (code >> 6) - 1; code &= 63;
-                        if (code) {
+                        int sign = (code >> 6) - 1;
+                        if (code &= 63) {
                             unsigned int index = code * 4 - 4;
                             if (index >= dca_countof(dmix_table)) {
                                 core_err("Invalid XXCH downmix coefficient index");
@@ -2006,8 +2006,8 @@ static int parse_aux_data(struct core_decoder *core)
         int *coeff_ptr = core->prim_dmix_coeff;
         for (int i = 0; i < m * n; i++) {
             int code = bits_get(&core->bits, 9);
-            int sign = (code >> 8) - 1; code &= 0xff;
-            if (code) {
+            int sign = (code >> 8) - 1;
+            if (code &= 0xff) {
                 unsigned int index = code - 1;
                 if (index >= dca_countof(dmix_table)) {
                     core_err("Invalid downmix coefficient index");

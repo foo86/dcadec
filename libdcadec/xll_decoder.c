@@ -82,8 +82,8 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
         // Downmix coefficients
         for (int j = 0; j < chs->nchannels; j++) {
             int code = bits_get(&xll->bits, 9);
-            int sign = (code >> 8) - 1; code &= 0xff;
-            if (code > 0) {
+            int sign = (code >> 8) - 1;
+            if (code &= 0xff) {
                 unsigned int index = code - 1;
                 if (index >= dca_countof(dmix_table)) {
                     xll_err("Invalid XLL downmix coefficient index");
