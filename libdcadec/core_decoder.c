@@ -1492,7 +1492,7 @@ static int parse_x96_subframe_audio(struct core_decoder *core, int sf, int xch_b
             int *samples = core->x96_subband_samples[ch][band] + *sub_pos;
 
             // Get the scale factor
-            int scale = core->scale_factors[ch][0][band];
+            int scale = core->x96_scale_factors[ch][band];
 
             int abits = core->bit_allocation[ch][band];
             if (abits == 0) {   // No bits allocated for subband
@@ -1546,7 +1546,7 @@ static int parse_x96_subframe_audio(struct core_decoder *core, int sf, int xch_b
                     step_size = step_size_lossy[abits];
 
                 // Determine proper scale factor
-                scale = core->scale_factors[ch][0][band];
+                scale = core->x96_scale_factors[ch][band];
 
                 dequantize(core->x96_subband_samples[ch][band] + ofs,
                            audio, step_size, scale, false);
@@ -1705,7 +1705,7 @@ static int parse_x96_subframe_header(struct core_decoder *core, int xch_base)
         for (band = core->x96_subband_start; band < core->nsubbands[ch]; band++) {
             if ((ret = parse_scale(core, &scale_index, sel)) < 0)
                 return ret;
-            core->scale_factors[ch][0][band] = ret;
+            core->x96_scale_factors[ch][band] = ret;
         }
     }
 

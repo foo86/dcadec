@@ -91,7 +91,10 @@ struct core_decoder {
     int16_t     prediction_vq_index[MAX_CHANNELS][MAX_SUBBANDS_X96];        ///< Prediction coefficients VQ address
     int8_t      bit_allocation[MAX_CHANNELS][MAX_SUBBANDS_X96];             ///< Bit allocation index
     int8_t      transition_mode[MAX_SUBFRAMES][MAX_CHANNELS][MAX_SUBBANDS]; ///< Transition mode
-    int32_t     scale_factors[MAX_CHANNELS][MAX_SUBBANDS][2];               ///< Scale factors (2x for transients and X96)
+    union {
+        int32_t     scale_factors[MAX_CHANNELS][MAX_SUBBANDS][2];               ///< Scale factors (2x for transients)
+        int32_t     x96_scale_factors[MAX_CHANNELS][MAX_SUBBANDS_X96];          ///< X96 scale factors
+    };
     int8_t      joint_scale_sel[MAX_CHANNELS];                              ///< Joint subband codebook select
     int32_t     joint_scale_factors[MAX_CHANNELS][MAX_SUBBANDS_X96];        ///< Scale factors for joint subband coding
 
