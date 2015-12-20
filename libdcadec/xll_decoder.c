@@ -67,21 +67,16 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
         // Only for non-primary channel sets
         if (!chs->primary_chset) {
             int code = bits_get(&xll->bits, 9);
-            int sign = (code >> 8) - 1; code &= 0xff;
-            if (code > 0) {
-                unsigned int index = code - 1;
-                if (index < 40 || index >= dca_countof(dmix_table)) {
-                    xll_err("Invalid XLL downmix scale index");
-                    return -DCADEC_EBADDATA;
-                }
-                int scale = dmix_table[index];
-                scale_inv = dmix_table_inv[index - 40];
-                chs->dmix_scale_cur[i] = (scale ^ sign) - sign;
-                chs->dmix_scale_inv_cur[i] = (scale_inv ^ sign) - sign;
-            } else {
-                chs->dmix_scale_cur[i] = 0;
-                chs->dmix_scale_inv_cur[i] = 0;
+            int sign = (code >> 8) - 1;
+            unsigned int index = (code & 0xff) - 1;
+            if (index < 40 || index >= dca_countof(dmix_table)) {
+                xll_err("Invalid XLL downmix scale index");
+                return -DCADEC_EBADDATA;
             }
+            int scale = dmix_table[index];
+            scale_inv = dmix_table_inv[index - 40];
+            chs->dmix_scale_cur[i] = (scale ^ sign) - sign;
+            chs->dmix_scale_inv_cur[i] = (scale_inv ^ sign) - sign;
         }
 
         // Downmix coefficients

@@ -282,17 +282,12 @@ static int parse_coding_header(struct core_decoder *core, enum HeaderType header
             core->xxch_dmix_embedded = bits_get1(&core->bits);
 
             // Downmix scale factor
-            int code = bits_get(&core->bits, 6);
-            if (code) {
-                unsigned int index = code * 4 - 44;
-                if (index >= dca_countof(dmix_table_inv)) {
-                    core_err("Invalid XXCH downmix scale index");
-                    return -DCADEC_EBADDATA;
-                }
-                core->xxch_dmix_scale_inv = dmix_table_inv[index];
-            } else {
-                core->xxch_dmix_scale_inv = 0;
+            unsigned int index = bits_get(&core->bits, 6) * 4 - 44;
+            if (index >= dca_countof(dmix_table_inv)) {
+                core_err("Invalid XXCH downmix scale index");
+                return -DCADEC_EBADDATA;
             }
+            core->xxch_dmix_scale_inv = dmix_table_inv[index];
 
             // Downmix channel mapping mask
             for (ch = 0; ch < nchannels; ch++) {
