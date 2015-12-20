@@ -265,12 +265,15 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
     if (chs->freq > 96000)
         chs->freq = 96000;
 
+    // Determine number of bits to read bit allocation coding parameter
     if (chs->storage_bit_res > 16)
         chs->nabits = 5;
     else if (chs->storage_bit_res > 8)
         chs->nabits = 4;
     else
         chs->nabits = 3;
+
+    // Account for embedded downmix and decimator saturation
     if ((xll->nchsets > 1 || chs->nfreqbands > 1) && chs->nabits < 5)
         chs->nabits++;
 
@@ -449,21 +452,22 @@ static int chs_parse_band_data(struct xll_chset *chs, int band_i, int seg, int b
     int i, j, ret;
 
     // Start unpacking MSB portion of the segment
-    if (seg == 0 || bits_get1(&xll->bits) == false) {
+    // Unpack flag whether to reuse parameters from previous segment
+    if (!(seg && bits_get1(&xll->bits))) {
         // Unpack segment type
         // 0 - distinct coding parameters for each channel
         // 1 - common coding parameters for all channels
-        chs->seg_type = bits_get1(&xll->bits);
+        chs->seg_common = bits_get1(&xll->bits);
 
         // Determine number of coding parameters encoded in segment
-        int nparamsets = (chs->seg_type == false) ? chs->nchannels : 1;
+        int nparamsets = chs->seg_common ? 1 : chs->nchannels;
 
         // Unpack Rice coding parameters
         for (i = 0; i < nparamsets; i++) {
             // Unpack Rice coding flag
             // 0 - linear code, 1 - Rice code
             chs->rice_code_flag[i] = bits_get1(&xll->bits);
-            if (chs->seg_type == false && chs->rice_code_flag[i] == true) {
+            if (!chs->seg_common && chs->rice_code_flag[i]) {
                 // Unpack Hybrid Rice coding flag
                 // 0 - Rice code, 1 - Hybrid Rice code
                 if (bits_get1(&xll->bits))
@@ -485,10 +489,10 @@ static int chs_parse_band_data(struct xll_chset *chs, int band_i, int seg, int b
                 chs->bitalloc_part_a[i] = bits_get(&xll->bits, chs->nabits);
 
                 // Adjust for the linear code
-                if (chs->rice_code_flag[i] == false && chs->bitalloc_part_a[i])
+                if (!chs->rice_code_flag[i] && chs->bitalloc_part_a[i])
                     chs->bitalloc_part_a[i]++;
 
-                if (chs->seg_type == false)
+                if (!chs->seg_common)
                     chs->nsamples_part_a[i] = band->adapt_pred_order[i];
                 else
                     chs->nsamples_part_a[i] = band->highest_pred_order;
@@ -501,7 +505,7 @@ static int chs_parse_band_data(struct xll_chset *chs, int band_i, int seg, int b
             chs->bitalloc_part_b[i] = bits_get(&xll->bits, chs->nabits);
 
             // Adjust for the linear code
-            if (chs->rice_code_flag[i] == false && chs->bitalloc_part_b[i])
+            if (!chs->rice_code_flag[i] && chs->bitalloc_part_b[i])
                 chs->bitalloc_part_b[i]++;
         }
     }
@@ -509,14 +513,14 @@ static int chs_parse_band_data(struct xll_chset *chs, int band_i, int seg, int b
     // Unpack entropy codes
     for (i = 0; i < chs->nchannels; i++) {
         // Select index of coding parameters
-        int k = (chs->seg_type == false) ? i : 0;
+        int k = chs->seg_common ? 0 : i;
 
         // Slice the segment into parts A and B
         int *part_a = band->msb_sample_buffer[i] + seg * xll->nsegsamples;
         int *part_b = part_a + chs->nsamples_part_a[k];
         int nsamples_part_b = xll->nsegsamples - chs->nsamples_part_a[k];
 
-        if (chs->rice_code_flag[k] == false) {
+        if (!chs->rice_code_flag[k]) {
             // Linear codes
             // Unpack all residuals of part A of segment 0
             bits_get_signed_linear_array(&xll->bits, part_a,
@@ -739,10 +743,10 @@ void xll_assemble_msbs_lsbs(struct xll_chset *chs, int band_i)
                 int *lsb = band->lsb_sample_buffer[ch];
                 int adj = band->bit_width_adjust[ch];
                 for (int n = 0; n < nsamples; n++)
-                    msb[n] = (msb[n] * (1 << shift)) + (lsb[n] << adj);
+                    msb[n] = msb[n] * (1 << shift) + (lsb[n] << adj);
             } else {
                 for (int n = 0; n < nsamples; n++)
-                    msb[n] *= 1 << shift;
+                    msb[n] = msb[n] * (1 << shift);
             }
         }
     }

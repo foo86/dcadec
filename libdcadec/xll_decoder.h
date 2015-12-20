@@ -99,7 +99,7 @@ struct xll_chset {
     struct xll_band     bands[XLL_MAX_BANDS];   ///< Frequency bands
 
     // Frequency band coding parameters
-    bool    seg_type;                                   ///< Segment type
+    bool    seg_common;                                 ///< Segment type
     bool    rice_code_flag[XLL_MAX_CHANNELS];           ///< Rice coding flag
     int     bitalloc_hybrid_linear[XLL_MAX_CHANNELS];   ///< Binary code length for isolated samples
     int     bitalloc_part_a[XLL_MAX_CHANNELS];          ///< Coding parameter for part A of segment
