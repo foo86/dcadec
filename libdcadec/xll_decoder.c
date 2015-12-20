@@ -722,7 +722,6 @@ int xll_get_lsb_width(struct xll_chset *chs, int band, int ch)
     else
         shift += adj;
 
-    assert(shift < chs->pcm_bit_res);
     return shift;
 }
 
