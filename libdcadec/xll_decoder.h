@@ -35,6 +35,7 @@
      | ((chs)->dmix_embedded << 13) | ((chs)->hier_chset << 14) | ((chs)->dmix_type << 15))
 
 #define xll_err(...)        dca_log(xll, ERROR, __VA_ARGS__)
+#define xll_warn(...)       dca_log(xll, WARNING, __VA_ARGS__)
 #define xll_verbose(...)    dca_log(xll, VERBOSE, __VA_ARGS__)
 
 #define xll_err_once(...)     dca_log_once(xll, ERROR, __VA_ARGS__)

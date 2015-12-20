@@ -1127,12 +1127,23 @@ static int parse_frame_no_pbr(struct xll_decoder *xll, uint8_t *data, int size, 
         data += asset->xll_sync_offset;
         size -= asset->xll_sync_offset;
 
+        // No data to buffer? Should not really happen.
+        if (size == 0)
+            return -DCADEC_ENOSYNC;
+
         // If decoding delay is set, put the frame into PBR buffer and return
         // failure code. Higher level decoder is expected to switch to lossy
         // core decoding or mute its output until decoding delay expires.
         if (asset->xll_delay_nframes > 0) {
             if ((ret = copy_to_pbr(xll, data, size, asset->xll_delay_nframes)) < 0)
                 return ret;
+            return -DCADEC_ENOSYNC;
+        }
+
+        // Can't parse in place when data is not aligned properly. We could
+        // copy to PBR buffer first, but don't bother for now.
+        if (asset->xll_sync_offset & 3) {
+            xll_warn("Unsupported XLL sync word alignment");
             return -DCADEC_ENOSYNC;
         }
 
