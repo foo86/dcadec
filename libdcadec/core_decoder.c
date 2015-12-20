@@ -96,10 +96,9 @@ static int parse_frame_header(struct core_decoder *core)
     bool normal_frame = bits_get1(&core->bits);
 
     // Deficit sample count
-    int deficit_samples = bits_get(&core->bits, 5) + 1;
-    if (deficit_samples < NUM_PCMBLOCK_SAMPLES && normal_frame) {
+    if (bits_get(&core->bits, 5) != NUM_PCMBLOCK_SAMPLES - 1) {
         core_err("Invalid deficit sample count");
-        return -DCADEC_EBADDATA;
+        return normal_frame ? -DCADEC_EBADDATA : -DCADEC_ENOSUP;
     }
 
     // CRC present flag
