@@ -147,46 +147,52 @@ static int reorder_samples(struct dcadec_context *dca, int **dca_samples, int dc
     return nchannels;
 }
 
-static int clip_vector(int *samples, int nsamples, int bits_per_sample)
+static bool shift_and_clip__(int *samples, int nsamples, int shift, int bits)
 {
-    int limit = 1 << (bits_per_sample - 1);
-    int mask = ~((1 << bits_per_sample) - 1);
-    int nclipped = 0;
+    bool clipped = false;
 
-    while (nsamples-- > 0) {
-        if ((*samples + limit) & mask) {
-            *samples = (*samples >> 31) ^ (limit - 1);
-            nclipped++;
+    for (int n = 0; n < nsamples; n++) {
+        int s = samples[n] * (1 << shift);
+        if ((s + (1 << bits)) & ~((1 << (bits + 1)) - 1)) {
+            s = (s >> 31) ^ ((1 << bits) - 1);
+            clipped = true;
         }
-        samples++;
+        samples[n] = s;
     }
 
-    return nclipped;
+    return clipped;
 }
 
-static int clip_samples(struct dcadec_context *dca, int nchannels)
+static bool shift_and_clip(struct dcadec_context *dca, int nchannels,
+                           int storage_bit_res, int pcm_bit_res)
 {
+    int shift = storage_bit_res - pcm_bit_res;
     int nsamples = dca->nframesamples;
-    int nclipped = 0;
 
-    if (dca->flags & DCADEC_FLAG_DONT_CLIP)
-        return 0;
+    if (dca->flags & DCADEC_FLAG_DONT_CLIP) {
+        if (shift)
+            for (int ch = 0; ch < nchannels; ch++)
+                for (int n = 0; n < nsamples; n++)
+                    dca->samples[ch][n] *= 1 << shift;
+        return false;
+    }
 
-    switch (dca->bits_per_sample) {
+    bool clipped = false;
+    switch (storage_bit_res) {
     case 24:
         for (int ch = 0; ch < nchannels; ch++)
-            nclipped += clip_vector(dca->samples[ch], nsamples, 24);
+            clipped |= shift_and_clip__(dca->samples[ch], nsamples, shift, 23);
         break;
     case 16:
         for (int ch = 0; ch < nchannels; ch++)
-            nclipped += clip_vector(dca->samples[ch], nsamples, 16);
+            clipped |= shift_and_clip__(dca->samples[ch], nsamples, shift, 15);
         break;
     default:
         assert(0);
         break;
     }
 
-    return nclipped;
+    return clipped;
 }
 
 static int get_dmix_coeff(int nchannels, int spkr, int ch)
@@ -336,7 +342,7 @@ static int filter_core_frame(struct dcadec_context *dca)
 
     // Perform clipping after Lo/Ro downmix
     if (ret > 0)
-        clip_samples(dca, nchannels);
+        shift_and_clip(dca, nchannels, 24, 24);
 
     return 0;
 }
@@ -694,11 +700,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
 {
     struct xll_decoder *xll = dca->xll;
     struct xll_chset *p = &xll->chset[0], *c;
-    int status = 0, ret, i;
-
-    // Status indicating if this frame has not been decoded losslessly
-    if ((dca->packet & PACKET_RECOVERY) || xll->nfailedsegs > 0)
-        status = DCADEC_WXLLLOSSY;
+    int ret, i;
 
     // Filter core frame if present
     if (dca->packet & PACKET_CORE)
@@ -848,25 +850,23 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     if ((nchannels = reorder_samples(dca, spkr_map, ch_mask)) <= 0)
         return -DCADEC_EINVAL;
 
-    // Shift samples to account for storage bit width
-    int shift = p->storage_bit_res - p->pcm_bit_res;
-    if (shift > 0) {
-        int nsamples = xll->nframesamples;
-        for (int ch = 0; ch < nchannels; ch++)
-            for (int n = 0; n < nsamples; n++)
-                dca->samples[ch][n] *= 1 << shift;
-    }
-
     dca->nframesamples = xll->nframesamples;
     dca->sample_rate = p->freq;
     dca->bits_per_sample = p->storage_bit_res;
     dca->profile = DCADEC_PROFILE_HD_MA;
 
-    // Perform clipping. Audio is not lossless if clipping is detected.
-    if (clip_samples(dca, nchannels) > 0 && !(dca->flags & DCADEC_FLAG_KEEP_DMIX_MASK))
-        status = DCA_MAX(status, DCADEC_WXLLCLIPPED);
+    // Shift and clip samples to account for storage bit width
+    bool clipped = shift_and_clip(dca, nchannels, p->storage_bit_res, p->pcm_bit_res);
 
-    return status;
+    // Warn if this frame has not been decoded losslessly
+    if ((dca->packet & PACKET_RECOVERY) || xll->nfailedsegs > 0)
+        return DCADEC_WXLLLOSSY;
+
+    // Warn if clipping was detected in lossless output
+    if (clipped && !(dca->flags & DCADEC_FLAG_KEEP_DMIX_MASK))
+        return DCADEC_WXLLCLIPPED;
+
+    return 0;
 }
 
 static int alloc_core_decoder(struct dcadec_context *dca)
