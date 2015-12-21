@@ -841,13 +841,9 @@ static void erase_adpcm_history(struct core_decoder *core)
 {
     // Erase ADPCM history from previous frame if
     // predictor history switch was disabled
-    for (int ch = 0; ch < MAX_CHANNELS; ch++) {
-        for (int band = 0; band < MAX_SUBBANDS; band++) {
-            int *samples = core->subband_samples[ch][band] - NUM_ADPCM_COEFFS;
-            for (int n = 0; n < NUM_ADPCM_COEFFS; n++)
-                samples[n] = 0;
-        }
-    }
+    for (int ch = 0; ch < MAX_CHANNELS; ch++)
+        for (int band = 0; band < MAX_SUBBANDS; band++)
+            memset(core->subband_samples[ch][band] - NUM_ADPCM_COEFFS, 0, NUM_ADPCM_COEFFS * sizeof(int));
 }
 
 static int alloc_sample_buffer(struct core_decoder *core)
@@ -898,8 +894,7 @@ static int parse_frame_data(struct core_decoder *core, enum HeaderType header, i
         // Update history for ADPCM
         for (int band = 0; band < nsubbands; band++) {
             int *samples = core->subband_samples[ch][band] - NUM_ADPCM_COEFFS;
-            for (int n = NUM_ADPCM_COEFFS - 1; n >= 0; n--)
-                samples[n] = samples[core->npcmblocks + n];
+            memcpy(samples, samples + core->npcmblocks, NUM_ADPCM_COEFFS * sizeof(int));
         }
 
         // Clear inactive subbands
@@ -1610,13 +1605,9 @@ static void erase_x96_adpcm_history(struct core_decoder *core)
 {
     // Erase ADPCM history from previous frame if
     // predictor history switch was disabled
-    for (int ch = 0; ch < MAX_CHANNELS; ch++) {
-        for (int band = 0; band < MAX_SUBBANDS_X96; band++) {
-            int *samples = core->x96_subband_samples[ch][band] - NUM_ADPCM_COEFFS;
-            for (int n = 0; n < NUM_ADPCM_COEFFS; n++)
-                samples[n] = 0;
-        }
-    }
+    for (int ch = 0; ch < MAX_CHANNELS; ch++)
+        for (int band = 0; band < MAX_SUBBANDS_X96; band++)
+            memset(core->x96_subband_samples[ch][band] - NUM_ADPCM_COEFFS, 0, NUM_ADPCM_COEFFS * sizeof(int));
 }
 
 static int alloc_x96_sample_buffer(struct core_decoder *core)
@@ -1851,12 +1842,10 @@ static int parse_x96_frame_data(struct core_decoder *core, bool exss, int xch_ba
         // Clear inactive subbands
         for (int band = 0; band < MAX_SUBBANDS_X96; band++) {
             int *samples = core->x96_subband_samples[ch][band] - NUM_ADPCM_COEFFS;
-            if (band >= core->x96_subband_start && band < nsubbands) {
-                for (int n = NUM_ADPCM_COEFFS - 1; n >= 0; n--)
-                    samples[n] = samples[core->npcmblocks + n];
-            } else {
+            if (band >= core->x96_subband_start && band < nsubbands)
+                memcpy(samples, samples + core->npcmblocks, NUM_ADPCM_COEFFS * sizeof(int));
+            else
                 memset(samples, 0, (NUM_ADPCM_COEFFS + core->npcmblocks) * sizeof(int));
-            }
         }
     }
 
