@@ -153,10 +153,14 @@ static bool shift_and_clip__(int *samples, int nsamples, int shift, int bits)
 
     for (int n = 0; n < nsamples; n++) {
         int s = samples[n] * (1 << shift);
+#ifdef __ARM_FEATURE_SAT
+        s = clip__(s, bits);
+#else
         if ((s + (1 << bits)) & ~((1 << (bits + 1)) - 1)) {
             s = (s >> 31) ^ ((1 << bits) - 1);
             clipped = true;
         }
+#endif
         samples[n] = s;
     }
 

@@ -42,10 +42,16 @@ static inline int32_t mul__(int32_t a, int32_t b, int bits)
 
 static inline int32_t clip__(int32_t a, int bits)
 {
+#ifdef __ARM_FEATURE_SAT
+    int x;
+    __asm__("ssat %0, %2, %1" : "=r"(x) : "r"(a), "i"(bits + 1));
+    return x;
+#else
     if ((a + (1 << bits)) & ~((1 << (bits + 1)) - 1))
         return (a >> 31) ^ ((1 << bits) - 1);
     else
         return a;
+#endif
 }
 
 static inline int64_t round20(int64_t a) { return round__(a, 20); }
