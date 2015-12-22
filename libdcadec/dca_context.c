@@ -474,6 +474,55 @@ static void scale_down_mix(struct xll_chset *c, struct downmix *dmix, int band)
     }
 }
 
+static int hier_down_mix(struct xll_decoder *xll)
+{
+    struct downmix dmix;
+    struct xll_chset *c;
+    int i, nchannels = 0;
+
+    // Build channel vectors for active channel sets that are part of hierarchy
+    for (i = 0, c = xll->chset; i < xll->nactivechsets; i++, c++) {
+        if (!c->hier_chset)
+            continue;
+
+        if (nchannels + c->nchannels > SPEAKER_COUNT)
+            return -DCADEC_EINVAL;
+
+        for (int ch = 0; ch < c->nchannels; ch++) {
+            dmix.samples[XLL_BAND_0][nchannels] =
+                c->bands[XLL_BAND_0].msb_sample_buffer[ch];
+            dmix.samples[XLL_BAND_1][nchannels] =
+                c->bands[XLL_BAND_1].msb_sample_buffer[ch];
+            dmix.deci_history[nchannels] = c->deci_history[ch];
+            nchannels++;
+        }
+    }
+
+    // Walk through hierarchial downmix embedded channel sets
+    for (i = 0, c = xll->chset; i < xll->nchsets; i++, c++) {
+        if (!is_hier_dmix_chset(c))
+            continue;
+
+        // Stop once enough channels are decoded for downmixed output
+        if (c->dmix_m > nchannels)
+            c->dmix_m = nchannels;
+        if (c->dmix_m == nchannels) {
+            // Scale down preceding channels in all frequency bands
+            scale_down_mix(c, &dmix, XLL_BAND_0);
+            if (c->nfreqbands > 1)
+                scale_down_mix(c, &dmix, XLL_BAND_1);
+            break;
+        }
+
+        // Undo downmix of preceding channels in all frequency bands
+        undo_down_mix(c, &dmix, XLL_BAND_0);
+        if (c->nfreqbands > 1)
+            undo_down_mix(c, &dmix, XLL_BAND_1);
+    }
+
+    return 0;
+}
+
 static int validate_hd_ma_frame(struct dcadec_context *dca)
 {
     struct xll_decoder *xll = dca->xll;
@@ -744,50 +793,9 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         }
     }
 
-    // Undo hierarchial downmix and apply scaling
-    if (xll->nchsets > 1) {
-        struct downmix dmix;
-        int nchannels = 0;
-
-        // Build channel vectors for all active channel sets
-        for (i = 0, c = xll->chset; i < xll->nactivechsets; i++, c++) {
-            if (!c->hier_chset)
-                continue;
-
-            if (nchannels + c->nchannels > SPEAKER_COUNT)
-                return -DCADEC_EINVAL;
-
-            for (int ch = 0; ch < c->nchannels; ch++) {
-                dmix.samples[XLL_BAND_0][nchannels] =
-                    c->bands[XLL_BAND_0].msb_sample_buffer[ch];
-                dmix.samples[XLL_BAND_1][nchannels] =
-                    c->bands[XLL_BAND_1].msb_sample_buffer[ch];
-                dmix.deci_history[nchannels] = c->deci_history[ch];
-                nchannels++;
-            }
-        }
-
-        // Walk through downmix embedded channel sets
-        for (i = 0, c = xll->chset; i < xll->nchsets; i++, c++) {
-            if (!is_hier_dmix_chset(c))
-                continue;
-
-            if (c->dmix_m > nchannels)
-                c->dmix_m = nchannels;
-            if (c->dmix_m == nchannels) {
-                // Scale down preceding channels in all frequency bands
-                scale_down_mix(c, &dmix, XLL_BAND_0);
-                if (c->nfreqbands > 1)
-                    scale_down_mix(c, &dmix, XLL_BAND_1);
-                break;
-            }
-
-            // Undo downmix of preceding channels in all frequency bands
-            undo_down_mix(c, &dmix, XLL_BAND_0);
-            if (c->nfreqbands > 1)
-                undo_down_mix(c, &dmix, XLL_BAND_1);
-        }
-    }
+    // Undo hierarchial downmix and/or apply scaling
+    if (xll->nchsets > 1 && (ret = hier_down_mix(xll)) < 0)
+        return ret;
 
     // Assemble frequency bands 0 and 1 for active channel sets
     if (xll->nfreqbands > 1) {
