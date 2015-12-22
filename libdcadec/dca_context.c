@@ -798,14 +798,8 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
         return ret;
 
     // Assemble frequency bands 0 and 1 for active channel sets
-    if (xll->nfreqbands > 1) {
-        for (i = 0; i < xll->nactivechsets; i++)
-            if ((ret = xll_assemble_freq_bands(&xll->chset[i])) < 0)
-                return ret;
-        // Double sampling frequency
-        xll->nframesamples *= 2;
-        p->freq *= 2;
-    }
+    if (xll->nfreqbands > 1 && (ret = xll_assemble_freq_bands(xll)) < 0)
+        return ret;
 
     // Output speaker map and channel mask
     int *spkr_map[SPEAKER_COUNT] = { NULL };
@@ -852,7 +846,7 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
                                        p->dmix_coeff_cur,
                                        p->dmix_coeff_pre,
                                        spkr_map,
-                                       xll->nframesamples,
+                                       xll->nframesamples << (xll->nfreqbands - 1),
                                        &ch_mask)) < 0)
             return ret;
     }
@@ -862,8 +856,8 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     if ((nchannels = reorder_samples(dca, spkr_map, ch_mask)) <= 0)
         return -DCADEC_EINVAL;
 
-    dca->nframesamples = xll->nframesamples;
-    dca->sample_rate = p->freq;
+    dca->nframesamples = xll->nframesamples << (xll->nfreqbands - 1);
+    dca->sample_rate = p->freq << (xll->nfreqbands - 1);
     dca->bits_per_sample = p->storage_bit_res;
     dca->profile = DCADEC_PROFILE_HD_MA;
 

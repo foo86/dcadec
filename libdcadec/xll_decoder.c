@@ -770,10 +770,12 @@ static void filter2(int *dst, const int *src, int nsamples, int32_t coeff)
         dst[n] -= mul23(src[n], coeff);
 }
 
-int xll_assemble_freq_bands(struct xll_chset *chs)
+static int chs_assemble_freq_bands(struct xll_chset *chs)
 {
     struct xll_decoder *xll = chs->decoder;
     int nsamples = xll->nframesamples;
+
+    assert(chs->nfreqbands > 1);
 
     // Reallocate frequency band assembly buffer
     if (ta_alloc_fast(xll->chset, &chs->sample_buffer3,
@@ -812,6 +814,17 @@ int xll_assemble_freq_bands(struct xll_chset *chs)
             *ptr++ = *++band0;
         }
     }
+
+    return 0;
+}
+
+int xll_assemble_freq_bands(struct xll_decoder *xll)
+{
+    int ret;
+
+    for (int i = 0; i < xll->nactivechsets; i++)
+        if ((ret = chs_assemble_freq_bands(&xll->chset[i])) < 0)
+            return ret;
 
     return 0;
 }
