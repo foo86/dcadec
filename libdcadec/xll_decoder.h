@@ -31,7 +31,7 @@
 #define XLL_BAND_1  1
 
 #define XLL_DMIX_SIGNATURE(chs) \
-    ((chs)->nchannels | ((chs)->dmix_m << 4) | ((chs)->primary_chset << 12) \
+    ((chs)->nchannels | ((chs)->hier_m << 4) | ((chs)->primary_chset << 12) \
      | ((chs)->dmix_embedded << 13) | ((chs)->hier_chset << 14) | ((chs)->dmix_type << 15))
 
 #define xll_err(...)        dca_log(xll, ERROR, __VA_ARGS__)
@@ -81,7 +81,7 @@ struct xll_chset {
     bool    dmix_embedded;          ///< Downmix already performed by encoder
     int     dmix_type;              ///< Primary channel set downmix type
     bool    hier_chset;             ///< Whether the channel set is part of a hierarchy
-    int     dmix_m;                 ///< Number of preceding channels in a hierarchy (M)
+    int     hier_m;                 ///< Number of preceding channels in a hierarchy (M)
     int     *dmix_coeff;            ///< Downmixing coefficients buffer base
     int     *dmix_coeff_cur;        ///< M*N downmixing coefficients for current frame
     int     *dmix_coeff_pre;        ///< M*N downmixing coefficients for previous frame

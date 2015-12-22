@@ -36,7 +36,7 @@ static int parse_dmix_coeffs(struct xll_chset *chs)
         m = dmix_primary_nch[chs->dmix_type];
         n = chs->nchannels;
     } else {
-        m = chs->dmix_m;
+        m = chs->hier_m;
         n = chs->nchannels + 2; // Two extra columns for scales
     }
 
@@ -959,7 +959,7 @@ static int parse_sub_headers(struct xll_decoder *xll, struct exss_asset *asset)
     xll->nchannels = 0;
     for (i = 0, chs = xll->chset; i < xll->nchsets; i++, chs++) {
         chs->decoder = xll;
-        chs->dmix_m = xll->nchannels;
+        chs->hier_m = xll->nchannels;
         if ((ret = chs_parse_header(chs, asset)) < 0)
             return ret;
         if (chs->nfreqbands > xll->nfreqbands)

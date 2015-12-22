@@ -382,14 +382,14 @@ static struct xll_chset *find_next_hier_dmix_chset(struct xll_chset *c)
 static void prescale_down_mix(struct xll_chset *c, struct xll_chset *o)
 {
     int *coeff_ptr = c->dmix_coeff_cur;
-    for (int i = 0; i < c->dmix_m; i++) {
+    for (int i = 0; i < c->hier_m; i++) {
         int scale = o->dmix_scale_cur[i];
         int scale_inv = o->dmix_scale_inv_cur[i];
         c->dmix_scale_cur[i] = mul15(c->dmix_scale_cur[i], scale);
         c->dmix_scale_inv_cur[i] = mul16(c->dmix_scale_inv_cur[i], scale_inv);
         for (int j = 0; j < c->nchannels; j++) {
             int coeff = mul16(*coeff_ptr, scale_inv);
-            *coeff_ptr++ = mul15(coeff, o->dmix_scale_cur[c->dmix_m + j]);
+            *coeff_ptr++ = mul15(coeff, o->dmix_scale_cur[c->hier_m + j]);
         }
     }
 }
@@ -409,7 +409,7 @@ static void undo_down_mix(struct xll_chset *c, struct downmix *dmix, int band)
     if (!b->dmix_embedded)
         return;
 
-    for (int i = 0; i < c->dmix_m; i++) {
+    for (int i = 0; i < c->hier_m; i++) {
         for (int j = 0; j < c->nchannels; j++) {
             int coeff_cur = c->dmix_coeff_cur[i * c->nchannels + j];
             int coeff_pre = c->dmix_coeff_pre[i * c->nchannels + j];
@@ -448,7 +448,7 @@ static void scale_down_mix(struct xll_chset *c, struct downmix *dmix, int band)
     if (!b->dmix_embedded)
         return;
 
-    for (int i = 0; i < c->dmix_m; i++) {
+    for (int i = 0; i < c->hier_m; i++) {
         int scale_cur = c->dmix_scale_cur[i];
         int scale_pre = c->dmix_scale_pre[i];
         int delta = scale_cur - scale_pre;
@@ -504,9 +504,9 @@ static int hier_down_mix(struct xll_decoder *xll)
             continue;
 
         // Stop once enough channels are decoded for downmixed output
-        if (c->dmix_m > nchannels)
-            c->dmix_m = nchannels;
-        if (c->dmix_m == nchannels) {
+        if (c->hier_m > nchannels)
+            c->hier_m = nchannels;
+        if (c->hier_m == nchannels) {
             // Scale down preceding channels in all frequency bands
             scale_down_mix(c, &dmix, XLL_BAND_0);
             if (c->nfreqbands > 1)
@@ -724,8 +724,8 @@ static int combine_residual_core_frame(struct dcadec_context *dca,
         int *src = core->output_samples[core_spkr];
         if (o) {
             // Undo embedded core downmix pre-scaling
-            int scale_inv_cur = o->dmix_scale_inv_cur[c->dmix_m + ch];
-            int scale_inv_pre = o->dmix_scale_inv_pre[c->dmix_m + ch];
+            int scale_inv_cur = o->dmix_scale_inv_cur[c->hier_m + ch];
+            int scale_inv_pre = o->dmix_scale_inv_pre[c->hier_m + ch];
             int delta = scale_inv_cur - scale_inv_pre;
 
             if (delta) {
