@@ -20,6 +20,7 @@
 #include "dca_waveout.h"
 
 #ifdef _WIN32
+#include <windows.h>
 #include <fcntl.h>
 #include <io.h>
 #else
@@ -334,7 +335,11 @@ DCADEC_API void dcadec_waveout_close(struct dcadec_waveout *wave)
 
     for (int i = 0; i < SPEAKER_COUNT; i++) {
         if (wave->fp[i]) {
-            if (wave->size && !fseeko(wave->fp[i], 0, SEEK_SET))
+            bool can_seek = true;
+#ifdef _WIN32
+            can_seek = GetFileType((HANDLE)_get_osfhandle(_fileno(wave->fp[i]))) == FILE_TYPE_DISK;
+#endif
+            if (wave->size && can_seek && !fseeko(wave->fp[i], 0, SEEK_SET))
                 write_header(wave, wave->fp[i]);
             fclose(wave->fp[i]);
         }

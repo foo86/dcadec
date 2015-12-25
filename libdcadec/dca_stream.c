@@ -22,6 +22,7 @@
 #include "dca_stream.h"
 
 #ifdef _WIN32
+#include <windows.h>
 #include <fcntl.h>
 #include <io.h>
 #else
@@ -216,7 +217,12 @@ DCADEC_API struct dcadec_stream *dcadec_stream_open(const char *name, int flags)
 #endif
     }
 
-    if (!fseeko(stream->fp, 0, SEEK_END)) {
+    bool can_seek = true;
+#ifdef _WIN32
+    can_seek = GetFileType((HANDLE)_get_osfhandle(_fileno(stream->fp))) == FILE_TYPE_DISK;
+#endif
+
+    if (can_seek && !fseeko(stream->fp, 0, SEEK_END)) {
         off_t pos = ftello(stream->fp);
         if (pos > 0)
             stream->stream_size = pos;
