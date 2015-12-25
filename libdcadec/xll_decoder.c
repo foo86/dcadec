@@ -260,10 +260,9 @@ static int chs_parse_header(struct xll_chset *chs, struct exss_asset *asset)
         return -DCADEC_ENOSUP;
     }
 
-    // Clamp the sampling frequency to 96 kHz. The rest of the code will use
-    // the number of bands to determine maximum frequency.
-    if (chs->freq > 96000)
-        chs->freq = 96000;
+    // Set the sampling frequency to that of the first frequency band.
+    // Frequency will be doubled again after bands assembly.
+    chs->freq >>= chs->nfreqbands - 1;
 
     // Determine number of bits to read bit allocation coding parameter
     if (chs->storage_bit_res > 16)
