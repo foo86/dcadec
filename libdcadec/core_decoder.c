@@ -1930,6 +1930,8 @@ static int parse_x96_frame_exss(struct core_decoder *core)
     if ((ret = alloc_x96_sample_buffer(core)) < 0)
         return ret;
 
+    core->x96_nchannels = 0;
+
     // Channel set data
     int x96_base_ch = 0;
     for (int i = 0; i < x96_nchsets; i++) {
