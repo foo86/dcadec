@@ -217,6 +217,10 @@ static int parse_descriptor(struct exss_asset *asset)
             nchannels_dmix += 2;
         for (i = 0; i < exss->nmixoutconfigs; i++) {
             for (j = 0; j < nchannels_dmix; j++) {
+                if (!exss->nmixoutchs[i]) {
+                    exss_err("Invalid speaker layout mask for mixing configuration");
+                    return -DCADEC_EBADDATA;
+                }
                 // Mix output mask
                 int mix_map_mask = bits_get(&exss->bits, exss->nmixoutchs[i]);
                 // Mixing coefficients
