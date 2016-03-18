@@ -718,6 +718,8 @@ static int combine_residual_core_frame(struct dcadec_context *dca,
         // Account for LSB width
         if (xll->scalable_lsbs)
             shift += xll_get_lsb_width(c, XLL_BAND_0, ch);
+        if (shift > 24)
+            return -DCADEC_EINVAL;
         int round = shift > 0 ? 1 << (shift - 1) : 0;
 
         int *dst = c->bands[XLL_BAND_0].msb_sample_buffer[ch];
