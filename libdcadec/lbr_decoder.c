@@ -250,7 +250,7 @@ static int parse_tonal(struct lbr_decoder *lbr, int group)
 
             value += lbr->tonal_scf[freq_to_sf[freq >> (7 - group)]];
             value += lbr->freq_range - 2;
-            if (value > 63)
+            if (value < 0 || value > 63)
                 return -1;
 
             amp[main_ch] = value;
@@ -263,14 +263,14 @@ static int parse_tonal(struct lbr_decoder *lbr, int group)
                 if (bits2_get1(&lbr->bits)) {
                     if ((value = bits2_get_vlc(&lbr->bits, huff_damp, sizeof(huff_damp))) < 0)
                         return -1;
-                    amp[ch] = amp[main_ch] - value;
+                    value = amp[main_ch] - value;
+                    if (value < 0 || value > 63)
+                        value = 0;
+                    amp[ch] = value;
 
                     if ((value = bits2_get_vlc(&lbr->bits, huff_dph, sizeof(huff_dph))) < 0)
                         return -1;
-                    value = phs[main_ch] - value;
-                    if (value < 0)
-                        value += 8;
-                    phs[ch] = value;
+                    phs[ch] = (phs[main_ch] - value) & 7;
                 } else {
                     amp[ch] = 0;
                     phs[ch] = 0;
