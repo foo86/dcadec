@@ -124,6 +124,6 @@ struct lbr_decoder {
 
 int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_asset *asset);
 int lbr_filter(struct lbr_decoder *lbr);
-void lbr_clear(struct lbr_decoder *lbr);
+void lbr_clear(struct lbr_decoder *lbr) __attribute__((cold));
 
 #endif
