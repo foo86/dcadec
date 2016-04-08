@@ -1302,12 +1302,12 @@ static void filter_ts(struct lbr_decoder *lbr, int ch1, int ch2)
             float *samples = &lbr->time_samples[ch][sb][LBR_TIME_HISTORY];
             uint8_t *hr_scf = lbr->high_res_scf[ch][sb];
             if (sb < 4) {
-                for (i = 0; i < LBR_TIME_SAMPLES / 2; i++, samples += 2) {
-                    unsigned int scf = hr_scf[i / 8];
+                for (i = 0; i < LBR_TIME_SAMPLES / 16; i++, samples += 16) {
+                    unsigned int scf = hr_scf[i];
                     if (scf > 63)
                         scf = 63;
-                    samples[0] *= quant_amp[scf];
-                    samples[1] *= quant_amp[scf];
+                    for (j = 0; j < 16; j++)
+                        samples[j] *= quant_amp[scf];
                 }
             } else {
                 uint8_t *g2_scf = lbr->grid_2_scf[ch][scf_to_grid_2[sb]];
