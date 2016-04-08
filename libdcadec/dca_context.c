@@ -891,7 +891,7 @@ static int filter_lbr_frame(struct dcadec_context *dca)
     if (reorder_samples(dca, lbr->output_samples, lbr->output_mask) <= 0)
         return -DCADEC_EINVAL;
 
-    dca->nframesamples = 4096;
+    dca->nframesamples = 1024 << lbr->freq_range;
     dca->sample_rate = lbr->sample_rate;
     dca->bits_per_sample = 24;
     dca->profile = DCADEC_PROFILE_EXPRESS;

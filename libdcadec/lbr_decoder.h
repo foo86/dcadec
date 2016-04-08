@@ -55,7 +55,6 @@ struct lbr_decoder {
     struct bitstream2       bits; ///< Bitstream reader
 
     int sample_rate;
-    int limited_rate;
     int ch_mask;
     int flags;
     int bit_rate_orig;
@@ -63,6 +62,9 @@ struct lbr_decoder {
 
     int nchannels;
     int freq_range;
+    int band_limit;
+    int limited_rate;
+    int limited_range;
     int res_profile;
     int nsubbands;
     int g3_avg_only_start_sb;

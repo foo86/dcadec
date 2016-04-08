@@ -249,7 +249,7 @@ static int parse_tonal(struct lbr_decoder *lbr, int group)
                 return -1;
 
             value += lbr->tonal_scf[freq_to_sf[freq >> (7 - group)]];
-            value += lbr->freq_range - 2;
+            value += lbr->limited_range - 2;
             if (value < 0 || value > 63)
                 return -1;
 
@@ -566,7 +566,7 @@ static int parse_ts(struct lbr_decoder *lbr, int ch1, int ch2,
         } else if (flag && sb < lbr->max_mono_subband) {
             sb_reorder = lbr->sb_indices[sb];
         } else {
-            sb_reorder = bits2_get(&lbr->bits, lbr->freq_range + 3);
+            sb_reorder = bits2_get(&lbr->bits, lbr->limited_range + 3);
             if (sb_reorder < 6)
                 sb_reorder = 6;
             lbr->sb_indices[sb] = sb_reorder;
@@ -875,26 +875,15 @@ static int parse_ts2_chunk(struct lbr_decoder *lbr, int ch1, int ch2)
 
 static void init_tables(struct lbr_decoder *lbr)
 {
-    float scale = 256.0 * 0.25;
-    int i, j;
+    float scale = 256.0 * 0.25 * sqrt(1 << (2 - lbr->limited_range));
+    int i, j, r = lbr->freq_range;
 
-    switch (lbr->flags & LBR_FLAG_BAND_LIMIT_MASK) {
-    case LBR_FLAG_BAND_LIMIT_1_2:
-        scale *= sqrt(2.0);
-        break;
-    case LBR_FLAG_BAND_LIMIT_1_4:
-        scale *= sqrt(4.0);
-        break;
-    case LBR_FLAG_BAND_LIMIT_1_8:
-        scale *= sqrt(8.0);
-        break;
-    }
+    for (i = 0; i < 64 << r; i++)
+        for (j = 0; j < 32 << r; j++)
+            lbr->cos_mod[i][j] = scale * cos(M_PI * (2 * i + (32 << r) + 1) * (2 * j + 1) / (128 << r));
 
-    for (i = 0; i < 256; i++) {
-        for (j = 0; j < 128; j++)
-            lbr->cos_mod[i][j] = scale * cos(M_PI * (2 * i + 129) * (2 * j + 1) / 512);
+    for (i = 0; i < 256; i++)
         lbr->sin_tab[i] = cos(M_PI * i / 128);
-    }
 
     for (i = 0; i < 16; i++)
         lbr->lpc_tab[i] = sin((i - 8) * (M_PI / ((i < 8) ? 17 : 15)));
@@ -910,7 +899,7 @@ static void init_tables(struct lbr_decoder *lbr)
 
     scale *= 1.0 / INT_MAX;
 
-    for (i = 0; i < LBR_SUBBANDS; i++) {
+    for (i = 0; i < lbr->nsubbands; i++) {
         if (i < 2)
             lbr->sb_scf[i] = 0;
         else if (i < 5)
@@ -923,11 +912,11 @@ static void init_tables(struct lbr_decoder *lbr)
 static int parse_decoder_init(struct lbr_decoder *lbr, struct bytestream *bytes)
 {
     int old_rate = lbr->sample_rate;
-    int old_flags = lbr->flags;
+    int old_band_limit = lbr->band_limit;
 
     // Sample rate of LBR audio
     unsigned int code = bytes_get(bytes);
-    if (code >= dca_countof(sample_rates) || sample_rates[code] != 48000) {
+    if (code >= dca_countof(sample_rates) || !sample_rates[code]) {
         lbr_err("Invalid LBR sample rate");
         return -DCADEC_EBADDATA;
     }
@@ -949,6 +938,9 @@ static int parse_decoder_init(struct lbr_decoder *lbr, struct bytestream *bytes)
         return -DCADEC_ENOSUP;
     }
 
+    if (lbr->sample_rate != 48000)
+        lbr->flags &= ~LBR_FLAG_LFE_PRESENT;
+
     // Most significant bit rate nibbles
     int bit_rate_hi = bytes_get(bytes);
 
@@ -966,25 +958,22 @@ static int parse_decoder_init(struct lbr_decoder *lbr, struct bytestream *bytes)
 
     switch (lbr->flags & LBR_FLAG_BAND_LIMIT_MASK) {
     case LBR_FLAG_BAND_LIMIT_1_2:
-        lbr->limited_rate = lbr->sample_rate / 2;
+        lbr->band_limit = 1;
         break;
     case LBR_FLAG_BAND_LIMIT_1_4:
-        lbr->limited_rate = lbr->sample_rate / 4;
-        break;
-    case LBR_FLAG_BAND_LIMIT_1_8:
-        lbr->limited_rate = lbr->sample_rate / 8;
+        lbr->band_limit = 2;
         break;
     case LBR_FLAG_BAND_LIMIT_NONE:
-        lbr->limited_rate = lbr->sample_rate;
+        lbr->band_limit = 0;
         break;
     default:
         lbr_err("Invalid LBR band limit");
         return -DCADEC_EBADDATA;
     }
 
-    if (lbr->limited_rate < 14000)
+    if (lbr->sample_rate < 14000)
         lbr->freq_range = 0;
-    else if (lbr->limited_rate < 28000)
+    else if (lbr->sample_rate < 28000)
         lbr->freq_range = 1;
     else
         lbr->freq_range = 2;
@@ -996,7 +985,14 @@ static int parse_decoder_init(struct lbr_decoder *lbr, struct bytestream *bytes)
     else
         lbr->res_profile = 0;
 
-    lbr->nsubbands = 8 << lbr->freq_range;
+    lbr->limited_rate = lbr->sample_rate >> lbr->band_limit;
+    lbr->limited_range = lbr->freq_range - lbr->band_limit;
+    if (lbr->limited_range < 0) {
+        lbr_err("Invalid LBR band limit");
+        return -DCADEC_EBADDATA;
+    }
+
+    lbr->nsubbands = 8 << lbr->limited_range;
 
     static const uint16_t freq[3] = { 16000, 18000, 24000 };
 
@@ -1012,10 +1008,8 @@ static int parse_decoder_init(struct lbr_decoder *lbr, struct bytestream *bytes)
     if (lbr->max_mono_subband > lbr->nsubbands)
         lbr->max_mono_subband = lbr->nsubbands;
 
-    if (old_rate != lbr->sample_rate || old_flags != lbr->flags) {
-        memset(lbr->part_stereo, 16, sizeof(lbr->part_stereo));
-        memset(lbr->spatial_info, 16, sizeof(lbr->spatial_info));
-
+    if (old_rate != lbr->sample_rate || old_band_limit != lbr->band_limit) {
+        lbr_clear(lbr);
         init_tables(lbr);
     }
 
@@ -1512,11 +1506,12 @@ static inline int convert(float a)
     return clip23(lrintf(a));
 }
 
-static void imdct128(struct lbr_decoder *lbr, float *output, const float *input)
+static void imdct(struct lbr_decoder *lbr, float *output, const float *input)
 {
-    for (int i = 0; i < 256; i++) {
+    int r = lbr->freq_range;
+    for (int i = 0; i < 64 << r; i++) {
         double res = 0.0;
-        for (int j = 0; j < 128; j++)
+        for (int j = 0; j < 32 << r; j++)
             res += input[j] * lbr->cos_mod[i][j];
         output[i] = res;
     }
@@ -1527,6 +1522,8 @@ static void transform_channel(struct lbr_decoder *lbr, int ch)
     float values[LBR_SUBBANDS][4];
     float _values[LBR_SUBBANDS * 2][4];
     int *output = lbr->channel_buffer[ch];
+    int noutsubbands = 8 << lbr->freq_range;
+    int step = 1 << (2 - lbr->freq_range);
     int i, sf, nsubbands = lbr->nsubbands;
 
     for (sf = 0; sf < LBR_TIME_SAMPLES / 4; sf++) {
@@ -1558,32 +1555,32 @@ static void transform_channel(struct lbr_decoder *lbr, int ch)
         }
 
         // Clear inactive subbands
-        if (nsubbands < LBR_SUBBANDS)
-            memset(values[nsubbands], 0, (LBR_SUBBANDS - nsubbands) * sizeof(values[0]));
+        if (nsubbands < noutsubbands)
+            memset(values[nsubbands], 0, (noutsubbands - nsubbands) * sizeof(values[0]));
 
         base_func_synth(lbr, ch, values[0], sf);
 
-        imdct128(lbr, _values[0], values[0]);
+        imdct(lbr, _values[0], values[0]);
 
         // Long window and overlap-add
-        const float *w1 = &long_window[      0];
-        const float *w2 = &long_window[128 - 4];
+        const float *w1 = &long_window[0];
+        const float *w2 = &long_window[128 - 4 * step];
         float *history = lbr->imdct_history[ch];
-        for (i = 0; i < LBR_SUBBANDS; i++) {
-            output[0] = convert(w1[0] * _values[i][0] + history[0]);
-            output[1] = convert(w1[1] * _values[i][1] + history[1]);
-            output[2] = convert(w1[2] * _values[i][2] + history[2]);
-            output[3] = convert(w1[3] * _values[i][3] + history[3]);
+        for (i = 0; i < noutsubbands; i++) {
+            output[0] = convert(w1[0 * step] * _values[i][0] + history[0]);
+            output[1] = convert(w1[1 * step] * _values[i][1] + history[1]);
+            output[2] = convert(w1[2 * step] * _values[i][2] + history[2]);
+            output[3] = convert(w1[3 * step] * _values[i][3] + history[3]);
 
-            history[0] = w2[3] * _values[LBR_SUBBANDS + i][0];
-            history[1] = w2[2] * _values[LBR_SUBBANDS + i][1];
-            history[2] = w2[1] * _values[LBR_SUBBANDS + i][2];
-            history[3] = w2[0] * _values[LBR_SUBBANDS + i][3];
+            history[0] = w2[3 * step] * _values[noutsubbands + i][0];
+            history[1] = w2[2 * step] * _values[noutsubbands + i][1];
+            history[2] = w2[1 * step] * _values[noutsubbands + i][2];
+            history[3] = w2[0 * step] * _values[noutsubbands + i][3];
 
             output  += 4;
             history += 4;
-            w1 += 4;
-            w2 -= 4;
+            w1 += 4 * step;
+            w2 -= 4 * step;
         }
     }
 
