@@ -1130,9 +1130,11 @@ int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_a
         int chunk_len = (chunk_id & 0x80) ? bytes_get16be(&bytes) : bytes_get(&bytes);
         int ch1, ch2;
 
-        int chunk_end = bytes.index + chunk_len;
-        if (chunk_end > bytes.total)
-            chunk_end = bytes.total;
+        if (chunk_len > bytes.total - bytes.index) {
+            chunk_len = bytes.total - bytes.index;
+            if (chunk_len < 0)
+                break;
+        }
 
         chunk_id &= 0x7f;
 
@@ -1197,7 +1199,7 @@ int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_a
             return -DCADEC_EBADDATA;
         }
 
-        bytes.index = chunk_end;
+        bytes.index += chunk_len;
     }
 
     return 0;
