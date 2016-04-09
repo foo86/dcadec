@@ -395,14 +395,9 @@ static int parse_grid_1_chunk(struct lbr_decoder *lbr, int ch1, int ch2)
     for (sb = 2; sb < nsubbands; sb++) {
         if (parse_scale_factors(lbr, lbr->grid_1_scf[ch1][sb]) < 0)
             return -1;
-        if (ch1 != ch2) {
-            if (grid_1_to_scf[sb] < lbr->min_mono_subband) {
-                if (parse_scale_factors(lbr, lbr->grid_1_scf[ch2][sb]) < 0)
-                    return -1;
-            } else {
-                memset(lbr->grid_1_scf[ch2][sb], 0, sizeof(lbr->grid_1_scf[0][0]));
-            }
-        }
+        if (ch1 != ch2 && grid_1_to_scf[sb] < lbr->min_mono_subband)
+            if (parse_scale_factors(lbr, lbr->grid_1_scf[ch2][sb]) < 0)
+                return -1;
     }
 
     if (lbr->bits.count < 20)
