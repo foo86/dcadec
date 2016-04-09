@@ -1496,11 +1496,6 @@ static void base_func_synth(struct lbr_decoder *lbr, int ch, float *values, int 
 #define AL1     0.30865827
 #define AL2     0.038060233
 
-static inline int convert(float a)
-{
-    return clip23(lrintf(a));
-}
-
 static void imdct(struct lbr_decoder *lbr, float *output, const float *input)
 {
     int r = lbr->freq_range;
@@ -1562,10 +1557,10 @@ static void transform_channel(struct lbr_decoder *lbr, int ch)
         const float *w2 = &long_window[128 - 4 * step];
         float *history = lbr->imdct_history[ch];
         for (i = 0; i < noutsubbands; i++) {
-            output[0] = convert(w1[0 * step] * _values[i][0] + history[0]);
-            output[1] = convert(w1[1 * step] * _values[i][1] + history[1]);
-            output[2] = convert(w1[2 * step] * _values[i][2] + history[2]);
-            output[3] = convert(w1[3 * step] * _values[i][3] + history[3]);
+            output[0] = lrintf(w1[0 * step] * _values[i][0] + history[0]);
+            output[1] = lrintf(w1[1 * step] * _values[i][1] + history[1]);
+            output[2] = lrintf(w1[2 * step] * _values[i][2] + history[2]);
+            output[3] = lrintf(w1[3 * step] * _values[i][3] + history[3]);
 
             history[0] = w2[3 * step] * _values[noutsubbands + i][0];
             history[1] = w2[2 * step] * _values[noutsubbands + i][1];
@@ -1608,7 +1603,7 @@ static void interpolate_lfe(struct lbr_decoder *lbr)
                 lbr->lfe_history[k][1] = res2;
             }
 
-            *output++ = convert(res1);
+            *output++ = lrintf(res1);
             res1 = 0.0;
         }
     }
