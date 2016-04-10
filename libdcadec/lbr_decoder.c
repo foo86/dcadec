@@ -214,8 +214,11 @@ static int parse_scf_chunk(struct lbr_decoder *lbr)
     if (lbr->bits.count < 36)
         return 0;
 
-    for (int sb = 0; sb < 6; sb++)
+    for (int sb = 0; sb < 6; sb++) {
         lbr->tonal_scf[sb] = bits2_get(&lbr->bits, 6);
+        if (lbr->tonal_scf[sb] > 55)
+            return -1;
+    }
 
     return 0;
 }
@@ -250,7 +253,7 @@ static int parse_tonal(struct lbr_decoder *lbr, int group)
 
             value += lbr->tonal_scf[freq_to_sf[freq >> (7 - group)]];
             value += lbr->limited_range - 2;
-            if (value < 0 || value > 63)
+            if (value < 0 || value > 55)
                 return -1;
 
             amp[main_ch] = value;
@@ -264,7 +267,7 @@ static int parse_tonal(struct lbr_decoder *lbr, int group)
                     if ((value = bits2_get_vlc(&lbr->bits, huff_damp, sizeof(huff_damp))) < 0)
                         return -1;
                     value = amp[main_ch] - value;
-                    if (value < 0 || value > 63)
+                    if (value < 0)
                         value = 0;
                     amp[ch] = value;
 
@@ -307,6 +310,8 @@ static int parse_scale_factors(struct lbr_decoder *lbr, uint8_t *scf)
         return 0;
     if ((prev = bits2_get_vlc(&lbr->bits, huff_fst_rsd_amp, sizeof(huff_fst_rsd_amp))) < 0)
         return -1;
+    if (prev > 56)
+        return -1;
 
     scf[sf] = prev;
 
@@ -322,6 +327,8 @@ static int parse_scale_factors(struct lbr_decoder *lbr, uint8_t *scf)
         if (lbr->bits.count < 20)
             return 0;
         if ((next = bits2_get_vlc(&lbr->bits, huff_rsd_amp, sizeof(huff_rsd_amp))) < 0)
+            return -1;
+        if (next > 112)
             return -1;
 
         if (next & 1)
@@ -371,6 +378,8 @@ static int parse_st_code(struct bitstream2 *bits, int min_v)
 
     if ((v = bits2_get_vlc(bits, huff_st_grid, sizeof(huff_st_grid))) < 0)
         return -1;
+    if (v > 31)
+        return -1;
 
     v += min_v;
     if (v & 1)
@@ -411,6 +420,8 @@ static int parse_grid_1_chunk(struct lbr_decoder *lbr, int ch1, int ch2)
         if (ch1 != ch2) {
             if (sb + 4 < lbr->min_mono_subband) {
                 if ((value = bits2_get_vlc(&lbr->bits, huff_avg_g3, sizeof(huff_avg_g3))) < 0)
+                    return -1;
+                if (value > 72)
                     return -1;
                 lbr->grid_3_avg[ch2][sb] = value - 16;
             } else {
@@ -488,6 +499,8 @@ static int parse_grid_1_sec_ch(struct lbr_decoder *lbr, int ch2)
     for (int sb = 0; sb < lbr->nsubbands - 4; sb++) {
         if (sb + 4 >= lbr->min_mono_subband) {
             if ((value = bits2_get_vlc(&lbr->bits, huff_avg_g3, sizeof(huff_avg_g3))) < 0)
+                return -1;
+            if (value > 72)
                 return -1;
             lbr->grid_3_avg[ch2][sb] = value - 16;
         }
@@ -1295,8 +1308,8 @@ static void filter_ts(struct lbr_decoder *lbr, int ch1, int ch2)
             if (sb < 4) {
                 for (i = 0; i < LBR_TIME_SAMPLES / 16; i++, samples += 16) {
                     unsigned int scf = hr_scf[i];
-                    if (scf > 63)
-                        scf = 63;
+                    if (scf > 56)
+                        scf = 56;
                     for (j = 0; j < 16; j++)
                         samples[j] *= quant_amp[scf];
                 }
@@ -1304,8 +1317,8 @@ static void filter_ts(struct lbr_decoder *lbr, int ch1, int ch2)
                 uint8_t *g2_scf = lbr->grid_2_scf[ch][scf_to_grid_2[sb]];
                 for (i = 0; i < LBR_TIME_SAMPLES / 2; i++, samples += 2) {
                     unsigned int scf = hr_scf[i / 8] - g2_scf[i];
-                    if (scf > 63)
-                        scf = 63;
+                    if (scf > 56)
+                        scf = 56;
                     samples[0] *= quant_amp[scf];
                     samples[1] *= quant_amp[scf];
                 }
