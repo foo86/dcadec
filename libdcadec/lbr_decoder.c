@@ -189,20 +189,23 @@ static int parse_lfe_chunk_16(struct lbr_decoder *lbr)
 
 static int parse_ecs_chunk(struct lbr_decoder *lbr)
 {
-    if (lbr->bits.count < 14)
+    if (lbr->bits.count < 16)
         return 0;
 
     int start_sb = bits2_get(&lbr->bits, 7);
     int end_sb = bits2_get(&lbr->bits, 7);
 
+    if (end_sb < start_sb || end_sb > lbr->nsubbands)
+        return -1;
+
     for (int i = 0; i < lbr->nchannels * lbr->nsubbands * 4; i++) {
         int sb = (i / 4) & (lbr->nsubbands - 1);
-        if (lbr->bits.count < 2)
-            break;
         if (sb >= start_sb && sb < end_sb && bits2_get1(&lbr->bits)) {
-            lbr->can_replace_ch_1[i >> 5] |= 1U << (i & 31);
+            DCA_SET_BIT(lbr->can_replace_sf, i);
             if (bits2_get1(&lbr->bits))
-                lbr->can_replace_ch_2[i >> 5] |= 1U << (i & 31);
+                DCA_SET_BIT(lbr->can_replace_ch, i);
+            if (lbr->bits.count < 2)
+                break;
         }
     }
 
@@ -225,6 +228,7 @@ static int parse_scf_chunk(struct lbr_decoder *lbr)
 
 static int parse_tonal(struct lbr_decoder *lbr, int group)
 {
+    int first_ch = lbr->undo_dmix * 2;
     int amp[LBR_CHANNELS];
     int phs[LBR_CHANNELS];
     unsigned int diff;
@@ -246,7 +250,7 @@ static int parse_tonal(struct lbr_decoder *lbr, int group)
             if (freq >> (5 - group) > lbr->nsubbands * 4 - 5)
                 return -1;
 
-            int main_ch = bits2_getz(&lbr->bits, bits_for_ch_num[lbr->nchannels - 1]);
+            int main_ch = bits2_getz(&lbr->bits, bits_for_ch_num[lbr->nchannels_total - 1]);
             int value = bits2_get_vlc(&lbr->bits, huff_tnl_scf, sizeof(huff_tnl_scf));
             if (value < 0)
                 return -1;
@@ -259,7 +263,7 @@ static int parse_tonal(struct lbr_decoder *lbr, int group)
             amp[main_ch] = value;
             phs[main_ch] = bits2_get(&lbr->bits, 3);
 
-            for (int ch = 0; ch < lbr->nchannels; ch++) {
+            for (int ch = 0; ch < lbr->nchannels_total; ch++) {
                 if (ch == main_ch)
                     continue;
 
@@ -291,8 +295,8 @@ static int parse_tonal(struct lbr_decoder *lbr, int group)
             value -= (t->ph_rot << (5 - group)) - t->ph_rot;
 
             for (int ch = 0; ch < lbr->nchannels; ch++) {
-                t->amp[ch] = amp[ch];
-                t->phs[ch] = 128 - phs[ch] * 32 + value;
+                t->amp[ch] = amp[first_ch + ch];
+                t->phs[ch] = 128 - phs[first_ch + ch] * 32 + value;
             }
         }
 
@@ -558,10 +562,123 @@ static float lbr_rand(struct lbr_decoder *lbr, int sb)
     return lbr->lbr_rand * lbr->sb_scf[sb];
 }
 
+static void parse_ch(struct lbr_decoder *lbr, int ch, int sb, int quant_level)
+{
+    int i, j, sf, ofs, code = -1, coding_method = -1;
+
+    if (lbr->bits.count < 20) {
+        lbr->bits.count = 0;
+        return;
+    }
+
+    for (sf = 0, ofs = 0; sf < 4; sf++, ofs += 32) {
+        float *samples = &lbr->time_samples[ch][sb][LBR_TIME_HISTORY + sf * 32];
+
+        if (lbr->undo_dmix && ch < lbr->nchannels) {
+            unsigned int bit = (ch * lbr->nsubbands + sb) * 4 + sf;
+            if (DCA_TEST_BIT(lbr->can_replace_sf, bit)) {
+                ofs = -32;
+                continue;
+            }
+        }
+
+        if (coding_method == -1)
+            coding_method = bits2_get1(&lbr->bits);
+
+        switch (quant_level) {
+        case 1:
+            for (i = 0; i < 4; i++, samples += 8) {
+                if (lbr->bits.count >= 8) {
+                    code = bits2_get(&lbr->bits, 8);
+                    for (j = 0; j < 8; j++)
+                        samples[j] = residual_level_2a[(code >> j) & 1];
+                } else {
+                    for (j = 0; j < 8; j++)
+                        samples[j] = lbr_rand(lbr, sb);
+                }
+            }
+            break;
+
+        case 2:
+            if (coding_method) {
+                for (i = 0; i < 32; i++) {
+                    if (lbr->bits.count < 2)
+                        samples[i] = lbr_rand(lbr, sb);
+                    else if (bits2_get1(&lbr->bits))
+                        samples[i] = residual_level_2b[bits2_get1(&lbr->bits)];
+                    else
+                        samples[i] = 0;
+                }
+                break;
+            }
+
+            for (i = 0; i < 32; i++) {
+                int mod = (ofs + i) % 5;
+
+                if (!mod) {
+                    if (lbr->bits.count >= 8) {
+                        code = bits2_get(&lbr->bits, 8);
+                        if (code > 242)
+                            code = 121;
+                    } else {
+                        code = 121;
+                    }
+
+                    code = residual_pack_5_in_8[code];
+                }
+
+                samples[i] = residual_level_3[(code >> mod * 2) & 3];
+            }
+            break;
+
+        case 3:
+            for (i = 0; i < 32; i++) {
+                int mod = (ofs + i) % 3;
+
+                if (!mod) {
+                    if (lbr->bits.count >= 7) {
+                        code = bits2_get(&lbr->bits, 7);
+                        if (code > 124)
+                            code = 62;
+                    } else {
+                        code = 62;
+                    }
+                }
+
+                samples[i] = residual_level_5[residual_pack_3_in_7[code][mod]];
+            }
+            break;
+
+        case 4:
+            for (i = 0; i < 32; i++) {
+                if (lbr->bits.count >= 6) {
+                    code = bits2_peek(&lbr->bits, 6);
+                    samples[i] = residual_level_8[residual_code_val[code]];
+                    bits2_skip(&lbr->bits, residual_code_len[code]);
+                } else {
+                    samples[i] = lbr_rand(lbr, sb);
+                }
+            }
+            break;
+
+        case 5:
+            for (i = 0; i < 32; i++) {
+                if (lbr->bits.count >= 4)
+                    samples[i] = residual_level_16[bits2_get(&lbr->bits, 4)];
+                else
+                    samples[i] = lbr_rand(lbr, sb);
+            }
+            break;
+        }
+    }
+
+    lbr->ch_pres[ch] |= 1U << sb;
+}
+
 static int parse_ts(struct lbr_decoder *lbr, int ch1, int ch2,
                     int start_sb, int end_sb, bool flag)
 {
-    int i, j, sb_reorder;
+    int sb_reorder;
 
     for (int sb = start_sb; sb < end_sb; sb++) {
         if (lbr->bits.count < 28) {
@@ -601,111 +718,19 @@ static int parse_ts(struct lbr_decoder *lbr, int ch1, int ch2,
                 lbr->sec_ch_lrms[ch1 / 2][sb_reorder] = bits2_get(&lbr->bits, 8);
         }
 
-        int _ch1 = ch1;
-        int _ch2 = ch2;
+        int quant_level = lbr->quant_levels[ch1 / 2][sb];
+        if (!quant_level)
+            return -1;
+
         if (sb < lbr->max_mono_subband && sb_reorder >= lbr->min_mono_subband) {
-            if (flag && ch1 == ch2)
-                continue;
-            if (flag)
-                _ch1 = ch2;
-            else
-                _ch2 = ch1;
-        }
-
-        for (int ch = _ch1; ch <= _ch2; ch++) {
-            if (lbr->bits.count < 32) {
-                lbr->bits.count = 0;
-                break;
-            }
-
-            int coding_method = bits2_get1(&lbr->bits);
-            float *samples = &lbr->time_samples[ch][sb_reorder][LBR_TIME_HISTORY];
-            int code;
-
-            switch (lbr->quant_levels[ch1 / 2][sb]) {
-            case 1:
-                for (i = 0; i < LBR_TIME_SAMPLES / 8; i++, samples += 8) {
-                    if (lbr->bits.count >= 8) {
-                        code = bits2_get(&lbr->bits, 8);
-                        for (j = 0; j < 8; j++)
-                            samples[j] = residual_level_2a[(code >> j) & 1];
-                    } else {
-                        for (j = 0; j < 8; j++)
-                            samples[j] = lbr_rand(lbr, sb_reorder);
-                    }
-                }
-                break;
-
-            case 2:
-                if (coding_method) {
-                    for (i = 0; i < LBR_TIME_SAMPLES; i++) {
-                        if (lbr->bits.count < 2)
-                            samples[i] = lbr_rand(lbr, sb_reorder);
-                        else if (bits2_get1(&lbr->bits))
-                            samples[i] = residual_level_2b[bits2_get1(&lbr->bits)];
-                        else
-                            samples[i] = 0;
-                    }
-                    break;
-                }
-
-                for (i = 0; i < (LBR_TIME_SAMPLES + 4) / 5; i++, samples += 5) {
-                    if (lbr->bits.count >= 8) {
-                        code = bits2_get(&lbr->bits, 8);
-                        if (code > 242)
-                            code = 121;
-                    } else {
-                        code = 121;
-                    }
-
-                    code = residual_pack_5_in_8[code];
-
-                    for (j = 0; j < 5; j++)
-                        samples[j] = residual_level_3[(code >> j * 2) & 3];
-                }
-                break;
-
-            case 3:
-                for (i = 0; i < (LBR_TIME_SAMPLES + 2) / 3; i++, samples += 3) {
-                    if (lbr->bits.count >= 7) {
-                        code = bits2_get(&lbr->bits, 7);
-                        if (code > 124)
-                            code = 62;
-                    } else {
-                        code = 62;
-                    }
-
-                    for (j = 0; j < 3; j++)
-                        samples[j] = residual_level_5[residual_pack_3_in_7[code][j]];
-                }
-                break;
-
-            case 4:
-                for (i = 0; i < LBR_TIME_SAMPLES; i++) {
-                    if (lbr->bits.count >= 6) {
-                        code = bits2_peek(&lbr->bits, 6);
-                        samples[i] = residual_level_8[residual_code_val[code]];
-                        bits2_skip(&lbr->bits, residual_code_len[code]);
-                    } else {
-                        samples[i] = lbr_rand(lbr, sb_reorder);
-                    }
-                }
-                break;
-
-            case 5:
-                for (i = 0; i < LBR_TIME_SAMPLES; i++) {
-                    if (lbr->bits.count >= 4)
-                        samples[i] = residual_level_16[bits2_get(&lbr->bits, 4)];
-                    else
-                        samples[i] = lbr_rand(lbr, sb_reorder);
-                }
-                break;
-
-            default:
-                return -1;
-            }
-
-            lbr->ch_pres[ch] |= 1U << sb_reorder;
+            if (!flag)
+                parse_ch(lbr, ch1, sb_reorder, quant_level);
+            else if (ch1 != ch2)
+                parse_ch(lbr, ch2, sb_reorder, quant_level);
+        } else {
+            parse_ch(lbr, ch1, sb_reorder, quant_level);
+            if (ch1 != ch2)
+                parse_ch(lbr, ch2, sb_reorder, quant_level);
         }
     }
 
@@ -941,8 +966,8 @@ static int parse_decoder_init(struct lbr_decoder *lbr, struct bytestream *bytes)
 
     // Flags for LBR decoder initialization
     lbr->flags = bytes_get(bytes);
-    if (lbr->flags & (LBR_FLAG_DMIX_STEREO | LBR_FLAG_DMIX_MULTI_CH)) {
-        lbr_err("Unsupported embedded downmix");
+    if (lbr->flags & LBR_FLAG_DMIX_MULTI_CH) {
+        lbr_err("Unsupported multi-channel downmix");
         return -DCADEC_ENOSUP;
     }
 
@@ -1021,6 +1046,23 @@ static int parse_decoder_init(struct lbr_decoder *lbr, struct bytestream *bytes)
         init_tables(lbr);
     }
 
+    lbr->nchannels_total = lbr->nchannels;
+    lbr->undo_dmix = false;
+    if (lbr->flags & LBR_FLAG_DMIX_STEREO) {
+        if (lbr->nchannels < 3 || lbr->nchannels > LBR_CHANNELS - 2) {
+            lbr_err("Invalid number of channels for stereo downmix");
+            return -DCADEC_EBADDATA;
+        }
+        lbr->nchannels_total += 2;
+        if (lbr->ctx_flags & DCADEC_FLAG_KEEP_DMIX_2CH) {
+            lbr->nchannels = 2;
+            lbr->ch_mask = SPEAKER_PAIR_LR;
+            lbr->flags &= ~LBR_FLAG_LFE_PRESENT;
+        } else {
+            lbr->undo_dmix = true;
+        }
+    }
+
     return 0;
 }
 
@@ -1087,8 +1129,8 @@ int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_a
         return -DCADEC_EBADDATA;
     }
 
-    memset(lbr->can_replace_ch_1, 0, sizeof(lbr->can_replace_ch_1));
-    memset(lbr->can_replace_ch_2, 0, sizeof(lbr->can_replace_ch_2));
+    memset(lbr->can_replace_sf, 0, sizeof(lbr->can_replace_sf));
+    memset(lbr->can_replace_ch, 0, sizeof(lbr->can_replace_ch));
     memset(lbr->quant_levels, 0, sizeof(lbr->quant_levels));
     memset(lbr->sb_indices, 0xff, sizeof(lbr->sb_indices));
     memset(lbr->sec_ch_sbms, 0, sizeof(lbr->sec_ch_sbms));
@@ -1156,7 +1198,8 @@ int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_a
             break;
 
         case LBR_CHUNK_ECS:
-            ret = parse_ecs_chunk(lbr);
+            if (lbr->undo_dmix)
+                ret = parse_ecs_chunk(lbr);
             break;
 
         case LBR_CHUNK_SCF:
@@ -1168,6 +1211,11 @@ int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_a
             break;
 
         case LBR_CHUNK_RES_GRID_LR ... LBR_CHUNK_RES_GRID_LR + LBR_CHANNELS / 2:
+            if (lbr->undo_dmix) {
+                if (chunk_id == LBR_CHUNK_RES_GRID_LR)
+                    break;
+                chunk_id--;
+            }
             ch1 = 2 * (chunk_id - LBR_CHUNK_RES_GRID_LR);
             ch2 = DCA_MIN(ch1 + 1, lbr->nchannels - 1);
             if (ch1 <= ch2)
@@ -1175,6 +1223,13 @@ int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_a
             break;
 
         case LBR_CHUNK_RES_GRID_HR ... LBR_CHUNK_RES_GRID_HR + LBR_CHANNELS / 2:
+            if (lbr->undo_dmix) {
+                if (chunk_id == LBR_CHUNK_RES_GRID_HR) {
+                    ret = parse_high_res_grid(lbr, LBR_CHANNELS - 2, LBR_CHANNELS - 1);
+                    break;
+                }
+                chunk_id--;
+            }
             ch1 = 2 * (chunk_id - LBR_CHUNK_RES_GRID_HR);
             ch2 = DCA_MIN(ch1 + 1, lbr->nchannels - 1);
             if (ch1 <= ch2)
@@ -1182,6 +1237,13 @@ int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_a
             break;
 
         case LBR_CHUNK_RES_TS_1 ... LBR_CHUNK_RES_TS_1 + LBR_CHANNELS / 2:
+            if (lbr->undo_dmix) {
+                if (chunk_id == LBR_CHUNK_RES_TS_1) {
+                    ret = parse_ts1_chunk(lbr, LBR_CHANNELS - 2, LBR_CHANNELS - 1);
+                    break;
+                }
+                chunk_id--;
+            }
             ch1 = 2 * (chunk_id - LBR_CHUNK_RES_TS_1);
             ch2 = DCA_MIN(ch1 + 1, lbr->nchannels - 1);
             if (ch1 <= ch2)
@@ -1189,6 +1251,13 @@ int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_a
             break;
 
         case LBR_CHUNK_RES_TS_2 ... LBR_CHUNK_RES_TS_2 + LBR_CHANNELS / 2:
+            if (lbr->undo_dmix) {
+                if (chunk_id == LBR_CHUNK_RES_TS_2) {
+                    ret = parse_ts2_chunk(lbr, LBR_CHANNELS - 2, LBR_CHANNELS - 1);
+                    break;
+                }
+                chunk_id--;
+            }
             ch1 = 2 * (chunk_id - LBR_CHUNK_RES_TS_2);
             ch2 = DCA_MIN(ch1 + 1, lbr->nchannels - 1);
             if (ch1 <= ch2)
@@ -1232,6 +1301,21 @@ static void decode_grid(struct lbr_decoder *lbr, int ch)
             for (int i = 0; i < 8; i++) {
                 int scf = w1 * g1_scf_a[i] + w2 * g1_scf_b[i];
                 hr_scf[i] = (scf >> 7) - g3_avg - g3_scf[i];
+            }
+        }
+    }
+}
+
+static void replace_ts(struct lbr_decoder *lbr, int ch1)
+{
+    for (int sb = 0; sb < lbr->nsubbands; sb++) {
+        for (int sf = 0; sf < 4; sf++) {
+            unsigned int bit = (ch1 * lbr->nsubbands + sb) * 4 + sf;
+            if (DCA_TEST_BIT(lbr->can_replace_sf, bit)) {
+                int ch2 = LBR_CHANNELS - 2 + DCA_TEST_BIT(lbr->can_replace_ch, bit);
+                float *samples1 = &lbr->time_samples[ch1][sb][LBR_TIME_HISTORY + sf * 32];
+                float *samples2 = &lbr->time_samples[ch2][sb][LBR_TIME_HISTORY + sf * 32];
+                memcpy(samples1, samples2, 32 * sizeof(*samples1));
             }
         }
     }
@@ -1624,6 +1708,11 @@ static void interpolate_lfe(struct lbr_decoder *lbr)
 
 int lbr_filter(struct lbr_decoder *lbr)
 {
+    if (lbr->undo_dmix) {
+        random_ts(lbr, LBR_CHANNELS - 2);
+        random_ts(lbr, LBR_CHANNELS - 1);
+    }
+
     for (int pair = 0; pair < (lbr->nchannels + 1) / 2; pair++) {
         int ch1 = pair * 2;
         int ch2 = DCA_MIN(ch1 + 1, lbr->nchannels - 1);
@@ -1631,6 +1720,12 @@ int lbr_filter(struct lbr_decoder *lbr)
         decode_grid(lbr, ch1);
         if (ch1 != ch2)
             decode_grid(lbr, ch2);
+
+        if (lbr->undo_dmix) {
+            replace_ts(lbr, ch1);
+            if (ch1 != ch2)
+                replace_ts(lbr, ch2);
+        }
 
         random_ts(lbr, ch1);
         if (ch1 != ch2)

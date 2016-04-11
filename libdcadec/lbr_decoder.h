@@ -19,7 +19,7 @@
 #ifndef LBR_DECODER_H
 #define LBR_DECODER_H
 
-#define LBR_CHANNELS    6
+#define LBR_CHANNELS    8
 #define LBR_SUBBANDS    32
 #define LBR_TONES       512
 
@@ -54,6 +54,8 @@ struct lbr_decoder {
     struct dcadec_context   *ctx; ///< Parent context
     struct bitstream2       bits; ///< Bitstream reader
 
+    int ctx_flags;
+
     int sample_rate;
     int ch_mask;
     int flags;
@@ -61,6 +63,8 @@ struct lbr_decoder {
     int bit_rate_scaled;
 
     int nchannels;
+    int nchannels_total;
+    int undo_dmix;
     int freq_range;
     int band_limit;
     int limited_rate;
@@ -74,8 +78,8 @@ struct lbr_decoder {
     int framenum;
     int lbr_rand;
 
-    uint32_t can_replace_ch_1[4 * 32];
-    uint32_t can_replace_ch_2[4 * 32];
+    uint8_t can_replace_sf[LBR_CHANNELS * LBR_SUBBANDS * 4 / 8];
+    uint8_t can_replace_ch[LBR_CHANNELS * LBR_SUBBANDS * 4 / 8];
 
     uint8_t quant_levels[LBR_CHANNELS / 2][LBR_SUBBANDS];
     uint8_t sb_indices[LBR_SUBBANDS];
@@ -96,14 +100,14 @@ struct lbr_decoder {
     uint8_t part_stereo[LBR_CHANNELS][LBR_SUBBANDS / 4][5];
     uint8_t spatial_info[LBR_CHANNELS - 2][LBR_SUBBANDS / 4][5];
 
-    uint32_t part_stereo_pres;
-    uint32_t spatial_info_pres;
+    uint8_t part_stereo_pres;
+    uint8_t spatial_info_pres;
 
     float lpc_coeff[LBR_CHANNELS][3][2][2][8];
 
     float sb_scf[LBR_SUBBANDS];
 
-    float time_samples[LBR_CHANNELS][LBR_SUBBANDS][LBR_TIME_HISTORY * 2 + LBR_TIME_SAMPLES];
+    float time_samples[LBR_CHANNELS][LBR_SUBBANDS][LBR_TIME_HISTORY + LBR_TIME_SAMPLES];
     float imdct_history[LBR_CHANNELS][LBR_SUBBANDS * 4];
 
     uint8_t tonal_scf[6];

@@ -132,6 +132,12 @@ static inline uint64_t dca_bswap64(uint64_t x)
 #define DCA_ALIGN(value, align) \
     (((value) + (align) - 1) & ~((align) - 1))
 
+#define DCA_SET_BIT(map, bit) \
+    ((map)[(bit) >> 3] |= 1 << ((bit) & 7))
+
+#define DCA_TEST_BIT(map, bit) \
+    ((map)[(bit) >> 3] >> ((bit) & 7) & 1)
+
 #define DCA_MEM16BE(data) \
     (((uint32_t)(data)[0] <<  8) | (data)[1])
 

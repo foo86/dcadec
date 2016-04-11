@@ -938,6 +938,7 @@ static int alloc_lbr_decoder(struct dcadec_context *dca)
         if (!(dca->lbr = ta_znew(dca, struct lbr_decoder)))
             return -DCADEC_ENOMEM;
         dca->lbr->ctx = dca;
+        dca->lbr->ctx_flags = dca->flags;
         dca->lbr->lbr_rand = 1;
     }
     return 0;
