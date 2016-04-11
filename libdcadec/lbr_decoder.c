@@ -1206,6 +1206,24 @@ int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_a
             ret = parse_scf_chunk(lbr);
             break;
 
+        case LBR_CHUNK_TONAL:
+            for (int group = 0; group < 5; group++)
+                if ((ret = parse_tonal(lbr, group)) < 0)
+                    break;
+            break;
+
+        case LBR_CHUNK_TONAL_GRP_1 ... LBR_CHUNK_TONAL_GRP_5:
+            ret = parse_tonal(lbr, LBR_CHUNK_TONAL_GRP_5 - chunk_id);
+            break;
+
+        case LBR_CHUNK_TONAL_SCF:
+            if ((ret = parse_scf_chunk(lbr)) < 0)
+                break;
+            for (int group = 0; group < 5; group++)
+                if ((ret = parse_tonal(lbr, group)) < 0)
+                    break;
+            break;
+
         case LBR_CHUNK_TONAL_SCF_GRP_1 ... LBR_CHUNK_TONAL_SCF_GRP_5:
             ret = parse_tonal(lbr, LBR_CHUNK_TONAL_SCF_GRP_5 - chunk_id);
             break;
