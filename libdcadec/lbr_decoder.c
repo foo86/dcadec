@@ -1132,6 +1132,8 @@ int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_a
         return -DCADEC_EBADDATA;
     }
 
+    bytes_init(&bytes, bytes.data + bytes.index, chunk_len);
+
     memset(lbr->can_replace_sf, 0, sizeof(lbr->can_replace_sf));
     memset(lbr->can_replace_ch, 0, sizeof(lbr->can_replace_ch));
     memset(lbr->quant_levels, 0, sizeof(lbr->quant_levels));
