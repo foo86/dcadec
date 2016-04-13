@@ -257,8 +257,10 @@ static int parse_tonal(struct lbr_decoder *lbr, int group)
 
             value += lbr->tonal_scf[freq_to_sf[freq >> (7 - group)]];
             value += lbr->limited_range - 2;
-            if (value < 0 || value > 55)
+            if (value > 55)
                 return -1;
+            if (value < 0)
+                value = 0;
 
             amp[main_ch] = value;
             phs[main_ch] = bits2_get(&lbr->bits, 3);
@@ -419,6 +421,8 @@ static int parse_grid_1_chunk(struct lbr_decoder *lbr, int ch1, int ch2)
     // Average values for third grid
     for (sb = 0; sb < lbr->nsubbands - 4; sb++) {
         if ((value = bits2_get_vlc(&lbr->bits, huff_avg_g3, sizeof(huff_avg_g3))) < 0)
+            return -1;
+        if (value > 72)
             return -1;
         lbr->grid_3_avg[ch1][sb] = value - 16;
         if (ch1 != ch2) {
