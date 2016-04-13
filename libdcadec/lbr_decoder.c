@@ -466,12 +466,11 @@ static int parse_grid_1_chunk(struct lbr_decoder *lbr, int ch1, int ch2)
 
     // Low resolution spatial information
     if (ch1 == 0) {
-        int nsubbands = (lbr->nsubbands + 3) / 4;
         for (ch = 2; ch < lbr->nchannels; ch++) {
             if (lbr->bits.count < 8)
                 break;
             int min_v = bits2_get(&lbr->bits, 4);
-            for (sb = 0; sb < nsubbands; sb++) {
+            for (sb = 0; sb < lbr->nsubbands / 4; sb++) {
                 for (sf = 1; sf <= 4; sf++) {
                     if ((value = parse_st_code(&lbr->bits, min_v)) < 0)
                         return -1;
