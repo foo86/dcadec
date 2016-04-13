@@ -78,7 +78,12 @@ enum LBRChunks {
     LBR_CHUNK_EXTENSION         = 0x7f
 };
 
-static int parse_lfe_chunk_24(struct lbr_decoder *lbr)
+struct lbr_chunk {
+    int id, len;
+    uint8_t *data;
+};
+
+static int parse_lfe_24(struct lbr_decoder *lbr)
 {
     int ps;
 
@@ -135,7 +140,7 @@ static int parse_lfe_chunk_24(struct lbr_decoder *lbr)
     return 0;
 }
 
-static int parse_lfe_chunk_16(struct lbr_decoder *lbr)
+static int parse_lfe_16(struct lbr_decoder *lbr)
 {
     int ps;
 
@@ -187,10 +192,28 @@ static int parse_lfe_chunk_16(struct lbr_decoder *lbr)
     return 0;
 }
 
-static int parse_ecs_chunk(struct lbr_decoder *lbr)
+static int parse_lfe_chunk(struct lbr_decoder *lbr, struct lbr_chunk *chunk)
 {
-    if (lbr->bits.count < 16)
+    if (!chunk->len)
         return 0;
+
+    bits2_init(&lbr->bits, chunk->data, chunk->len);
+
+    if (chunk->len >= 52)
+        return parse_lfe_24(lbr);
+    if (chunk->len >= 35)
+        return parse_lfe_16(lbr);
+
+    lbr_warn("LFE chunk too small");
+    return 0;
+}
+
+static int parse_ecs_chunk(struct lbr_decoder *lbr, struct lbr_chunk *chunk)
+{
+    if (chunk->len < 2)
+        return 0;
+
+    bits2_init(&lbr->bits, chunk->data, chunk->len);
 
     int start_sb = bits2_get(&lbr->bits, 7);
     int end_sb = bits2_get(&lbr->bits, 7);
@@ -207,20 +230,6 @@ static int parse_ecs_chunk(struct lbr_decoder *lbr)
             if (lbr->bits.count < 2)
                 break;
         }
-    }
-
-    return 0;
-}
-
-static int parse_scf_chunk(struct lbr_decoder *lbr)
-{
-    if (lbr->bits.count < 36)
-        return 0;
-
-    for (int sb = 0; sb < 6; sb++) {
-        lbr->tonal_scf[sb] = bits2_get(&lbr->bits, 6);
-        if (lbr->tonal_scf[sb] > 55)
-            return -1;
     }
 
     return 0;
@@ -306,6 +315,41 @@ static int parse_tonal(struct lbr_decoder *lbr, int group)
     }
 
     return 0;
+}
+
+static int parse_tonal_chunk(struct lbr_decoder *lbr, struct lbr_chunk *chunk)
+{
+    if (!chunk->len)
+        return 0;
+
+    bits2_init(&lbr->bits, chunk->data, chunk->len);
+
+    if (chunk->id == LBR_CHUNK_SCF || chunk->id == LBR_CHUNK_TONAL_SCF) {
+        if (lbr->bits.count < 36)
+            return -1;
+        for (int sb = 0; sb < 6; sb++) {
+            lbr->tonal_scf[sb] = bits2_get(&lbr->bits, 6);
+            if (lbr->tonal_scf[sb] > 55)
+                return -1;
+        }
+    }
+
+    if (chunk->id == LBR_CHUNK_TONAL || chunk->id == LBR_CHUNK_TONAL_SCF)
+        for (int group = 0; group < 5; group++)
+            if (parse_tonal(lbr, group) < 0)
+                return -1;
+
+    return 0;
+}
+
+static int parse_tonal_group(struct lbr_decoder *lbr, struct lbr_chunk *chunk)
+{
+    if (!chunk->len)
+        return 0;
+
+    bits2_init(&lbr->bits, chunk->data, chunk->len);
+
+    return parse_tonal(lbr, chunk->id);
 }
 
 static int parse_scale_factors(struct lbr_decoder *lbr, uint8_t *scf)
@@ -398,12 +442,14 @@ static int parse_st_code(struct bitstream2 *bits, int min_v)
     return v;
 }
 
-static int parse_grid_1_chunk(struct lbr_decoder *lbr, int ch1, int ch2)
+static int parse_grid_1_chunk(struct lbr_decoder *lbr, struct lbr_chunk *chunk, int ch1, int ch2)
 {
     int ch, sb, sf, value;
 
-    if (lbr->bits.count < 20)
+    if (chunk->len < 3)
         return 0;
+
+    bits2_init(&lbr->bits, chunk->data, chunk->len);
 
     // Scale factors
     int nsubbands = scf_to_grid_1[lbr->nsubbands - 1] + 1;
@@ -777,10 +823,12 @@ static int parse_lpc(struct lbr_decoder *lbr, int ch1, int ch2, int start_sb, in
     return 0;
 }
 
-static int parse_high_res_grid(struct lbr_decoder *lbr, int ch1, int ch2)
+static int parse_high_res_grid(struct lbr_decoder *lbr, struct lbr_chunk *chunk, int ch1, int ch2)
 {
-    if (lbr->bits.count < 8)
-        return -1;
+    if (!chunk->len)
+        return 0;
+
+    bits2_init(&lbr->bits, chunk->data, chunk->len);
 
     // Quantizer profile
     int profile = bits2_get(&lbr->bits, 8);
@@ -879,8 +927,11 @@ static int parse_grid_2(struct lbr_decoder *lbr, int ch1, int ch2,
     return 0;
 }
 
-static int parse_ts1_chunk(struct lbr_decoder *lbr, int ch1, int ch2)
+static int parse_ts1_chunk(struct lbr_decoder *lbr, struct lbr_chunk *chunk, int ch1, int ch2)
 {
+    if (!chunk->len)
+        return 0;
+    bits2_init(&lbr->bits, chunk->data, chunk->len);
     if (parse_lpc(lbr, ch1, ch2, 2, 3) < 0)
         return -1;
     if (parse_ts(lbr, ch1, ch2, 2, 4, false) < 0)
@@ -892,8 +943,11 @@ static int parse_ts1_chunk(struct lbr_decoder *lbr, int ch1, int ch2)
     return 0;
 }
 
-static int parse_ts2_chunk(struct lbr_decoder *lbr, int ch1, int ch2)
+static int parse_ts2_chunk(struct lbr_decoder *lbr, struct lbr_chunk *chunk, int ch1, int ch2)
 {
+    if (!chunk->len)
+        return 0;
+    bits2_init(&lbr->bits, chunk->data, chunk->len);
     if (parse_grid_2(lbr, ch1, ch2, 1, 3, false) < 0)
         return -1;
     if (parse_ts(lbr, ch1, ch2, 6, lbr->max_mono_subband, false) < 0)
@@ -1071,7 +1125,7 @@ static int parse_decoder_init(struct lbr_decoder *lbr, struct bytestream *bytes)
 
 int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_asset *asset)
 {
-    int ret;
+    int i, ret;
 
     (void)size;
 
@@ -1174,10 +1228,22 @@ int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_a
         }
     }
 
+    struct {
+        struct lbr_chunk    lfe;
+        struct lbr_chunk    ecs;
+        struct lbr_chunk    tonal;
+        struct lbr_chunk    tonal_grp[5];
+        struct lbr_chunk    grid1[LBR_CHANNELS / 2];
+        struct lbr_chunk    hr_grid[LBR_CHANNELS / 2];
+        struct lbr_chunk    ts1[LBR_CHANNELS / 2];
+        struct lbr_chunk    ts2[LBR_CHANNELS / 2];
+    } chunk;
+
+    memset(&chunk, 0, sizeof(chunk));
+
     while (bytes.index < bytes.total) {
         int chunk_id = bytes_get(&bytes);
         int chunk_len = (chunk_id & 0x80) ? bytes_get16be(&bytes) : bytes_get(&bytes);
-        int ch1, ch2;
 
         if (chunk_len > bytes.total - bytes.index) {
             chunk_len = bytes.total - bytes.index;
@@ -1187,114 +1253,137 @@ int lbr_parse(struct lbr_decoder *lbr, uint8_t *data, size_t size, struct exss_a
 
         chunk_id &= 0x7f;
 
-        bits2_init(&lbr->bits, bytes.data + bytes.index, chunk_len);
-
-        ret = 0;
         switch (chunk_id) {
         case LBR_CHUNK_LFE:
-            if (lbr->flags & LBR_FLAG_LFE_PRESENT) {
-                if (chunk_len >= 52)
-                    ret = parse_lfe_chunk_24(lbr);
-                else if (chunk_len >= 35)
-                    ret = parse_lfe_chunk_16(lbr);
-                else
-                    lbr_warn("LFE chunk too small");
-            }
+            chunk.lfe.len  = chunk_len;
+            chunk.lfe.data = bytes.data + bytes.index;
             break;
 
         case LBR_CHUNK_ECS:
-            if (lbr->undo_dmix)
-                ret = parse_ecs_chunk(lbr);
+            chunk.ecs.len  = chunk_len;
+            chunk.ecs.data = bytes.data + bytes.index;
             break;
 
         case LBR_CHUNK_SCF:
-            ret = parse_scf_chunk(lbr);
-            break;
-
         case LBR_CHUNK_TONAL:
-            for (int group = 0; group < 5; group++)
-                if ((ret = parse_tonal(lbr, group)) < 0)
-                    break;
-            break;
-
-        case LBR_CHUNK_TONAL_GRP_1 ... LBR_CHUNK_TONAL_GRP_5:
-            ret = parse_tonal(lbr, LBR_CHUNK_TONAL_GRP_5 - chunk_id);
-            break;
-
         case LBR_CHUNK_TONAL_SCF:
-            if ((ret = parse_scf_chunk(lbr)) < 0)
-                break;
-            for (int group = 0; group < 5; group++)
-                if ((ret = parse_tonal(lbr, group)) < 0)
-                    break;
+            chunk.tonal.id   = chunk_id;
+            chunk.tonal.len  = chunk_len;
+            chunk.tonal.data = bytes.data + bytes.index;
             break;
 
-        case LBR_CHUNK_TONAL_SCF_GRP_1 ... LBR_CHUNK_TONAL_SCF_GRP_5:
-            ret = parse_tonal(lbr, LBR_CHUNK_TONAL_SCF_GRP_5 - chunk_id);
+        case LBR_CHUNK_TONAL_GRP_1:
+        case LBR_CHUNK_TONAL_GRP_2:
+        case LBR_CHUNK_TONAL_GRP_3:
+        case LBR_CHUNK_TONAL_GRP_4:
+        case LBR_CHUNK_TONAL_GRP_5:
+            i = LBR_CHUNK_TONAL_GRP_5 - chunk_id;
+            chunk.tonal_grp[i].id   = i;
+            chunk.tonal_grp[i].len  = chunk_len;
+            chunk.tonal_grp[i].data = bytes.data + bytes.index;
             break;
 
-        case LBR_CHUNK_RES_GRID_LR ... LBR_CHUNK_RES_GRID_LR + LBR_CHANNELS / 2:
-            if (lbr->undo_dmix) {
-                if (chunk_id == LBR_CHUNK_RES_GRID_LR)
-                    break;
-                chunk_id--;
-            }
-            ch1 = 2 * (chunk_id - LBR_CHUNK_RES_GRID_LR);
-            ch2 = DCA_MIN(ch1 + 1, lbr->nchannels - 1);
-            if (ch1 <= ch2)
-                ret = parse_grid_1_chunk(lbr, ch1, ch2);
+        case LBR_CHUNK_TONAL_SCF_GRP_1:
+        case LBR_CHUNK_TONAL_SCF_GRP_2:
+        case LBR_CHUNK_TONAL_SCF_GRP_3:
+        case LBR_CHUNK_TONAL_SCF_GRP_4:
+        case LBR_CHUNK_TONAL_SCF_GRP_5:
+            i = LBR_CHUNK_TONAL_SCF_GRP_5 - chunk_id;
+            chunk.tonal_grp[i].id   = i;
+            chunk.tonal_grp[i].len  = chunk_len;
+            chunk.tonal_grp[i].data = bytes.data + bytes.index;
             break;
 
-        case LBR_CHUNK_RES_GRID_HR ... LBR_CHUNK_RES_GRID_HR + LBR_CHANNELS / 2:
-            if (lbr->undo_dmix) {
-                if (chunk_id == LBR_CHUNK_RES_GRID_HR) {
-                    ret = parse_high_res_grid(lbr, LBR_CHANNELS - 2, LBR_CHANNELS - 1);
-                    break;
-                }
-                chunk_id--;
-            }
-            ch1 = 2 * (chunk_id - LBR_CHUNK_RES_GRID_HR);
-            ch2 = DCA_MIN(ch1 + 1, lbr->nchannels - 1);
-            if (ch1 <= ch2)
-                ret = parse_high_res_grid(lbr, ch1, ch2);
+        case LBR_CHUNK_RES_GRID_LR:
+        case LBR_CHUNK_RES_GRID_LR + 1:
+        case LBR_CHUNK_RES_GRID_LR + 2:
+        case LBR_CHUNK_RES_GRID_LR + 3:
+            i = chunk_id - LBR_CHUNK_RES_GRID_LR;
+            chunk.grid1[i].len  = chunk_len;
+            chunk.grid1[i].data = bytes.data + bytes.index;
             break;
 
-        case LBR_CHUNK_RES_TS_1 ... LBR_CHUNK_RES_TS_1 + LBR_CHANNELS / 2:
-            if (lbr->undo_dmix) {
-                if (chunk_id == LBR_CHUNK_RES_TS_1) {
-                    ret = parse_ts1_chunk(lbr, LBR_CHANNELS - 2, LBR_CHANNELS - 1);
-                    break;
-                }
-                chunk_id--;
-            }
-            ch1 = 2 * (chunk_id - LBR_CHUNK_RES_TS_1);
-            ch2 = DCA_MIN(ch1 + 1, lbr->nchannels - 1);
-            if (ch1 <= ch2)
-                ret = parse_ts1_chunk(lbr, ch1, ch2);
+        case LBR_CHUNK_RES_GRID_HR:
+        case LBR_CHUNK_RES_GRID_HR + 1:
+        case LBR_CHUNK_RES_GRID_HR + 2:
+        case LBR_CHUNK_RES_GRID_HR + 3:
+            i = chunk_id - LBR_CHUNK_RES_GRID_HR;
+            chunk.hr_grid[i].len  = chunk_len;
+            chunk.hr_grid[i].data = bytes.data + bytes.index;
             break;
 
-        case LBR_CHUNK_RES_TS_2 ... LBR_CHUNK_RES_TS_2 + LBR_CHANNELS / 2:
-            if (lbr->undo_dmix) {
-                if (chunk_id == LBR_CHUNK_RES_TS_2) {
-                    ret = parse_ts2_chunk(lbr, LBR_CHANNELS - 2, LBR_CHANNELS - 1);
-                    break;
-                }
-                chunk_id--;
-            }
-            ch1 = 2 * (chunk_id - LBR_CHUNK_RES_TS_2);
-            ch2 = DCA_MIN(ch1 + 1, lbr->nchannels - 1);
-            if (ch1 <= ch2)
-                ret = parse_ts2_chunk(lbr, ch1, ch2);
+        case LBR_CHUNK_RES_TS_1:
+        case LBR_CHUNK_RES_TS_1 + 1:
+        case LBR_CHUNK_RES_TS_1 + 2:
+        case LBR_CHUNK_RES_TS_1 + 3:
+            i = chunk_id - LBR_CHUNK_RES_TS_1;
+            chunk.ts1[i].len  = chunk_len;
+            chunk.ts1[i].data = bytes.data + bytes.index;
             break;
-        }
 
-        if (ret < 0) {
-            lbr_err("Error decoding chunk %#x", chunk_id);
-            return -DCADEC_EBADDATA;
+        case LBR_CHUNK_RES_TS_2:
+        case LBR_CHUNK_RES_TS_2 + 1:
+        case LBR_CHUNK_RES_TS_2 + 2:
+        case LBR_CHUNK_RES_TS_2 + 3:
+            i = chunk_id - LBR_CHUNK_RES_TS_2;
+            chunk.ts2[i].len  = chunk_len;
+            chunk.ts2[i].data = bytes.data + bytes.index;
+            break;
         }
 
         bytes.index += chunk_len;
     }
+
+#define CHECK(x, s) \
+    if (x < 0) { \
+        lbr_err("Error parsing %s chunk", s); \
+        return -DCADEC_EBADDATA; \
+    }
+
+    // LFE chunk
+    if (lbr->flags & LBR_FLAG_LFE_PRESENT)
+        CHECK(parse_lfe_chunk(lbr, &chunk.lfe), "LFE");
+
+    // Tonal chunks
+    CHECK(parse_tonal_chunk(lbr, &chunk.tonal), "tonal");
+    for (i = 0; i < 5; i++)
+        CHECK(parse_tonal_group(lbr, &chunk.tonal_grp[i]), "tonal group");
+
+    // ECS chunk and downmixed channel pair
+    if (lbr->undo_dmix) {
+        // Decode into unused channel pair at the end of array
+        int ch1 = LBR_CHANNELS - 2;
+        int ch2 = LBR_CHANNELS - 1;
+
+        CHECK(parse_ecs_chunk(lbr, &chunk.ecs), "ECS");
+        CHECK(parse_high_res_grid(lbr, &chunk.hr_grid[0], ch1, ch2), "high-res grid");
+
+        if (chunk.hr_grid[0].len) {
+            CHECK(parse_ts1_chunk(lbr, &chunk.ts1[0], ch1, ch2), "TS 1");
+            if (chunk.ts1[0].len)
+                CHECK(parse_ts2_chunk(lbr, &chunk.ts2[0], ch1, ch2), "TS 2");
+        }
+    }
+
+    // Residual chunks
+    for (int pair = 0; pair < (lbr->nchannels + 1) / 2; pair++) {
+        int ch1 = pair * 2;
+        int ch2 = DCA_MIN(ch1 + 1, lbr->nchannels - 1);
+
+        // Skip the first downmixed channel pair
+        i = pair + lbr->undo_dmix;
+
+        CHECK(parse_grid_1_chunk(lbr, &chunk.grid1[i], ch1, ch2), "grid 1");
+        CHECK(parse_high_res_grid(lbr, &chunk.hr_grid[i], ch1, ch2), "high-res grid");
+
+        if (chunk.grid1[i].len && chunk.hr_grid[i].len) {
+            CHECK(parse_ts1_chunk(lbr, &chunk.ts1[i], ch1, ch2), "TS 1");
+            if (chunk.ts1[i].len)
+                CHECK(parse_ts2_chunk(lbr, &chunk.ts2[i], ch1, ch2), "TS 2");
+        }
+    }
+
+#undef CHECK
 
     return 0;
 }
