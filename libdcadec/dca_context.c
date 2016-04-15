@@ -592,7 +592,8 @@ static int validate_hd_ma_frame(struct dcadec_context *dca)
             return -DCADEC_ENOSUP;
         }
 
-        dca->has_residual_encoded |= c->residual_encode != (1 << c->nchannels) - 1;
+        dca->has_residual_encoded = dca->has_residual_encoded ||
+            (c->residual_encode != (1 << c->nchannels) - 1);
     }
 
     // Verify that core is compatible if there are residual encoded channel sets
