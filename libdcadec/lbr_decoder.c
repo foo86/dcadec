@@ -86,16 +86,10 @@ struct lbr_chunk {
 
 static int parse_lfe_24(struct lbr_decoder *lbr)
 {
-    int ps;
+    int ps = bits2_get(&lbr->bits, 24);
+    int si = ps >> 23;
 
-    ps  = bits2_get(&lbr->bits,  8);
-    ps |= bits2_get(&lbr->bits, 16) << 8;
-    if (ps &  0x800000) {
-        ps &= 0x7fffff;
-        ps = -ps;
-    }
-
-    float value = ps * (1.0 / 0x7fffff);
+    float value = (((ps & 0x7fffff) ^ -si) + si) * (1.0 / 0x7fffff);
 
     int step_i = bits2_get(&lbr->bits, 8);
     if (step_i > 143)
@@ -143,15 +137,10 @@ static int parse_lfe_24(struct lbr_decoder *lbr)
 
 static int parse_lfe_16(struct lbr_decoder *lbr)
 {
-    int ps;
+    int ps = bits2_get(&lbr->bits, 16);
+    int si = ps >> 15;
 
-    ps = bits2_get(&lbr->bits, 16);
-    if (ps &  0x8000) {
-        ps &= 0x7fff;
-        ps = -ps;
-    }
-
-    float value = ps * (1.0 / 0x7fff);
+    float value = (((ps & 0x7fff) ^ -si) + si) * (1.0 / 0x7fff);
 
     int step_i = bits2_get(&lbr->bits, 8);
     if (step_i > 100)
