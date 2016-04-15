@@ -139,3 +139,35 @@ void idct_fast(const struct idct_context *s, const double *input, double *output
         output[n - i - 1] = a[i] * s->as[i] - b[i] * s->ac[i];
     }
 }
+
+void imdct_fast(const struct idct_context *s, const float *input, float *output)
+{
+    double a[IDCT_SIZE / 2];
+    double b[IDCT_SIZE / 2];
+    int i;
+
+    int m = s->nbits + 1;
+    int n = 1 << m;
+    int n2 = n >> 1;
+    int n4 = n >> 2;
+
+    a[0] = input[0];
+    b[0] = input[n2 - 1];
+    for (i = 1; i < n4; i++) {
+        a[     i] = input[2 * i - 1] + input[2 * i];
+        b[n4 - i] = input[2 * i - 1] - input[2 * i];
+    }
+
+    proc(s, a, 0);
+    proc(s, b, 1);
+
+    for (i = 0; i < n4; i++) {
+        output[    n4 + i    ] = -a[i] * s->as[i] + b[i] * s->ac[i];
+        output[n - n4 - i - 1] = -a[i] * s->ac[i] - b[i] * s->as[i];
+    }
+
+    for (i = 0; i < n4; i++) {
+        output[    i    ] = -output[n2 - i - 1];
+        output[n - i - 1] =  output[n2 + i    ];
+    }
+}

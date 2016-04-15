@@ -118,7 +118,7 @@ struct lbr_decoder {
     float lfe_data[64];
     float lfe_history[5][2];
 
-    float cos_mod[256][128];
+    struct idct_context *imdct;
     float sin_tab[256];
     float lpc_tab[16];
 

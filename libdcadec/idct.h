@@ -32,6 +32,7 @@ struct idct_context {
 
 struct idct_context *idct_init(void *parent, int nbits, double scale) __attribute__((cold));
 void idct_fast(const struct idct_context *s, const double *input, double *output);
+void imdct_fast(const struct idct_context *s, const float *input, float *output);
 
 void idct_fixed32(int * restrict input, int * restrict output);
 void idct_fixed64(int * restrict input, int * restrict output);

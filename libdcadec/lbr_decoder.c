@@ -19,6 +19,7 @@
 #include "common.h"
 #include "exss_parser.h"
 #include "lbr_decoder.h"
+#include "idct.h"
 
 #include "lbr_bitstream.h"
 #include "lbr_tables.h"
@@ -963,14 +964,15 @@ static int parse_ts2_chunk(struct lbr_decoder *lbr, struct lbr_chunk *chunk, int
     return 0;
 }
 
-static void init_tables(struct lbr_decoder *lbr)
+static int init_tables(struct lbr_decoder *lbr)
 {
     float scale = 256.0 * 0.25 * sqrt(1 << (2 - lbr->limited_range));
-    int i, j, r = lbr->freq_range;
+    int i;
 
-    for (i = 0; i < 64 << r; i++)
-        for (j = 0; j < 32 << r; j++)
-            lbr->cos_mod[i][j] = scale * cos(M_PI * (2 * i + (32 << r) + 1) * (2 * j + 1) / (128 << r));
+    ta_free(lbr->imdct);
+
+    if (!(lbr->imdct = idct_init(lbr, lbr->freq_range + 5, scale)))
+        return -1;
 
     for (i = 0; i < 256; i++)
         lbr->sin_tab[i] = cos(M_PI * i / 128);
@@ -997,6 +999,8 @@ static void init_tables(struct lbr_decoder *lbr)
         else
             lbr->sb_scf[i] = 0.785 * scale;
     }
+
+    return 0;
 }
 
 static int parse_decoder_init(struct lbr_decoder *lbr, struct bytestream *bytes)
@@ -1100,7 +1104,8 @@ static int parse_decoder_init(struct lbr_decoder *lbr, struct bytestream *bytes)
 
     if (old_rate != lbr->sample_rate || old_band_limit != lbr->band_limit) {
         lbr_clear(lbr);
-        init_tables(lbr);
+        if (init_tables(lbr) < 0)
+            return -DCADEC_ENOMEM;
     }
 
     lbr->nchannels_total = lbr->nchannels;
@@ -1705,21 +1710,9 @@ static void base_func_synth(struct lbr_decoder *lbr, int ch, float *values, int 
 #define AL1     0.30865827
 #define AL2     0.038060233
 
-static void imdct(struct lbr_decoder *lbr, float *output, const float *input)
-{
-    int r = lbr->freq_range;
-    for (int i = 0; i < 64 << r; i++) {
-        double res = 0.0;
-        for (int j = 0; j < 32 << r; j++)
-            res += input[j] * lbr->cos_mod[i][j];
-        output[i] = res;
-    }
-}
-
 static void transform_channel(struct lbr_decoder *lbr, int ch)
 {
-    float values[LBR_SUBBANDS][4];
-    float _values[LBR_SUBBANDS * 2][4];
+    float values[LBR_SUBBANDS * 2][4];
     int *output = lbr->channel_buffer[ch];
     int noutsubbands = 8 << lbr->freq_range;
     int step = 1 << (2 - lbr->freq_range);
@@ -1759,22 +1752,22 @@ static void transform_channel(struct lbr_decoder *lbr, int ch)
 
         base_func_synth(lbr, ch, values[0], sf);
 
-        imdct(lbr, _values[0], values[0]);
+        imdct_fast(lbr->imdct, values[0], values[0]);
 
         // Long window and overlap-add
         const float *w1 = &long_window[0];
         const float *w2 = &long_window[128 - 4 * step];
         float *history = lbr->imdct_history[ch];
         for (i = 0; i < noutsubbands; i++) {
-            output[0] = lrintf(w1[0 * step] * _values[i][0] + history[0]);
-            output[1] = lrintf(w1[1 * step] * _values[i][1] + history[1]);
-            output[2] = lrintf(w1[2 * step] * _values[i][2] + history[2]);
-            output[3] = lrintf(w1[3 * step] * _values[i][3] + history[3]);
+            output[0] = lrintf(w1[0 * step] * values[i][0] + history[0]);
+            output[1] = lrintf(w1[1 * step] * values[i][1] + history[1]);
+            output[2] = lrintf(w1[2 * step] * values[i][2] + history[2]);
+            output[3] = lrintf(w1[3 * step] * values[i][3] + history[3]);
 
-            history[0] = w2[3 * step] * _values[noutsubbands + i][0];
-            history[1] = w2[2 * step] * _values[noutsubbands + i][1];
-            history[2] = w2[1 * step] * _values[noutsubbands + i][2];
-            history[3] = w2[0 * step] * _values[noutsubbands + i][3];
+            history[0] = w2[3 * step] * values[noutsubbands + i][0];
+            history[1] = w2[2 * step] * values[noutsubbands + i][1];
+            history[2] = w2[1 * step] * values[noutsubbands + i][2];
+            history[3] = w2[0 * step] * values[noutsubbands + i][3];
 
             output  += 4;
             history += 4;
