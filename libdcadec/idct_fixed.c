@@ -156,7 +156,7 @@ static void clp_v(int *input, int len)
         input[i] = clip23(input[i]);
 }
 
-void idct_perform32_fixed(int * restrict input, int * restrict output)
+void idct_fixed32(int * restrict input, int * restrict output)
 {
     int mag = 0;
     for (int i = 0; i < 32; i++)
@@ -267,7 +267,7 @@ static void mod64_c(const int * restrict input, int * restrict output)
         output[i] = mul23(cos_mod[i], input[k] - input[32 + k]);
 }
 
-void idct_perform64_fixed(int * restrict input, int * restrict output)
+void idct_fixed64(int * restrict input, int * restrict output)
 {
     int mag = 0;
     for (int i = 0; i < 64; i++)

@@ -136,7 +136,7 @@ struct core_decoder {
     int                 *subband_buffer;    ///< Subband sample buffer base
     int                 *subband_samples[MAX_CHANNELS][MAX_SUBBANDS];   ///< Subband samples
     struct interpolator *subband_dsp[MAX_CHANNELS]; ///< Filter banks
-    struct idct_context *subband_dsp_idct;          ///< IDCT context
+    struct idct_context *subband_dsp_idct[2];       ///< IDCT context
     int                 *lfe_samples;   ///< Buffer for decimated LFE samples
 
     // PCM output data
