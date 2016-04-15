@@ -546,6 +546,8 @@ static int parse_grid_1_sec_ch(struct lbr_decoder *lbr, int ch2)
             if (value > 72)
                 return -1;
             lbr->grid_3_avg[ch2][sb] = value - 16;
+            if (lbr->bits.count < 20)
+                break;
         }
     }
 
