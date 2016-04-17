@@ -1598,8 +1598,10 @@ static void decode_part_stereo(struct lbr_decoder *lbr, int ch1, int ch2)
 
 static void decode_spatial_info(struct lbr_decoder *lbr, int ch1, int ch2)
 {
+    int ch_pres = ~lbr->ch_pres[ch1] | lbr->ch_pres[ch2];
+
     for (int sb = 0; sb < lbr->nsubbands; sb++) {
-        if (lbr->ch_pres[ch2] & (1U << sb))
+        if (ch_pres & (1U << sb))
             continue;
 
         float *samples_l = &lbr->time_samples[ch1][sb][LBR_TIME_HISTORY];
