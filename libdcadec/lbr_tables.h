@@ -39,8 +39,8 @@ static const int8_t ph0_shift[8] = {
     -32, +96, -96, +32, +96, -32, +32, -96
 };
 
-static const uint8_t bits_for_ch_num[10] = {
-    0, 1, 2, 2, 3, 3, 3, 3, 4, 4
+static const uint8_t bits_for_ch_num[8] = {
+    0, 1, 2, 2, 3, 3, 3, 3
 };
 
 static const uint8_t grid_1_to_scf[11] = {
