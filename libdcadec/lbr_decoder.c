@@ -1001,11 +1001,11 @@ static int parse_decoder_init(struct lbr_decoder *lbr, struct bytestream *bytes)
 
     // Sample rate of LBR audio
     unsigned int code = bytes_get(bytes);
-    if (code >= dca_countof(sample_rates) || !sample_rates[code]) {
+    if (code >= dca_countof(exss_sample_rates) || exss_sample_rates[code] > 48000) {
         lbr_err("Invalid LBR sample rate");
         return -DCADEC_EBADDATA;
     }
-    lbr->sample_rate = sample_rates[code];
+    lbr->sample_rate = exss_sample_rates[code];
 
     // LBR speaker mask
     lbr->ch_mask = bytes_get16le(bytes);

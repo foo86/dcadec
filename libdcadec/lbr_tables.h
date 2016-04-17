@@ -16,13 +16,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-static const uint16_t sample_rates[16] = {
-    8000, 16000,  32000,     0,
-    0,    22050,  44100,     0,
-    0,        0,  12000, 24000,
-    48000,    0,      0,     0
-};
-
 static const uint16_t fst_amp[44] = {
        0,    1,    2,    3,
        4,    6,    8,   10,
