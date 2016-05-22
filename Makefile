@@ -63,6 +63,7 @@ libdcadec/idct_float.c \
 libdcadec/interpolator.c \
 libdcadec/interpolator_fixed.c \
 libdcadec/interpolator_float.c \
+libdcadec/lbr_decoder.c \
 libdcadec/ta.c \
 libdcadec/xll_decoder.c
 INC_LIB = \

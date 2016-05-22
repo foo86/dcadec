@@ -19,57 +19,22 @@
 #ifndef IDCT_H
 #define IDCT_H
 
-#define DCT_A_ROWS      8
-#define DCT_A_COLS      8
-#define DCT_B_ROWS      8
-#define DCT_B_COLS      7
-
-#define IDCT_SIZE       32
-#define IDCT_SIZE_2     (IDCT_SIZE / 2)
-#define IDCT_SIZE_4     (IDCT_SIZE / 4)
-
-#define MOD_A_SIZE      IDCT_SIZE_2
-#define MOD_B_SIZE      IDCT_SIZE_4
-#define MOD_C_SIZE      IDCT_SIZE
-#define MOD_A_HALF      (MOD_A_SIZE / 2)
-#define MOD_B_HALF      (MOD_B_SIZE / 2)
-#define MOD_C_HALF      (MOD_C_SIZE / 2)
-
-#define IDCT64_SIZE     64
-#define IDCT64_SIZE_2   (IDCT64_SIZE / 2)
-#define IDCT64_SIZE_4   (IDCT64_SIZE / 4)
-#define IDCT64_SIZE_8   (IDCT64_SIZE / 8)
-
-#define MOD64_A_SIZE    IDCT64_SIZE_2
-#define MOD64_B_SIZE    IDCT64_SIZE_4
-#define MOD64_C_SIZE    IDCT64_SIZE
-#define MOD64_A_HALF    (MOD64_A_SIZE / 2)
-#define MOD64_B_HALF    (MOD64_B_SIZE / 2)
-#define MOD64_C_HALF    (MOD64_C_SIZE / 2)
-
-struct core_decoder;
+#define IDCT_BITS   7
+#define IDCT_SIZE   (1 << IDCT_BITS)
 
 struct idct_context {
-    double dct_a[DCT_A_ROWS][DCT_A_COLS];
-    double dct_b[DCT_B_ROWS][DCT_B_COLS];
-
-    double mod_a[MOD_A_SIZE];
-    double mod_b[MOD_B_SIZE];
-    double mod_c[MOD_C_SIZE];
-
-    double mod64_a[MOD64_A_SIZE];
-    double mod64_b[MOD64_B_SIZE];
-    double mod64_c[MOD64_C_SIZE];
+    double cs[IDCT_SIZE / 2];
+    double ac[IDCT_SIZE / 2];
+    double as[IDCT_SIZE / 2];
+    uint8_t permute[IDCT_SIZE / 2];
+    int nbits;
 };
 
-struct idct_context *idct_init(struct core_decoder *parent) __attribute__((cold));
+struct idct_context *idct_init(void *parent, int nbits, double scale) __attribute__((cold));
+void idct_fast(const struct idct_context *s, const double *input, double *output);
+void imdct_fast(const struct idct_context *s, const float *input, float *output);
 
-void idct_perform32_float(const struct idct_context * restrict idct,
-                          double * restrict input, double * restrict output);
-void idct_perform64_float(const struct idct_context * restrict idct,
-                          double * restrict input, double * restrict output);
-
-void idct_perform32_fixed(int * restrict input, int * restrict output);
-void idct_perform64_fixed(int * restrict input, int * restrict output);
+void idct_fixed32(int * restrict input, int * restrict output);
+void idct_fixed64(int * restrict input, int * restrict output);
 
 #endif

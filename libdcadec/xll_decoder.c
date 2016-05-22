@@ -466,19 +466,14 @@ static int chs_parse_band_data(struct xll_chset *chs, int band_i, int seg, int b
             // Unpack Rice coding flag
             // 0 - linear code, 1 - Rice code
             chs->rice_code_flag[i] = bits_get1(&xll->bits);
-            if (!chs->seg_common && chs->rice_code_flag[i]) {
-                // Unpack Hybrid Rice coding flag
-                // 0 - Rice code, 1 - Hybrid Rice code
-                if (bits_get1(&xll->bits))
-                    // Unpack binary code length for isolated samples
-                    chs->bitalloc_hybrid_linear[i] = bits_get(&xll->bits, chs->nabits) + 1;
-                else
-                    // 0 indicates no Hybrid Rice coding
-                    chs->bitalloc_hybrid_linear[i] = 0;
-            } else {
+            // Unpack Hybrid Rice coding flag
+            // 0 - Rice code, 1 - Hybrid Rice code
+            if (!chs->seg_common && chs->rice_code_flag[i] && bits_get1(&xll->bits))
+                // Unpack binary code length for isolated samples
+                chs->bitalloc_hybrid_linear[i] = bits_get(&xll->bits, chs->nabits) + 1;
+            else
                 // 0 indicates no Hybrid Rice coding
                 chs->bitalloc_hybrid_linear[i] = 0;
-            }
         }
 
         // Unpack coding parameters

@@ -20,6 +20,7 @@
 #include "core_decoder.h"
 #include "exss_parser.h"
 #include "xll_decoder.h"
+#include "lbr_decoder.h"
 #include "fixed_math.h"
 
 #define MAX_PACKET_SIZE     0x104000
@@ -27,6 +28,7 @@
 #define PACKET_CORE     0x01
 #define PACKET_EXSS     0x02
 #define PACKET_XLL      0x04
+#define PACKET_LBR      0x08
 
 #define PACKET_FILTERED     0x100
 #define PACKET_RECOVERY     0x200
@@ -45,6 +47,7 @@ struct dcadec_context {
     struct core_decoder *core;  ///< Core decoder context
     struct exss_parser  *exss;  ///< EXSS parser context
     struct xll_decoder  *xll;   ///< XLL decoder context
+    struct lbr_decoder  *lbr;   ///< LBR decoder context
 
     bool    has_residual_encoded;   ///< XLL residual encoded channels present
     bool    core_residual_valid;    ///< Core valid for residual decoding
@@ -718,6 +721,8 @@ static int combine_residual_core_frame(struct dcadec_context *dca,
         // Account for LSB width
         if (xll->scalable_lsbs)
             shift += xll_get_lsb_width(c, XLL_BAND_0, ch);
+        if (shift > 24)
+            return -DCADEC_EINVAL;
         int round = shift > 0 ? 1 << (shift - 1) : 0;
 
         int *dst = c->bands[XLL_BAND_0].msb_sample_buffer[ch];
@@ -875,6 +880,26 @@ static int filter_hd_ma_frame(struct dcadec_context *dca)
     return 0;
 }
 
+static int filter_lbr_frame(struct dcadec_context *dca)
+{
+    struct lbr_decoder *lbr = dca->lbr;
+    int ret;
+
+    if ((ret = lbr_filter(lbr)) < 0)
+        return ret;
+
+    if ((ret = reorder_samples(dca, lbr->output_samples, lbr->output_mask)) <= 0)
+        return -DCADEC_EINVAL;
+
+    dca->nframesamples = 1024 << lbr->freq_range;
+    dca->sample_rate = lbr->sample_rate;
+    dca->bits_per_sample = 24;
+    dca->profile = DCADEC_PROFILE_EXPRESS;
+
+    shift_and_clip(dca, ret, 24, 24);
+    return 0;
+}
+
 static int alloc_core_decoder(struct dcadec_context *dca)
 {
     if (!dca->core) {
@@ -903,6 +928,18 @@ static int alloc_xll_decoder(struct dcadec_context *dca)
             return -DCADEC_ENOMEM;
         dca->xll->ctx = dca;
         dca->xll->flags = dca->flags;
+    }
+    return 0;
+}
+
+static int alloc_lbr_decoder(struct dcadec_context *dca)
+{
+    if (!dca->lbr) {
+        if (!(dca->lbr = ta_znew(dca, struct lbr_decoder)))
+            return -DCADEC_ENOMEM;
+        dca->lbr->ctx = dca;
+        dca->lbr->ctx_flags = dca->flags;
+        dca->lbr->lbr_rand = 1;
     }
     return 0;
 }
@@ -992,6 +1029,18 @@ DCADEC_API int dcadec_context_parse(struct dcadec_context *dca, uint8_t *data, s
                     status = DCADEC_WXLLBANDERR;
             }
         }
+
+        // Parse LBR component in EXSS
+        if (!(dca->flags & DCADEC_FLAG_CORE_ONLY) && (asset->extension_mask & EXSS_LBR)) {
+            if ((ret = alloc_lbr_decoder(dca)) < 0)
+                return ret;
+            if ((ret = lbr_parse(dca->lbr, data, size, asset)) < 0) {
+                if (dca->flags & DCADEC_FLAG_STRICT)
+                    return ret;
+            } else {
+                dca->packet |= PACKET_LBR;
+            }
+        }
     }
 
     if (!dca->packet)
@@ -1047,7 +1096,10 @@ DCADEC_API int dcadec_context_filter(struct dcadec_context *dca, int ***samples,
         return -DCADEC_EINVAL;
 
     if (!(dca->packet & PACKET_FILTERED)) {
-        if (dca->packet & PACKET_XLL) {
+        if (dca->packet & PACKET_LBR) {
+            if ((ret = filter_lbr_frame(dca)) < 0)
+                return ret;
+        } else if (dca->packet & PACKET_XLL) {
             if ((ret = validate_hd_ma_frame(dca)) < 0) {
                 if (dca->flags & DCADEC_FLAG_STRICT)
                     return ret;
@@ -1090,6 +1142,7 @@ DCADEC_API void dcadec_context_clear(struct dcadec_context *dca)
     if (dca) {
         core_clear(dca->core);
         xll_clear(dca->xll);
+        lbr_clear(dca->lbr);
         dca->core_residual_valid = false;
     }
 }

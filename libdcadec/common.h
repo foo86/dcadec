@@ -132,6 +132,12 @@ static inline uint64_t dca_bswap64(uint64_t x)
 #define DCA_ALIGN(value, align) \
     (((value) + (align) - 1) & ~((align) - 1))
 
+#define DCA_SET_BIT(map, bit) \
+    ((map)[(bit) >> 3] |= 1 << ((bit) & 7))
+
+#define DCA_TEST_BIT(map, bit) \
+    ((map)[(bit) >> 3] >> ((bit) & 7) & 1)
+
 #define DCA_MEM16BE(data) \
     (((uint32_t)(data)[0] <<  8) | (data)[1])
 
@@ -143,6 +149,18 @@ static inline uint64_t dca_bswap64(uint64_t x)
 
 #define DCA_MEM40BE(data) \
     (((uint64_t)(data)[0] << 32) | DCA_MEM32BE(&(data)[1]))
+
+#define DCA_MEM16LE(data) \
+    (((uint32_t)(data)[1] <<  8) | (data)[0])
+
+#define DCA_MEM24LE(data) \
+    (((uint32_t)(data)[2] << 16) | DCA_MEM16LE(data))
+
+#define DCA_MEM32LE(data) \
+    (((uint32_t)(data)[3] << 24) | DCA_MEM24LE(data))
+
+#define DCA_MEM40LE(data) \
+    (((uint64_t)(data)[4] << 32) | DCA_MEM32LE(data))
 
 static inline uint32_t DCA_MEM32NE(const void *data)
 {
@@ -285,6 +303,11 @@ enum SpeakerPair {
     SPEAKER_PAIR_ALL_1  = 0x5199,
     SPEAKER_PAIR_ALL_2  = 0xae66
 };
+
+static inline int count_chs_for_mask(int mask)
+{
+    return dca_popcount(mask) + dca_popcount(mask & SPEAKER_PAIR_ALL_2);
+}
 
 // Table 7-11: Representation type
 enum RepresentationType {
