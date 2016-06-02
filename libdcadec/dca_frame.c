@@ -128,7 +128,7 @@ DCADEC_API int dcadec_frame_parse_header(const uint8_t *data, size_t *size)
         if (frame_size < 96)
             return -DCADEC_ENOSYNC;
         if (ret & DCADEC_BITSTREAM_BE14)
-            *size = frame_size + frame_size / 7;
+            *size = frame_size * 8 / 14 * 2;
         else
             *size = frame_size;
         return DCADEC_FRAME_TYPE_CORE;
