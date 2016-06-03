@@ -12,10 +12,11 @@ Supported features:
 * Lossless decoding of Master Audio streams with up to 7.1 channels, 192 kHz
 * Downmixing to stereo and 5.1 using embedded coefficients
 
-Features not implemented:
+__This program is deprecated!__
 
-* Decoding of DTS Express streams
-* Applying dynamic range compression and dialog normalization
+This decoder has been fully integrated into FFmpeg master branch and further
+development will continue there. Using [FFmpeg](https://ffmpeg.org/) for DTS
+decoding is now recommended.
 
 Usage
 -----
