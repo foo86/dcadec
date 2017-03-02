@@ -54,6 +54,10 @@
     <ClInclude Include="..\..\libdcadec\huffman.h" />
     <ClInclude Include="..\..\libdcadec\idct.h" />
     <ClInclude Include="..\..\libdcadec\interpolator.h" />
+    <ClInclude Include="..\..\libdcadec\lbr_bitstream.h" />
+    <ClInclude Include="..\..\libdcadec\lbr_decoder.h" />
+    <ClInclude Include="..\..\libdcadec\lbr_huffman.h" />
+    <ClInclude Include="..\..\libdcadec\lbr_tables.h" />
     <ClInclude Include="..\..\libdcadec\ta.h" />
     <ClInclude Include="..\..\libdcadec\xll_decoder.h" />
     <ClInclude Include="..\..\libdcadec\xll_tables.h" />
@@ -72,6 +76,7 @@
     <ClCompile Include="..\..\libdcadec\interpolator.c" />
     <ClCompile Include="..\..\libdcadec\interpolator_fixed.c" />
     <ClCompile Include="..\..\libdcadec\interpolator_float.c" />
+    <ClCompile Include="..\..\libdcadec\lbr_decoder.c" />
     <ClCompile Include="..\..\libdcadec\ta.c" />
     <ClCompile Include="..\..\libdcadec\xll_decoder.c" />
   </ItemGroup>
