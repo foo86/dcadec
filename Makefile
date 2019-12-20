@@ -7,8 +7,9 @@ API_PATCH = 0
 CFLAGS := -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall -Wextra -O3 -ffast-math -g -MMD $(CFLAGS)
 
 PREFIX ?= /usr/local
+BASELIB ?= lib
 BINDIR ?= $(PREFIX)/bin
-LIBDIR ?= $(PREFIX)/lib
+LIBDIR ?= $(PREFIX)/$(BASELIB)
 INCLUDEDIR ?= $(PREFIX)/include
 
 SRC_DIR := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
